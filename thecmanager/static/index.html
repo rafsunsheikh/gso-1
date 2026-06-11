@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0b0f17; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #2a3346; border-radius: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body class="text-slate-200">
+  <div class="max-w-7xl mx-auto p-5">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+          <span>🗂️</span> The Manager
+        </h1>
+        <p class="text-sm text-slate-400" id="subtitle">Loading…</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <input id="search" type="text" placeholder="Search apps…"
+          class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
+        <button id="refresh" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-sm">↻ Refresh</button>
+      </div>
+    </header>
+
+    <!-- View tabs -->
+    <div id="views" class="flex items-center gap-2 mb-3 border-b border-slate-800 pb-2"></div>
+
+    <!-- Filter pills -->
+    <div id="filters" class="flex flex-wrap gap-2 mb-4 text-xs"></div>
+
+    <!-- App grid -->
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+  </div>
+
+  <!-- Detail drawer -->
+  <div id="drawer" class="fixed inset-0 z-50 hidden">
+    <div id="drawer-bg" class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute right-0 top-0 h-full w-full max-w-2xl bg-slate-900 border-l border-slate-700 shadow-2xl overflow-y-auto">
+      <div id="drawer-content" class="p-6"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (s, r=document) => r.querySelector(s);
+    const api = (p, opt) => fetch(p, opt).then(r => r.json());
+    let ALL = [];
+    let activeType = "all";
+    let activeView = "favourites";  // home shows favourites by default
+    let setupPoll = null;           // interval id for the running setup job
+
+    const TYPE_COLORS = {
+      node: "bg-green-900/40 text-green-300 border-green-700",
+      django: "bg-emerald-900/40 text-emerald-300 border-emerald-700",
+      streamlit: "bg-red-900/40 text-red-300 border-red-700",
+      fastapi: "bg-teal-900/40 text-teal-300 border-teal-700",
+      flask: "bg-cyan-900/40 text-cyan-300 border-cyan-700",
+      python: "bg-blue-900/40 text-blue-300 border-blue-700",
+      rust: "bg-orange-900/40 text-orange-300 border-orange-700",
+      go: "bg-sky-900/40 text-sky-300 border-sky-700",
+      static: "bg-purple-900/40 text-purple-300 border-purple-700",
+      script: "bg-yellow-900/40 text-yellow-300 border-yellow-700",
+      make: "bg-pink-900/40 text-pink-300 border-pink-700",
+      unknown: "bg-slate-800 text-slate-400 border-slate-700",
+    };
+    const typeClass = t => TYPE_COLORS[t] || TYPE_COLORS.unknown;
+
+    async function load() {
+      const data = await api("/api/apps");
+      ALL = data.apps;
+      $("#subtitle").textContent =
+        `${data.count} apps in ${data.projects_dir}`;
+      renderViews();
+      renderFilters();
+      render();
+    }
+
+    function favCount() { return ALL.filter(a => a.favourite).length; }
+
+    // Apps in the current view (favourites vs all), before type/search filters.
+    function viewApps() {
+      return activeView === "favourites" ? ALL.filter(a => a.favourite) : ALL;
+    }
+
+    function renderViews() {
+      const tabs = [
+        { id: "favourites", label: `⭐ Favourites`, n: favCount() },
+        { id: "all", label: `🗂️ All Apps`, n: ALL.length },
+      ];
+      $("#views").innerHTML = tabs.map(t => {
+        const active = t.id === activeView;
+        return `<button data-view="${t.id}"
+          class="px-4 py-1.5 rounded-lg text-sm font-medium ${active
+            ? 'bg-indigo-600 text-white'
+            : 'text-slate-300 hover:bg-slate-800'}">
+          ${t.label} <span class="opacity-60">${t.n}</span></button>`;
+      }).join("");
+      $("#views").querySelectorAll("button").forEach(b =>
+        b.onclick = () => {
+          activeView = b.dataset.view;
+          activeType = "all";
+          renderViews(); renderFilters(); render();
+        });
+    }
+
+    function renderFilters() {
+      const base = viewApps();
+      const counts = {};
+      base.forEach(a => counts[a.type] = (counts[a.type]||0)+1);
+      const types = ["all", ...Object.keys(counts).sort()];
+      $("#filters").innerHTML = types.map(t => {
+        const n = t === "all" ? base.length : counts[t];
+        const active = t === activeType;
+        return `<button data-type="${t}"
+          class="px-3 py-1 rounded-full border ${active ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}">
+          ${t} <span class="opacity-60">${n}</span></button>`;
+      }).join("");
+      $("#filters").querySelectorAll("button").forEach(b =>
+        b.onclick = () => { activeType = b.dataset.type; renderFilters(); render(); });
+    }
+
+    function render() {
+      const q = $("#search").value.toLowerCase();
+      const apps = viewApps().filter(a =>
+        (activeType === "all" || a.type === activeType) &&
+        a.name.toLowerCase().includes(q));
+      let empty = `<p class="text-slate-500 col-span-full">No matching apps.</p>`;
+      if (activeView === "favourites" && favCount() === 0) {
+        empty = `<div class="col-span-full text-center py-16 text-slate-500">
+          <p class="text-lg mb-1">⭐ No favourites yet</p>
+          <p class="text-sm">Click the ☆ on any app card, or switch to
+          <button id="goto-all" class="text-indigo-400 hover:underline">All Apps</button> to browse.</p>
+        </div>`;
+      }
+      $("#grid").innerHTML = apps.map(card).join("") || empty;
+      const gotoAll = $("#goto-all");
+      if (gotoAll) gotoAll.onclick = () => {
+        activeView = "all"; renderViews(); renderFilters(); render();
+      };
+      apps.forEach(a => {
+        $(`#card-${cssId(a.name)}`).onclick = (e) => {
+          if (e.target.closest("button")) return;
+          openDrawer(a.name);
+        };
+        const sb = $(`#start-${cssId(a.name)}`);
+        if (sb) sb.onclick = () => toggleRun(a.name, a.running);
+        const fb = $(`#fav-${cssId(a.name)}`);
+        if (fb) fb.onclick = () => toggleFav(a.name);
+      });
+    }
+
+    async function toggleFav(name) {
+      const r = await api(`/api/apps/${encodeURIComponent(name)}/favourite`, {method:"POST"});
+      const app = ALL.find(a => a.name === name);
+      if (app) app.favourite = r.favourite;
+      renderViews(); renderFilters(); render();
+    }
+
+    const cssId = s => s.replace(/[^a-zA-Z0-9]/g, "_");
+
+    function card(a) {
+      const dot = a.running
+        ? '<span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>'
+        : '<span class="w-2 h-2 rounded-full bg-slate-600"></span>';
+      const btn = a.has_start_command
+        ? `<button id="start-${cssId(a.name)}"
+             class="text-xs px-3 py-1.5 rounded-md font-medium ${a.running
+               ? 'bg-red-600 hover:bg-red-500 text-white'
+               : 'bg-indigo-600 hover:bg-indigo-500 text-white'}">
+             ${a.running ? '■ Stop' : '▶ Start'}</button>`
+        : `<span class="text-xs text-slate-500">no run cmd</span>`;
+      const star = `<button id="fav-${cssId(a.name)}" title="${a.favourite?'Unfavourite':'Favourite'}"
+          class="text-lg leading-none ${a.favourite?'text-amber-400':'text-slate-600 hover:text-amber-300'}">
+          ${a.favourite?'★':'☆'}</button>`;
+      return `
+      <div id="card-${cssId(a.name)}"
+        class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer transition">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            ${star}
+            ${dot}
+            <span class="font-semibold text-white truncate">${a.name}</span>
+          </div>
+          ${btn}
+        </div>
+        <div class="mt-3 flex items-center gap-2 flex-wrap">
+          <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(a.type)}">${a.type}</span>
+          ${a.port ? `<span class="text-[11px] text-slate-400 mono">:${a.port}</span>` : ""}
+        </div>
+      </div>`;
+    }
+
+    async function toggleRun(name, running) {
+      const action = running ? "stop" : "start";
+      const r = await api(`/api/apps/${encodeURIComponent(name)}/${action}`, {method:"POST"});
+      flash(r.message || (r.ok ? "OK" : "Failed"), r.ok);
+      await load();
+      if (!$("#drawer").classList.contains("hidden")) openDrawer(name);
+    }
+
+    function flash(msg, ok=true) {
+      const el = document.createElement("div");
+      el.className = `fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg text-sm shadow-lg ${ok?'bg-green-700':'bg-red-700'} text-white`;
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    // -------- Drawer --------
+    async function openDrawer(name) {
+      if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
+      $("#drawer").classList.remove("hidden");
+      $("#drawer-content").innerHTML = `<p class="text-slate-400">Loading ${name}…</p>`;
+      const d = await api(`/api/apps/${encodeURIComponent(name)}`);
+      $("#drawer-content").innerHTML = drawerHtml(d);
+      wireDrawer(d);
+    }
+
+    function closeDrawer() {
+      if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
+      $("#drawer").classList.add("hidden");
+    }
+
+    // Poll setup logs + status until the job finishes.
+    function watchSetup(name) {
+      const enc = encodeURIComponent(name);
+      const out = $("#setup-out");
+      const btn = $("#run-setup");
+      if (!out) return;
+      out.classList.remove("hidden");
+      if (setupPoll) clearInterval(setupPoll);
+      const tick = async () => {
+        const [logs, st] = await Promise.all([
+          fetch(`/api/apps/${enc}/setup/logs`).then(r => r.text()),
+          api(`/api/apps/${enc}/setup/status`),
+        ]);
+        out.textContent = logs;
+        out.scrollTop = out.scrollHeight;
+        const s = st.setup;
+        if (s && !s.running) {
+          clearInterval(setupPoll); setupPoll = null;
+          const ok = s.exit_code === 0;
+          if (btn) { btn.disabled = false; btn.textContent = "⚙ Run setup / install"; }
+          flash(ok ? `Setup finished (exit 0)` : `Setup failed (exit ${s.exit_code})`, ok);
+        }
+      };
+      tick();
+      setupPoll = setInterval(tick, 1500);
+    }
+
+    function healthBadge(h) {
+      const map = {
+        healthy: "bg-green-600", running: "bg-green-700", starting: "bg-amber-600",
+        crashed: "bg-red-600", stopped: "bg-slate-600",
+      };
+      return `<span class="px-2 py-0.5 rounded text-xs text-white ${map[h.state]||'bg-slate-600'}">${h.state}</span>`;
+    }
+
+    function drawerHtml(d) {
+      const c = d.config, g = d.git, h = d.health, p = d.process;
+      const gitBox = g.is_repo ? `
+        <div class="grid grid-cols-2 gap-y-1 text-sm">
+          <span class="text-slate-400">Branch</span><span class="mono">${g.branch||"?"}</span>
+          <span class="text-slate-400">Status</span><span>${g.dirty?`<span class="text-amber-400">${g.changed_count} changed</span>`:'<span class="text-green-400">clean</span>'}</span>
+          <span class="text-slate-400">Ahead / Behind</span><span class="mono">${g.ahead} / ${g.behind}</span>
+          <span class="text-slate-400">Last commit</span><span class="mono text-xs">${(g.last_commit||"").slice(0,80)}</span>
+        </div>` : `<p class="text-slate-500 text-sm">Not a git repository.</p>`;
+
+      return `
+      <div class="flex items-start justify-between mb-4">
+        <div>
+          <h2 class="text-xl font-bold text-white">${d.name}</h2>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(c.type)}">${c.type}</span>
+            <span class="text-xs text-slate-400">${c.language||""}</span>
+            ${healthBadge(h)}
+          </div>
+        </div>
+        <button id="close-drawer" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+      </div>
+
+      <p class="text-xs text-slate-500 mono mb-4 break-all">${d.path}</p>
+
+      <div class="flex gap-2 mb-5">
+        <button id="d-run" class="px-4 py-2 rounded-lg font-medium ${p&&p.running?'bg-red-600 hover:bg-red-500':'bg-indigo-600 hover:bg-indigo-500'} text-white ${c.start_command?'':'opacity-40 cursor-not-allowed'}">
+          ${p&&p.running?'■ Stop':'▶ Start'}</button>
+        <button id="d-update" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">⟳ Update (git pull)</button>
+        <button id="d-refresh" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">↻</button>
+      </div>
+
+      ${section("📝 Description", `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(d.description)}</p>`)}
+
+      ${section("🚀 Run config", `
+        <div class="grid grid-cols-[120px_1fr] gap-y-1 text-sm items-center">
+          <span class="text-slate-400">Start cmd</span>
+          <span class="mono text-xs ${c.start_command?'text-slate-200':'text-slate-500'}">${c.start_command||"— none detected —"}</span>
+          <span class="text-slate-400">Port</span><span class="mono">${c.port||"—"}</span>
+          <span class="text-slate-400">Setup</span><span class="mono text-xs text-slate-400">${c.setup_command||"—"}</span>
+          ${p?`<span class="text-slate-400">PID</span><span class="mono">${p.pid} ${p.running?`· up ${p.uptime_seconds}s`:`· exit ${p.exit_code}`}</span>`:""}
+        </div>
+        <button id="edit-cfg" class="mt-2 text-xs text-indigo-400 hover:underline">✎ Edit start command / port</button>
+        <div id="cfg-edit" class="hidden mt-2 space-y-2">
+          <input id="cfg-start" value="${(c.start_command||'').replace(/"/g,'&quot;')}" placeholder="start command"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono"/>
+          <input id="cfg-port" value="${c.port||''}" placeholder="port"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono"/>
+          <button id="cfg-save" class="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded">Save</button>
+        </div>
+        ${c.setup_command ? `
+        <div class="mt-3 pt-3 border-t border-slate-700">
+          <button id="run-setup" class="text-xs px-3 py-1.5 rounded-md bg-amber-700 hover:bg-amber-600 text-white font-medium">
+            ⚙ Run setup / install</button>
+          <span class="ml-2 text-[11px] text-slate-500 mono">${c.setup_command}</span>
+          <pre id="setup-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>
+        </div>` : ""}`)}
+
+      ${section("🌿 Git", gitBox + (g.is_repo?'<div id="git-out" class="mt-2"></div>':''))}
+
+      ${section("❤️ Health", `
+        <div class="text-sm grid grid-cols-2 gap-y-1">
+          <span class="text-slate-400">State</span><span>${healthBadge(h)}</span>
+          <span class="text-slate-400">Port</span><span class="mono">${h.port?`${h.port} (${h.port_status})`:'—'}</span>
+          <span class="text-slate-400">Uptime</span><span class="mono">${h.uptime_seconds}s</span>
+        </div>`)}
+
+      ${section("📜 Logs", `<button id="d-logs" class="text-xs text-indigo-400 hover:underline">Load latest logs</button>
+        <pre id="logs-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>`)}
+
+      ${section("💬 Chat", `<p class="text-xs text-slate-500">AI chat about this app is a planned next pass (reads README + git + code, answers via Claude API).</p>`)}
+      `;
+    }
+
+    function section(title, body) {
+      return `<div class="mb-4 bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-slate-300 mb-2">${title}</h3>${body}</div>`;
+    }
+    function escapeHtml(s){return (s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+    function wireDrawer(d) {
+      const name = d.name, enc = encodeURIComponent(name);
+      $("#close-drawer").onclick = closeDrawer;
+      $("#d-refresh").onclick = () => openDrawer(name);
+      const runBtn = $("#d-run");
+      if (d.config.start_command) runBtn.onclick = async () => {
+        await toggleRun(name, d.process && d.process.running);
+      };
+      $("#d-update").onclick = async () => {
+        $("#d-update").textContent = "⟳ Pulling…";
+        const r = await api(`/api/apps/${enc}/update`, {method:"POST"});
+        flash(r.output ? r.output.split("\n")[0] : (r.ok?"Updated":"Failed"), r.ok);
+        openDrawer(name);
+      };
+      const editBtn = $("#edit-cfg");
+      if (editBtn) editBtn.onclick = () => $("#cfg-edit").classList.toggle("hidden");
+      const saveBtn = $("#cfg-save");
+      if (saveBtn) saveBtn.onclick = async () => {
+        const body = {
+          start_command: $("#cfg-start").value || null,
+          port: $("#cfg-port").value ? parseInt($("#cfg-port").value) : null,
+        };
+        await api(`/api/apps/${enc}/config`, {
+          method:"PUT", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify(body)});
+        flash("Saved config");
+        openDrawer(name);
+      };
+      $("#d-logs").onclick = async () => {
+        const t = await fetch(`/api/apps/${enc}/logs`).then(r=>r.text());
+        const out = $("#logs-out");
+        out.textContent = t; out.classList.remove("hidden");
+      };
+      const setupBtn = $("#run-setup");
+      if (setupBtn) {
+        setupBtn.onclick = async () => {
+          setupBtn.disabled = true;
+          setupBtn.textContent = "⚙ Running…";
+          const r = await api(`/api/apps/${enc}/setup`, {method:"POST"});
+          if (!r.ok) {
+            flash(r.message || "Failed to start setup", false);
+            setupBtn.disabled = false;
+            setupBtn.textContent = "⚙ Run setup / install";
+            return;
+          }
+          watchSetup(name);
+        };
+        // If a setup is already in flight (e.g. drawer reopened), resume.
+        api(`/api/apps/${enc}/setup/status`).then(st => {
+          if (st.setup && st.setup.running) {
+            setupBtn.disabled = true;
+            setupBtn.textContent = "⚙ Running…";
+            watchSetup(name);
+          }
+        });
+      }
+    }
+
+    // events
+    $("#refresh").onclick = load;
+    $("#search").oninput = render;
+    $("#drawer-bg").onclick = closeDrawer;
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+    load();
+    setInterval(() => { if ($("#drawer").classList.contains("hidden")) load(); }, 8000);
+  </script>
+</body>
+</html>
