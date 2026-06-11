@@ -36,8 +36,14 @@ python -m thecmanager
 | **Git status** | Branch, dirty file count, ahead/behind, last commit, remote. |
 | **Update** | `git pull --ff-only` from the dashboard. |
 | **Description** | Pulled from README first paragraph or `package.json`. |
-| **Auto-detect** | Guesses run command for Node, Django, Streamlit, FastAPI, Flask, plain Python, Rust, Go, static sites. |
+| **Auto-detect** | Guesses run command for explicit `run.sh`/`Makefile`, Node, Django, Streamlit, FastAPI, Flask, plain Python, Rust, Go, static sites. |
+| **Run setup / install** | Runs the detected setup command (`install.sh`, `npm install`, `pip install`) as a tracked job with live log tailing. |
 | **Per-app override** | Edit the start command / port; saved in `data/registry.json`. |
+| **Favourites** | Star apps; the home view shows favourites, "All Apps" shows everything. |
+| **Edit with VSCode** | Open a project in a new VS Code window (or focus it if already open). |
+| **Opened in VSCode** | Nav view listing folders open in VS Code windows; click to focus the window. |
+| **Local LLM** | Nav view to start/stop a llama.cpp `llama-server`, pick a GGUF model and set ctx / GPU layers / port; detects servers it didn't start. |
+| **Planner** | Nav view with kanban boards (To Do / In Progress / Done), draggable task cards with notes, priority, due date, and optional links to registry apps. Saved in `data/planner.json`. |
 | **Chat** | Stubbed — planned next pass (reads README + code + git, answers via Claude API). |
 
 ## Configuration
@@ -60,9 +66,12 @@ thecmanager/
   scanner.py     # list apps, descriptions, effective config
   detector.py    # auto-detect run command / type
   registry.py    # per-app overrides (registry.json)
-  runner.py      # start/stop process management + logs
+  runner.py      # start/stop process management + logs (apps + setup jobs)
   git_ops.py     # git status / pull
   health.py      # process + port health checks
+  vscode.py      # open/focus projects + detect open VS Code windows
+  llm.py         # llama.cpp server control (start/stop/status/models)
+  planner.py     # kanban boards + tasks (planner.json)
   static/index.html   # single-page dashboard
 ```
 
@@ -74,5 +83,11 @@ thecmanager/
 - `GET  /api/apps/{name}/status` · `/health` · `/git` · `/logs` · `/description`
 - `POST /api/apps/{name}/update`
 - `PUT  /api/apps/{name}/config` — `{start_command, port, setup_command, description}`
+- `POST /api/apps/{name}/setup` · `GET /api/apps/{name}/setup/status` · `/setup/logs`
+- `POST /api/apps/{name}/favourite` — toggle favourite
+- `POST /api/apps/{name}/vscode/open` · `/vscode/focus` · `GET /api/vscode/folders`
+- `GET  /api/llm/status` · `/llm/models` · `POST /api/llm/start` · `/llm/stop` · `GET /api/llm/logs`
+- `GET  /api/planner` · `POST /api/planner/boards` · `PUT|DELETE /api/planner/boards/{id}`
+- `POST /api/planner/boards/{id}/tasks` · `PUT|DELETE /api/planner/boards/{id}/tasks/{task_id}`
 ```
 ```

@@ -39,6 +39,14 @@
     <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
   </div>
 
+  <!-- Task editor modal -->
+  <div id="task-modal" class="fixed inset-0 z-[55] hidden">
+    <div id="task-modal-bg" class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6">
+      <div id="task-modal-content"></div>
+    </div>
+  </div>
+
   <!-- Detail drawer -->
   <div id="drawer" class="fixed inset-0 z-50 hidden">
     <div id="drawer-bg" class="absolute inset-0 bg-black/60"></div>
@@ -49,11 +57,19 @@
 
   <script>
     const $ = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
     const api = (p, opt) => fetch(p, opt).then(r => r.json());
     let ALL = [];
+    let VSCODE = [];                // folders open in VS Code
+    let LLM = {};                   // llama.cpp server status
+    let MODELS = [];                // available GGUF models
+    let PLANNER = {boards: []};     // kanban boards + tasks
+    let activeBoardId = null;       // currently shown board
     let activeType = "all";
     let activeView = "favourites";  // home shows favourites by default
     let setupPoll = null;           // interval id for the running setup job
+    let llmPoll = null;             // interval id for llm status/log polling
+    let modelsLoaded = false;       // lazy-load the model list once
 
     const TYPE_COLORS = {
       node: "bg-green-900/40 text-green-300 border-green-700",
@@ -72,8 +88,17 @@
     const typeClass = t => TYPE_COLORS[t] || TYPE_COLORS.unknown;
 
     async function load() {
-      const data = await api("/api/apps");
+      const [data, vsc, llm, plan] = await Promise.all([
+        api("/api/apps"),
+        api("/api/vscode/folders").catch(() => ({folders:[]})),
+        api("/api/llm/status").catch(() => ({})),
+        api("/api/planner").catch(() => ({boards:[]})),
+      ]);
       ALL = data.apps;
+      VSCODE = vsc.folders || [];
+      LLM = llm || {};
+      PLANNER = plan && plan.boards ? plan : {boards: []};
+      if (!activeBoardId && PLANNER.boards.length) activeBoardId = PLANNER.boards[0].id;
       $("#subtitle").textContent =
         `${data.count} apps in ${data.projects_dir}`;
       renderViews();
@@ -89,9 +114,13 @@
     }
 
     function renderViews() {
+      const llmDot = LLM.state === "running" ? "🟢" : LLM.state === "loading" ? "🟡" : "⚪";
       const tabs = [
         { id: "favourites", label: `⭐ Favourites`, n: favCount() },
         { id: "all", label: `🗂️ All Apps`, n: ALL.length },
+        { id: "vscode", label: `🖥️ Opened in VSCode`, n: VSCODE.length },
+        { id: "llm", label: `🧠 Local LLM ${llmDot}`, n: null },
+        { id: "planner", label: `📋 Planner`, n: PLANNER.boards ? PLANNER.boards.length : null },
       ];
       $("#views").innerHTML = tabs.map(t => {
         const active = t.id === activeView;
@@ -99,7 +128,7 @@
           class="px-4 py-1.5 rounded-lg text-sm font-medium ${active
             ? 'bg-indigo-600 text-white'
             : 'text-slate-300 hover:bg-slate-800'}">
-          ${t.label} <span class="opacity-60">${t.n}</span></button>`;
+          ${t.label}${t.n!==null?` <span class="opacity-60">${t.n}</span>`:''}</button>`;
       }).join("");
       $("#views").querySelectorAll("button").forEach(b =>
         b.onclick = () => {
@@ -126,6 +155,12 @@
     }
 
     function render() {
+      const isGrid = (activeView === "favourites" || activeView === "all");
+      $("#filters").style.display = isGrid ? "flex" : "none";
+      if (activeView === "vscode") return renderVscode();
+      if (activeView === "llm") return renderLlm();
+      if (activeView === "planner") return renderPlanner();
+
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
         (activeType === "all" || a.type === activeType) &&
@@ -152,7 +187,383 @@
         if (sb) sb.onclick = () => toggleRun(a.name, a.running);
         const fb = $(`#fav-${cssId(a.name)}`);
         if (fb) fb.onclick = () => toggleFav(a.name);
+        const vb = $(`#vsc-${cssId(a.name)}`);
+        if (vb) vb.onclick = () => openVscode(a.name);
       });
+    }
+
+    async function openVscode(name) {
+      const r = await api(`/api/apps/${encodeURIComponent(name)}/vscode/open`, {method:"POST"});
+      flash(r.message || (r.ok?"Opening…":"Failed"), r.ok);
+      // Window state takes a moment to update; refresh shortly after.
+      setTimeout(load, 1500);
+    }
+
+    // -------- "Opened in VSCode" view --------
+    function renderVscode() {
+      const q = $("#search").value.toLowerCase();
+      const folders = VSCODE.filter(f =>
+        f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
+      if (!folders.length) {
+        $("#grid").innerHTML = `<div class="col-span-full text-center py-16 text-slate-500">
+          <p class="text-lg mb-1">🖥️ No VS Code windows detected</p>
+          <p class="text-sm">Open a project with “⧉ Edit with VSCode” from All Apps.</p></div>`;
+        return;
+      }
+      $("#grid").innerHTML = folders.map(f => {
+        const id = cssId(f.path);
+        return `<div id="vf-${id}"
+          class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer transition">
+          <div class="flex items-center gap-2 min-w-0">
+            <span>🖥️</span><span class="font-semibold text-white truncate">${f.name}</span>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-500 mono break-all">${f.path}</p>
+          <div class="mt-3 flex items-center justify-between">
+            ${f.in_projects
+              ? `<span class="text-[11px] px-2 py-0.5 rounded border border-indigo-700 bg-indigo-900/40 text-indigo-300">in Projects</span>`
+              : `<span class="text-[11px] text-slate-500">external folder</span>`}
+            <span class="text-xs text-sky-400">Click to focus →</span>
+          </div>
+        </div>`;
+      }).join("");
+      folders.forEach(f => {
+        const el = $(`#vf-${cssId(f.path)}`);
+        if (el) el.onclick = () => focusVscode(f.path);
+      });
+    }
+
+    async function focusVscode(path) {
+      const r = await api(`/api/vscode/focus-path`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({path})});
+      flash(r.message || (r.ok?"Focusing…":"Failed"), r.ok);
+    }
+
+    // -------- "Local LLM" view --------
+    function renderLlm() {
+      if (!modelsLoaded) {
+        modelsLoaded = true;
+        api("/api/llm/models").then(d => { MODELS = d.models || []; renderLlm(); });
+      }
+      const s = LLM || {};
+      const stateColors = {running:"bg-green-600", loading:"bg-amber-600", stopped:"bg-slate-600"};
+      const busy = s.state === "running" || s.state === "loading";
+      const opts = MODELS.map(m =>
+        `<option value="${m.path}">${m.name} · ${m.size_gb}GB</option>`).join("");
+      $("#grid").innerHTML = `
+      <div class="col-span-full max-w-3xl mx-auto w-full space-y-4">
+        <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="px-3 py-1 rounded text-white text-sm ${stateColors[s.state]||'bg-slate-600'}">${s.state||'unknown'}</span>
+              <div class="min-w-0">
+                <div class="font-semibold text-white truncate">${s.model || 'No model loaded'}</div>
+                <div class="text-xs text-slate-400 mono truncate">${s.url||''}${s.ctx?` · ctx ${s.ctx}`:''}${s.pid?` · pid ${s.pid}`:''}${s.managed?' · managed':''}</div>
+              </div>
+            </div>
+            ${busy ? `<button id="llm-stop" class="shrink-0 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm">■ Stop server</button>` : ''}
+          </div>
+          ${busy && !s.managed ? `<p class="mt-3 text-xs text-amber-400">⚠ Started outside The Manager — Stop will terminate the process on port ${s.port}.</p>` : ''}
+          ${!s.server_bin ? `<p class="mt-3 text-xs text-red-400">llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ''}
+        </div>
+
+        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5 ${busy?'opacity-50 pointer-events-none':''}">
+          <h3 class="text-sm font-semibold text-slate-300 mb-3">Start a server</h3>
+          <div class="space-y-3 text-sm">
+            <label class="block"><span class="text-slate-400 text-xs">Model</span>
+              <select id="llm-model" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">${opts || '<option>No models found</option>'}</select>
+            </label>
+            <div class="grid grid-cols-3 gap-3">
+              <label class="block"><span class="text-slate-400 text-xs">Context (n_ctx)</span>
+                <input id="llm-ctx" type="number" value="65536" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
+              <label class="block"><span class="text-slate-400 text-xs">GPU layers (-ngl)</span>
+                <input id="llm-ngl" type="number" value="99" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
+              <label class="block"><span class="text-slate-400 text-xs">Port</span>
+                <input id="llm-port" type="number" value="${s.port||8080}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <input id="llm-jinja" type="checkbox" checked/> Use --jinja (chat template)</label>
+            <button id="llm-start" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">▶ Start server</button>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-300">Server log</h3>
+            <button id="llm-logbtn" class="text-xs text-indigo-400 hover:underline">Load log</button>
+          </div>
+          <pre id="llm-log" class="hidden bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>
+        </div>
+      </div>`;
+
+      const stopBtn = $("#llm-stop");
+      if (stopBtn) stopBtn.onclick = async () => {
+        stopBtn.textContent = "Stopping…"; stopBtn.disabled = true;
+        const r = await api(`/api/llm/stop`, {method:"POST"});
+        flash(r.message, r.ok);
+        await refreshLlm();
+      };
+      const startBtn = $("#llm-start");
+      if (startBtn) startBtn.onclick = async () => {
+        const body = {
+          model_path: $("#llm-model").value,
+          ctx: parseInt($("#llm-ctx").value)||65536,
+          ngl: parseInt($("#llm-ngl").value)||99,
+          port: parseInt($("#llm-port").value)||8080,
+          jinja: $("#llm-jinja").checked,
+        };
+        startBtn.textContent = "Starting…"; startBtn.disabled = true;
+        const r = await api(`/api/llm/start`, {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify(body)});
+        flash(r.message, r.ok);
+        if (r.ok) { showLlmLog(); watchLlm(); }
+        else { startBtn.textContent = "▶ Start server"; startBtn.disabled = false; }
+      };
+      const logBtn = $("#llm-logbtn");
+      if (logBtn) logBtn.onclick = showLlmLog;
+    }
+
+    async function showLlmLog() {
+      const t = await fetch(`/api/llm/logs`).then(r=>r.text());
+      const out = $("#llm-log");
+      if (out) { out.textContent = t; out.classList.remove("hidden"); out.scrollTop = out.scrollHeight; }
+    }
+
+    async function refreshLlm() {
+      LLM = await api("/api/llm/status").catch(()=>LLM);
+      renderViews();
+      if (activeView === "llm") renderLlm();
+    }
+
+    // Poll while a model loads until it's healthy (or stops).
+    function watchLlm() {
+      if (llmPoll) clearInterval(llmPoll);
+      const tick = async () => {
+        LLM = await api("/api/llm/status").catch(()=>LLM);
+        renderViews();
+        if (activeView === "llm") { renderLlm(); showLlmLog(); }
+        if (LLM.state === "running" || LLM.state === "stopped") {
+          clearInterval(llmPoll); llmPoll = null;
+          flash(LLM.state === "running" ? "LLM server is up" : "LLM server stopped",
+                LLM.state === "running");
+        }
+      };
+      tick();
+      llmPoll = setInterval(tick, 2000);
+    }
+
+    // -------- "Planner" view (kanban) --------
+    const COLS = [
+      {id:"todo", label:"To Do"},
+      {id:"doing", label:"In Progress"},
+      {id:"done", label:"Done"},
+    ];
+    const PRI_COLORS = {high:"bg-red-500", med:"bg-amber-500", low:"bg-slate-500"};
+
+    function activeBoard() {
+      return PLANNER.boards.find(b => b.id === activeBoardId) || PLANNER.boards[0] || null;
+    }
+
+    function renderPlanner() {
+      const boards = PLANNER.boards;
+      if (!boards.length) {
+        $("#grid").innerHTML = `<div class="col-span-full">
+          <button id="new-board" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm mb-4">+ New board</button>
+          <div class="text-center py-16 text-slate-500">
+            <p class="text-lg mb-1">📋 No boards yet</p>
+            <p class="text-sm">Create a board to start planning a project.</p>
+          </div></div>`;
+        $("#new-board").onclick = newBoard;
+        return;
+      }
+      const board = activeBoard();
+      const tabs = boards.map(b => `<button data-board="${b.id}"
+          class="px-3 py-1.5 rounded-lg text-sm ${b.id===board.id?'bg-slate-700 text-white':'text-slate-300 hover:bg-slate-800'}">
+          ${escapeHtml(b.name)} <span class="opacity-50">${b.tasks.length}</span></button>`).join("");
+      const appChip = board.app
+        ? `<span class="text-xs text-slate-400">↳ <button id="board-app" class="text-indigo-400 hover:underline">${escapeHtml(board.app)}</button></span>` : "";
+
+      const columns = COLS.map(c => {
+        const tasks = board.tasks.filter(t => t.status===c.id).sort((a,b)=>a.order-b.order);
+        const cards = tasks.map(taskCard).join("") ||
+          `<p class="text-xs text-slate-600 text-center py-6 pointer-events-none">drop here</p>`;
+        return `<div class="flex-1 min-w-[240px]">
+          <h3 class="text-sm font-semibold text-slate-300 mb-2 px-1">${c.label} <span class="opacity-50">${tasks.length}</span></h3>
+          <div class="kcol bg-slate-900/40 border border-slate-800 rounded-xl p-2 min-h-[120px] space-y-2" data-col="${c.id}">${cards}</div>
+          <input data-add="${c.id}" placeholder="+ Add task, press Enter"
+            class="mt-2 w-full bg-slate-800/60 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-500"/>
+        </div>`;
+      }).join("");
+
+      $("#grid").innerHTML = `<div class="col-span-full">
+        <div class="flex items-center gap-2 mb-4 flex-wrap">
+          ${tabs}
+          <button id="new-board" class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm">+ Board</button>
+        </div>
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3"><h2 class="text-lg font-bold text-white">${escapeHtml(board.name)}</h2>${appChip}</div>
+          <div class="flex gap-3">
+            <button id="rename-board" class="text-xs text-slate-400 hover:text-white">✎ Rename</button>
+            <button id="link-board" class="text-xs text-slate-400 hover:text-white">🔗 Link app</button>
+            <button id="del-board" class="text-xs text-red-400 hover:text-red-300">🗑 Delete board</button>
+          </div>
+        </div>
+        <div class="flex gap-3 overflow-x-auto pb-2">${columns}</div>
+      </div>`;
+
+      $$("[data-board]").forEach(b => b.onclick = () => { activeBoardId = b.dataset.board; renderPlanner(); });
+      $("#new-board").onclick = newBoard;
+      $("#rename-board").onclick = () => renameBoard(board);
+      $("#link-board").onclick = () => linkBoard(board);
+      $("#del-board").onclick = () => deleteBoard(board);
+      const bapp = $("#board-app"); if (bapp) bapp.onclick = () => openDrawer(board.app);
+
+      $$("[data-add]").forEach(inp => inp.onkeydown = async (e) => {
+        if (e.key === "Enter" && inp.value.trim()) {
+          const v = inp.value.trim(); inp.value = "";
+          await addTask(board.id, v, inp.dataset.add);
+        }
+      });
+
+      board.tasks.forEach(t => {
+        const el = $(`#task-${t.id}`);
+        if (!el) return;
+        el.onclick = () => { if (!el._dragging) openTaskEditor(board.id, t.id); };
+        el.ondragstart = (e) => { el._dragging = true; e.dataTransfer.setData("text/plain", t.id); };
+        el.ondragend = () => setTimeout(() => el._dragging = false, 60);
+      });
+      $$(".kcol").forEach(col => {
+        col.ondragover = (e) => { e.preventDefault(); col.classList.add("ring-2","ring-indigo-500"); };
+        col.ondragleave = () => col.classList.remove("ring-2","ring-indigo-500");
+        col.ondrop = async (e) => {
+          e.preventDefault();
+          col.classList.remove("ring-2","ring-indigo-500");
+          const taskId = e.dataTransfer.getData("text/plain");
+          if (taskId) await moveTask(board.id, taskId, col.dataset.col);
+        };
+      });
+    }
+
+    function taskCard(t) {
+      const due = t.due ? `<span class="text-[11px] text-slate-400">📅 ${t.due}</span>` : "";
+      const appc = t.app ? `<span class="text-[11px] text-indigo-300">↳ ${escapeHtml(t.app)}</span>` : "";
+      const notes = t.notes ? `<span class="text-[11px] text-slate-500">📝</span>` : "";
+      return `<div id="task-${t.id}" draggable="true"
+        class="bg-slate-800 border border-slate-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-slate-500">
+        <div class="flex items-start gap-2">
+          <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 ${PRI_COLORS[t.priority]||'bg-slate-500'}"></span>
+          <span class="text-sm text-slate-100 ${t.status==='done'?'line-through opacity-60':''}">${escapeHtml(t.title)}</span>
+        </div>
+        ${(due||appc||notes)?`<div class="mt-2 flex items-center gap-2 flex-wrap pl-4">${due}${appc}${notes}</div>`:""}
+      </div>`;
+    }
+
+    async function reloadPlanner() {
+      const p = await api("/api/planner").catch(()=>PLANNER);
+      PLANNER = p && p.boards ? p : {boards:[]};
+      renderViews();
+    }
+
+    async function newBoard() {
+      const name = prompt("New board name:");
+      if (!name) return;
+      const r = await api("/api/planner/boards", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+      await reloadPlanner();
+      if (r.board) activeBoardId = r.board.id;
+      renderPlanner();
+    }
+    async function renameBoard(board) {
+      const name = prompt("Rename board:", board.name);
+      if (!name) return;
+      await api(`/api/planner/boards/${board.id}`, {method:"PUT",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+      await reloadPlanner(); renderPlanner();
+    }
+    async function linkBoard(board) {
+      const name = prompt("Link this board to which app? (exact name, blank to unlink)", board.app||"");
+      if (name === null) return;
+      await api(`/api/planner/boards/${board.id}`, {method:"PUT",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({app: name.trim()||null})});
+      await reloadPlanner(); renderPlanner();
+    }
+    async function deleteBoard(board) {
+      if (!confirm(`Delete board "${board.name}" and all its tasks?`)) return;
+      await api(`/api/planner/boards/${board.id}`, {method:"DELETE"});
+      if (activeBoardId === board.id) activeBoardId = null;
+      await reloadPlanner();
+      if (!activeBoardId && PLANNER.boards.length) activeBoardId = PLANNER.boards[0].id;
+      renderPlanner();
+    }
+    async function addTask(boardId, title, status) {
+      await api(`/api/planner/boards/${boardId}/tasks`, {method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({title, status})});
+      await reloadPlanner(); renderPlanner();
+    }
+    async function moveTask(boardId, taskId, status) {
+      await api(`/api/planner/boards/${boardId}/tasks/${taskId}`, {method:"PUT",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({status})});
+      await reloadPlanner(); renderPlanner();
+    }
+
+    function openTaskEditor(boardId, taskId) {
+      const board = PLANNER.boards.find(b=>b.id===boardId);
+      const t = board && board.tasks.find(x=>x.id===taskId);
+      if (!t) return;
+      const appOpts = ['<option value="">— none —</option>']
+        .concat(ALL.map(a=>`<option value="${a.name}" ${t.app===a.name?'selected':''}>${a.name}</option>`)).join("");
+      const priOpts = ["low","med","high"].map(p=>`<option value="${p}" ${t.priority===p?'selected':''}>${p}</option>`).join("");
+      const statOpts = COLS.map(c=>`<option value="${c.id}" ${t.status===c.id?'selected':''}>${c.label}</option>`).join("");
+      $("#task-modal-content").innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-white">Edit task</h3>
+          <button id="tm-close" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+        </div>
+        <div class="space-y-3 text-sm">
+          <input id="tm-title" value="${escapeHtml(t.title).replace(/"/g,'&quot;')}" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2"/>
+          <textarea id="tm-notes" rows="4" placeholder="Notes…" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2">${escapeHtml(t.notes||"")}</textarea>
+          <div class="grid grid-cols-3 gap-3">
+            <label class="block"><span class="text-xs text-slate-400">Status</span>
+              <select id="tm-status" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${statOpts}</select></label>
+            <label class="block"><span class="text-xs text-slate-400">Priority</span>
+              <select id="tm-pri" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${priOpts}</select></label>
+            <label class="block"><span class="text-xs text-slate-400">Due</span>
+              <input id="tm-due" type="date" value="${t.due||''}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/></label>
+          </div>
+          <label class="block"><span class="text-xs text-slate-400">Linked app</span>
+            <select id="tm-app" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${appOpts}</select></label>
+          <div class="flex items-center justify-between pt-2">
+            <button id="tm-del" class="text-xs text-red-400 hover:text-red-300">🗑 Delete task</button>
+            <div class="flex gap-2">
+              <button id="tm-cancel" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
+              <button id="tm-save" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Save</button>
+            </div>
+          </div>
+        </div>`;
+      $("#task-modal").classList.remove("hidden");
+      const close = () => $("#task-modal").classList.add("hidden");
+      $("#tm-close").onclick = close;
+      $("#tm-cancel").onclick = close;
+      $("#task-modal-bg").onclick = close;
+      $("#tm-save").onclick = async () => {
+        const body = {
+          title: $("#tm-title").value.trim() || "Untitled",
+          notes: $("#tm-notes").value,
+          status: $("#tm-status").value,
+          priority: $("#tm-pri").value,
+          due: $("#tm-due").value || null,
+          app: $("#tm-app").value || null,
+        };
+        await api(`/api/planner/boards/${boardId}/tasks/${taskId}`, {method:"PUT",
+          headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+        close(); await reloadPlanner(); renderPlanner();
+      };
+      $("#tm-del").onclick = async () => {
+        if (!confirm("Delete this task?")) return;
+        await api(`/api/planner/boards/${boardId}/tasks/${taskId}`, {method:"DELETE"});
+        close(); await reloadPlanner(); renderPlanner();
+      };
     }
 
     async function toggleFav(name) {
@@ -193,6 +604,11 @@
           <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(a.type)}">${a.type}</span>
           ${a.port ? `<span class="text-[11px] text-slate-400 mono">:${a.port}</span>` : ""}
         </div>
+        <button id="vsc-${cssId(a.name)}"
+          class="mt-3 w-full text-xs px-3 py-1.5 rounded-md border ${a.vscode_open
+            ? 'bg-sky-900/40 border-sky-700 text-sky-300'
+            : 'bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700'}">
+          ${a.vscode_open ? '✓ Opened in VSCode' : '⧉ Edit with VSCode'}</button>
       </div>`;
     }
 
@@ -407,7 +823,14 @@
     document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
 
     load();
-    setInterval(() => { if ($("#drawer").classList.contains("hidden")) load(); }, 8000);
+    setInterval(() => {
+      // Don't auto-reload while a drawer/modal is open or on the LLM/Planner
+      // views (it would reset inputs / drag state); those self-refresh.
+      const busy = !$("#drawer").classList.contains("hidden")
+        || !$("#task-modal").classList.contains("hidden")
+        || activeView === "llm" || activeView === "planner";
+      if (!busy) load();
+    }, 8000);
   </script>
 </body>
 </html>
