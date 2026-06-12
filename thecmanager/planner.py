@@ -156,6 +156,45 @@ def update_task(board_id: str, task_id: str, patch: dict[str, Any]) -> Optional[
         return task
 
 
+def move_task(board_id: str, task_id: str, status: str, index: int) -> Optional[dict]:
+    """Move a task to `status` at position `index`, renumbering both columns."""
+    with _lock:
+        data = _load()
+        board = _find_board(data, board_id)
+        if not board:
+            return None
+        task = _find_task(board, task_id)
+        if not task:
+            return None
+        if status not in STATUSES:
+            status = task["status"]
+        src_status = task["status"]
+        task["status"] = status
+
+        # Rebuild destination column with the task inserted at `index`.
+        dest = sorted(
+            (t for t in board["tasks"] if t["status"] == status and t["id"] != task_id),
+            key=lambda t: t["order"],
+        )
+        index = max(0, min(index, len(dest)))
+        dest.insert(index, task)
+        for i, t in enumerate(dest):
+            t["order"] = i
+
+        # Renumber the source column if the task changed columns.
+        if src_status != status:
+            src = sorted(
+                (t for t in board["tasks"]
+                 if t["status"] == src_status and t["id"] != task_id),
+                key=lambda t: t["order"],
+            )
+            for i, t in enumerate(src):
+                t["order"] = i
+
+        _save(data)
+        return task
+
+
 def delete_task(board_id: str, task_id: str) -> bool:
     with _lock:
         data = _load()

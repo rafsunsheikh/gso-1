@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, git_ops, health, llm, planner, runner, scanner, vscode
+from . import config, git_ops, health, llm, planner, runner, scanner, sysmon, vscode
 
 app = FastAPI(title="The Manager", version="0.1.0")
 
@@ -308,6 +308,16 @@ def llm_logs(lines: int = 200) -> PlainTextResponse:
     return PlainTextResponse(llm.tail_log(lines) or "(no logs yet)")
 
 
+@app.get("/api/llm/metrics")
+def llm_metrics() -> JSONResponse:
+    """System CPU/GPU/RAM load, with the LLM process broken out."""
+    st = llm.status()
+    snap = sysmon.get_snapshot(st.get("pid"))
+    if snap is None:
+        return JSONResponse({"warming": True})
+    return JSONResponse(snap)
+
+
 # --------------------------------------------------------------------------
 # Planner (kanban boards + tasks)
 # --------------------------------------------------------------------------
@@ -377,6 +387,19 @@ class TaskPatch(BaseModel):
 @app.put("/api/planner/boards/{board_id}/tasks/{task_id}")
 def planner_update_task(board_id: str, task_id: str, patch: TaskPatch) -> JSONResponse:
     task = planner.update_task(board_id, task_id, patch.model_dump(exclude_unset=True))
+    if task is None:
+        raise HTTPException(status_code=404, detail="Board or task not found.")
+    return JSONResponse({"ok": True, "task": task})
+
+
+class TaskMove(BaseModel):
+    status: str
+    index: int = 0
+
+
+@app.put("/api/planner/boards/{board_id}/tasks/{task_id}/move")
+def planner_move_task(board_id: str, task_id: str, body: TaskMove) -> JSONResponse:
+    task = planner.move_task(board_id, task_id, body.status, body.index)
     if task is None:
         raise HTTPException(status_code=404, detail="Board or task not found.")
     return JSONResponse({"ok": True, "task": task})

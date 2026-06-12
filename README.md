@@ -42,7 +42,7 @@ python -m thecmanager
 | **Favourites** | Star apps; the home view shows favourites, "All Apps" shows everything. |
 | **Edit with VSCode** | Open a project in a new VS Code window (or focus it if already open). |
 | **Opened in VSCode** | Nav view listing folders open in VS Code windows; click to focus the window. |
-| **Local LLM** | Nav view to start/stop a llama.cpp `llama-server`, pick a GGUF model and set ctx / GPU layers / port; detects servers it didn't start. |
+| **Local LLM** | Nav view to start/stop a llama.cpp `llama-server`, pick a GGUF model and set ctx / GPU layers / port; detects servers it didn't start. Includes a live **System load** panel (CPU / GPU / RAM, with the LLM process broken out and a top-processes list) via native macOS tools — no extra deps. |
 | **Planner** | Nav view with kanban boards (To Do / In Progress / Done), draggable task cards with notes, priority, due date, and optional links to registry apps. Saved in `data/planner.json`. |
 | **Chat** | Stubbed — planned next pass (reads README + code + git, answers via Claude API). |
 
@@ -71,6 +71,7 @@ thecmanager/
   health.py      # process + port health checks
   vscode.py      # open/focus projects + detect open VS Code windows
   llm.py         # llama.cpp server control (start/stop/status/models)
+  sysmon.py      # CPU/GPU/RAM monitor via top + ioreg (macOS, no deps)
   planner.py     # kanban boards + tasks (planner.json)
   static/index.html   # single-page dashboard
 ```
@@ -86,7 +87,7 @@ thecmanager/
 - `POST /api/apps/{name}/setup` · `GET /api/apps/{name}/setup/status` · `/setup/logs`
 - `POST /api/apps/{name}/favourite` — toggle favourite
 - `POST /api/apps/{name}/vscode/open` · `/vscode/focus` · `GET /api/vscode/folders`
-- `GET  /api/llm/status` · `/llm/models` · `POST /api/llm/start` · `/llm/stop` · `GET /api/llm/logs`
+- `GET  /api/llm/status` · `/llm/models` · `/llm/metrics` · `POST /api/llm/start` · `/llm/stop` · `GET /api/llm/logs`
 - `GET  /api/planner` · `POST /api/planner/boards` · `PUT|DELETE /api/planner/boards/{id}`
 - `POST /api/planner/boards/{id}/tasks` · `PUT|DELETE /api/planner/boards/{id}/tasks/{task_id}`
 ```

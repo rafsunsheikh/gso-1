@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The Manager</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" href="/static/favicon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: #0b0f17; }
@@ -69,6 +71,7 @@
     let activeView = "favourites";  // home shows favourites by default
     let setupPoll = null;           // interval id for the running setup job
     let llmPoll = null;             // interval id for llm status/log polling
+    let metricsPoll = null;         // interval id for system load polling
     let modelsLoaded = false;       // lazy-load the model list once
 
     const TYPE_COLORS = {
@@ -157,6 +160,7 @@
     function render() {
       const isGrid = (activeView === "favourites" || activeView === "all");
       $("#filters").style.display = isGrid ? "flex" : "none";
+      if (metricsPoll && activeView !== "llm") { clearInterval(metricsPoll); metricsPoll = null; }
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
@@ -267,6 +271,11 @@
           ${!s.server_bin ? `<p class="mt-3 text-xs text-red-400">llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ''}
         </div>
 
+        <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+          <h3 class="text-sm font-semibold text-slate-300 mb-3">System load</h3>
+          <div id="sysmon" class="text-sm text-slate-400">Sampling…</div>
+        </div>
+
         <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5 ${busy?'opacity-50 pointer-events-none':''}">
           <h3 class="text-sm font-semibold text-slate-300 mb-3">Start a server</h3>
           <div class="space-y-3 text-sm">
@@ -322,6 +331,88 @@
       };
       const logBtn = $("#llm-logbtn");
       if (logBtn) logBtn.onclick = showLlmLog;
+      startMetrics();
+    }
+
+    // ---- system load (CPU / GPU / RAM) ----
+    function startMetrics() {
+      if (metricsPoll) clearInterval(metricsPoll);
+      pollMetrics();
+      metricsPoll = setInterval(pollMetrics, 3000);
+    }
+
+    async function pollMetrics() {
+      if (activeView !== "llm") return;
+      const snap = await api("/api/llm/metrics").catch(() => null);
+      const el = $("#sysmon");
+      if (!el) return;
+      if (!snap || snap.warming) { el.textContent = "Sampling… (first reading takes ~3s)"; return; }
+      el.innerHTML = renderSysmon(snap);
+    }
+
+    function bar(segments) {
+      // segments: [{w, cls}] widths in % of total
+      return `<div class="h-3 rounded bg-slate-700/70 overflow-hidden flex">${
+        segments.map(s => `<div style="width:${Math.max(0,s.w)}%" class="${s.cls}"></div>`).join("")
+      }</div>`;
+    }
+
+    function renderSysmon(s) {
+      const gb = b => (b/1e9).toFixed(1);
+      const c = s.cpu, r = s.ram, g = s.gpu;
+      const cpuBar = bar([
+        {w: c.llm,   cls: "bg-indigo-500"},
+        {w: c.other, cls: "bg-amber-500"},
+      ]);
+      const ramBar = bar([
+        {w: (r.llm_bytes/r.total_bytes*100),   cls: "bg-indigo-500"},
+        {w: (r.other_bytes/r.total_bytes*100), cls: "bg-emerald-500"},
+      ]);
+      const gpuBar = g.available ? bar([{w: g.util, cls: "bg-sky-500"}]) : "";
+
+      const rows = (s.top||[]).map(p => `
+        <div class="flex items-center justify-between text-xs ${p.is_llm?'text-indigo-300 font-medium':'text-slate-400'}">
+          <span class="truncate">${p.is_llm?'🧠 ':''}${p.name}</span>
+          <span class="mono shrink-0 ml-2">${p.cpu_share}% cpu · ${gb(p.mem_bytes)}G</span>
+        </div>`).join("");
+
+      return `
+      <div class="space-y-4">
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300">CPU — ${c.busy}% busy</span>
+            <span><span class="text-indigo-400">LLM ${c.llm}%</span> · <span class="text-amber-400">other ${c.other}%</span> · idle ${c.idle}%</span>
+          </div>
+          ${cpuBar}
+          <div class="text-[11px] text-slate-500 mt-1">${s.ncpu} logical cores</div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300">RAM — ${gb(r.used_bytes)} / ${gb(r.total_bytes)} GB (${r.percent}%)</span>
+            <span><span class="text-indigo-400">LLM ${gb(r.llm_bytes)}G</span> · <span class="text-emerald-400">other ${gb(r.other_bytes)}G</span> · free ${gb(r.free_bytes)}G</span>
+          </div>
+          ${ramBar}
+          <div class="text-[11px] text-slate-500 mt-1">of which wired ${gb(r.wired_bytes)}G</div>
+        </div>
+        ${g.available ? `
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300">GPU — ${g.util}% utilization</span>
+            <span class="text-sky-400">active mem ~${gb(g.mem_bytes)}G</span>
+          </div>
+          ${gpuBar}
+        </div>` : `<p class="text-xs text-slate-500">GPU stats unavailable.</p>`}
+        <div>
+          <div class="text-xs text-slate-300 mb-1">Top processes</div>
+          <div class="space-y-1">${rows || '<span class="text-xs text-slate-500">—</span>'}</div>
+        </div>
+        <p class="text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-2">
+          Memory figures are each process's physical footprint (matches Activity Monitor); for the
+          GPU-offloaded model (<span class="mono">-ngl</span>) that includes its Metal/wired weights, which
+          <span class="mono">ps</span>/RSS would miss. macOS doesn't expose per-process GPU utilization, so
+          the GPU bar is system-wide — with the model on GPU, that activity is essentially the LLM.
+        </p>
+      </div>`;
     }
 
     async function showLlmLog() {
@@ -360,6 +451,39 @@
       {id:"done", label:"Done"},
     ];
     const PRI_COLORS = {high:"bg-red-500", med:"bg-amber-500", low:"bg-slate-500"};
+
+    // --- drag-and-drop (between columns AND vertical reorder within one) ---
+    let dragTaskId = null;
+    let dragMarker = null;
+    function _marker() {
+      if (!dragMarker) {
+        dragMarker = document.createElement("div");
+        dragMarker.className = "h-1 bg-indigo-400 rounded";
+      }
+      return dragMarker;
+    }
+    function _removeMarker() {
+      if (dragMarker && dragMarker.parentNode) dragMarker.parentNode.removeChild(dragMarker);
+    }
+    function _colCards(col) {
+      return Array.from(col.children).filter(c =>
+        c.id && c.id.startsWith("task-") && c.id !== "task-" + dragTaskId);
+    }
+    function _dropIndex(col, y) {
+      const cards = _colCards(col);
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect();
+        if (y < r.top + r.height / 2) return i;
+      }
+      return cards.length;
+    }
+    function _placeMarker(col, y) {
+      const cards = _colCards(col);
+      const idx = _dropIndex(col, y);
+      const mk = _marker();
+      if (idx >= cards.length) col.appendChild(mk);
+      else col.insertBefore(mk, cards[idx]);
+    }
 
     function activeBoard() {
       return PLANNER.boards.find(b => b.id === activeBoardId) || PLANNER.boards[0] || null;
@@ -430,19 +554,46 @@
         const el = $(`#task-${t.id}`);
         if (!el) return;
         el.onclick = () => { if (!el._dragging) openTaskEditor(board.id, t.id); };
-        el.ondragstart = (e) => { el._dragging = true; e.dataTransfer.setData("text/plain", t.id); };
-        el.ondragend = () => setTimeout(() => el._dragging = false, 60);
-      });
-      $$(".kcol").forEach(col => {
-        col.ondragover = (e) => { e.preventDefault(); col.classList.add("ring-2","ring-indigo-500"); };
-        col.ondragleave = () => col.classList.remove("ring-2","ring-indigo-500");
-        col.ondrop = async (e) => {
-          e.preventDefault();
-          col.classList.remove("ring-2","ring-indigo-500");
-          const taskId = e.dataTransfer.getData("text/plain");
-          if (taskId) await moveTask(board.id, taskId, col.dataset.col);
+        el.ondragstart = (e) => {
+          el._dragging = true; dragTaskId = t.id;
+          e.dataTransfer.setData("text/plain", t.id);
+          e.dataTransfer.effectAllowed = "move";
+          setTimeout(() => el.classList.add("opacity-40"), 0);
+        };
+        el.ondragend = () => {
+          setTimeout(() => el._dragging = false, 60);
+          el.classList.remove("opacity-40");
+          dragTaskId = null; _removeMarker();
         };
       });
+      $$(".kcol").forEach(col => {
+        col.ondragover = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          col.classList.add("ring-1","ring-indigo-500/60");
+          _placeMarker(col, e.clientY);
+        };
+        col.ondragleave = (e) => {
+          if (!col.contains(e.relatedTarget)) {
+            col.classList.remove("ring-1","ring-indigo-500/60");
+            if (dragMarker && dragMarker.parentNode === col) _removeMarker();
+          }
+        };
+        col.ondrop = async (e) => {
+          e.preventDefault();
+          col.classList.remove("ring-1","ring-indigo-500/60");
+          const taskId = e.dataTransfer.getData("text/plain") || dragTaskId;
+          const idx = _dropIndex(col, e.clientY);
+          _removeMarker();
+          if (taskId) await moveTaskTo(board.id, taskId, col.dataset.col, idx);
+        };
+      });
+    }
+
+    async function moveTaskTo(boardId, taskId, status, index) {
+      await api(`/api/planner/boards/${boardId}/tasks/${taskId}/move`, {method:"PUT",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({status, index})});
+      await reloadPlanner(); renderPlanner();
     }
 
     function taskCard(t) {
