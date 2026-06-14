@@ -292,7 +292,7 @@ def llm_models() -> JSONResponse:
 class LlmStartBody(BaseModel):
     model_path: str
     port: int | None = None
-    ctx: int = 65536
+    ctx: int = 131072
     ngl: int = 99
     jinja: bool = True
     alias: str = ""
@@ -303,6 +303,10 @@ class LlmStartBody(BaseModel):
     temp: float | None = None
     top_p: float | None = None
     top_k: int | None = None
+    min_p: float | None = None
+    context_shift: bool = True
+    cache_type_k: str = "q8_0"
+    cache_type_v: str = "q8_0"
 
 
 @app.post("/api/llm/start")
@@ -321,6 +325,10 @@ def llm_start(body: LlmStartBody) -> JSONResponse:
         temp=body.temp,
         top_p=body.top_p,
         top_k=body.top_k,
+        min_p=body.min_p,
+        context_shift=body.context_shift,
+        cache_type_k=body.cache_type_k,
+        cache_type_v=body.cache_type_v,
     )
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 

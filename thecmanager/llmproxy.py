@@ -12,6 +12,7 @@ depends on the local model's function-calling ability (run llama-server with
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from typing import Iterator
 
@@ -77,6 +78,16 @@ def to_openai(body: dict) -> dict:
         out["max_tokens"] = body["max_tokens"]
     if body.get("temperature") is not None:
         out["temperature"] = body["temperature"]
+    # Forward the rest of the sampler so per-call settings reach llama-server
+    # (previously only temperature was passed; top_p/top_k/min_p were dropped).
+    if body.get("top_p") is not None:
+        out["top_p"] = body["top_p"]
+    if body.get("top_k") is not None:
+        out["top_k"] = body["top_k"]
+    if body.get("min_p") is not None:
+        out["min_p"] = body["min_p"]
+    # Reuse llama.cpp's prompt cache across turns for faster prefill.
+    out["cache_prompt"] = True
     tools = body.get("tools")
     if tools:
         out["tools"] = [{"type": "function",
@@ -95,6 +106,24 @@ def _post(path: str, payload: dict, stream: bool, timeout: int = 600):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def _describe_error(e: Exception) -> str:
+    """Surface llama-server's actual error body (e.g. 'exceeds the available
+    context size') instead of just 'HTTP Error 500', which is far easier to
+    diagnose than the bare urllib exception string."""
+    body = ""
+    try:
+        if isinstance(e, urllib.error.HTTPError):
+            raw = e.read().decode("utf-8", "ignore")
+            try:
+                j = json.loads(raw)
+                body = (j.get("error", {}) or {}).get("message") or j.get("message") or raw
+            except Exception:
+                body = raw
+    except Exception:
+        pass
+    return f"{e}{(': ' + body.strip()) if body else ''}"
+
+
 # --------------------------------------------------------------------------
 # Non-streaming: OpenAI response -> Anthropic message
 # --------------------------------------------------------------------------
@@ -108,7 +137,7 @@ def complete(body: dict) -> dict:
         return {
             "id": "msg_error", "type": "message", "role": "assistant",
             "model": body.get("model", "local"),
-            "content": [{"type": "text", "text": f"[local LLM proxy error: {e}]"}],
+            "content": [{"type": "text", "text": f"[local LLM proxy error: {_describe_error(e)}]"}],
             "stop_reason": "end_turn", "stop_sequence": None,
             "usage": {"input_tokens": 0, "output_tokens": 0},
         }
@@ -214,7 +243,7 @@ def stream(body: dict) -> Iterator[str]:
                 "content_block": {"type": "text", "text": ""}})
             text_open, text_idx = True, 0
         yield _sse("content_block_delta", {"type": "content_block_delta", "index": text_idx,
-            "delta": {"type": "text_delta", "text": f"[local LLM proxy error: {e}]"}})
+            "delta": {"type": "text_delta", "text": f"[local LLM proxy error: {_describe_error(e)}]"}})
 
     if text_open:
         yield _sse("content_block_stop", {"type": "content_block_stop", "index": text_idx})

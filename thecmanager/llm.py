@@ -186,7 +186,7 @@ def log_file() -> Path:
 def start(
     model_path: str,
     port: int = DEFAULT_PORT,
-    ctx: int = 65536,
+    ctx: int = 131072,
     ngl: int = 99,
     jinja: bool = True,
     alias: str = "",
@@ -197,6 +197,10 @@ def start(
     temp: Optional[float] = None,
     top_p: Optional[float] = None,
     top_k: Optional[int] = None,
+    min_p: Optional[float] = None,
+    context_shift: bool = True,
+    cache_type_k: str = "q8_0",
+    cache_type_v: str = "q8_0",
 ) -> dict:
     global _proc
     bin_ = server_bin()
@@ -210,6 +214,22 @@ def start(
             "message": f"A server is already running on port {port}. Stop it first.",
         }
 
+    # A single Claude Code client uses one slot; default to -np 1 so the whole
+    # context window is available to it (auto would pick 4 and fragment the KV
+    # pool, making the limit bite well before `ctx`).
+    if parallel is None:
+        parallel = 1
+    # Sampling defaults tuned for Qwen3.x tool-calling; the proxy forwards these
+    # to llama-server, and a client request can still override per call.
+    if temp is None:
+        temp = 0.6
+    if top_p is None:
+        top_p = 0.95
+    if top_k is None:
+        top_k = 20
+    if min_p is None:
+        min_p = 0.0
+
     lp = log_file()
     fh = open(lp, "w")
     cmd = [
@@ -220,6 +240,14 @@ def start(
         "-c", str(ctx),
         "-ngl", str(ngl),
     ]
+    # Context shift evicts the oldest tokens instead of erroring when a long
+    # session fills the window — without it llama-server rejects the request
+    # ("exceeds the available context size") after a few Claude Code turns.
+    cmd.append("--context-shift" if context_shift else "--no-context-shift")
+    if cache_type_k:
+        cmd += ["-ctk", cache_type_k]
+    if cache_type_v:
+        cmd += ["-ctv", cache_type_v]
     if jinja:
         cmd.append("--jinja")
     if alias:
@@ -238,6 +266,8 @@ def start(
         cmd += ["--top-p", str(top_p)]
     if top_k is not None:
         cmd += ["--top-k", str(top_k)]
+    if min_p is not None:
+        cmd += ["--min-p", str(min_p)]
     fh.write("$ " + " ".join(cmd) + "\n" + "-" * 60 + "\n")
     fh.flush()
 

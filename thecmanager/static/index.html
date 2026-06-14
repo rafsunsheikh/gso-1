@@ -295,8 +295,8 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Resources</div>
               <div class="grid grid-cols-3 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Context <span class="mono text-slate-500">-c</span></span>
-                  <input id="llm-ctx" type="number" value="65536" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
-                  <span class="block text-[11px] text-slate-500 mt-1">Context window in tokens. Larger holds more history but uses more memory.</span></label>
+                  <input id="llm-ctx" type="number" value="131072" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Context window in tokens. Larger holds more history but uses more memory (≈42 KB/token at q8_0).</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">GPU layers <span class="mono text-slate-500">-ngl</span></span>
                   <input id="llm-ngl" type="number" value="99" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Layers offloaded to the GPU. 99 puts the whole model on GPU.</span></label>
@@ -312,8 +312,8 @@
                   <input id="llm-batch" type="number" placeholder="2048" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Prompt-processing batch size. Higher speeds long prompts, costs memory.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Parallel slots <span class="mono text-slate-500">-np</span></span>
-                  <input id="llm-parallel" type="number" placeholder="4" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
-                  <span class="block text-[11px] text-slate-500 mt-1">Concurrent request slots; the context is split evenly across them.</span></label>
+                  <input id="llm-parallel" type="number" placeholder="1" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Concurrent request slots. Blank = 1, so a single Claude Code client gets the whole context window.</span></label>
               </div>
             </div>
 
@@ -348,6 +348,19 @@
                   <input id="llm-alias" type="text" placeholder="optional" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Model name reported to API clients.</span></label>
               </div>
+              <div class="grid grid-cols-2 gap-3 mt-3">
+                <label class="block"><span class="text-slate-300 text-xs font-medium">KV cache type <span class="mono text-slate-500">-ctk/-ctv</span></span>
+                  <select id="llm-cachetype" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">
+                    <option value="q8_0" selected>q8_0 (half memory, recommended)</option>
+                    <option value="f16">f16 (full precision)</option>
+                    <option value="">Server default</option>
+                  </select>
+                  <span class="block text-[11px] text-slate-500 mt-1">Quantizes the KV cache. q8_0 roughly halves its memory so a large context fits.</span></label>
+              </div>
+              <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
+                <input id="llm-ctxshift" type="checkbox" checked class="mt-0.5"/>
+                <span>Use <span class="mono">--context-shift</span>
+                  <span class="block text-[11px] text-slate-500">Evicts the oldest tokens when the window fills instead of erroring. Keep on for long Claude Code sessions.</span></span></label>
               <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
                 <input id="llm-jinja" type="checkbox" checked class="mt-0.5"/>
                 <span>Use <span class="mono">--jinja</span> (model chat template)
@@ -380,7 +393,7 @@
         const numOrNull = (sel) => { const v = parseFloat($(sel).value); return isNaN(v) ? null : v; };
         const body = {
           model_path: $("#llm-model").value,
-          ctx: parseInt($("#llm-ctx").value)||65536,
+          ctx: parseInt($("#llm-ctx").value)||131072,
           ngl: parseInt($("#llm-ngl").value)||99,
           port: parseInt($("#llm-port").value)||8080,
           jinja: $("#llm-jinja").checked,
@@ -392,6 +405,9 @@
           temp: numOrNull("#llm-temp"),
           top_p: numOrNull("#llm-topp"),
           top_k: intOrNull("#llm-topk"),
+          context_shift: $("#llm-ctxshift").checked,
+          cache_type_k: $("#llm-cachetype").value,
+          cache_type_v: $("#llm-cachetype").value,
         };
         startBtn.textContent = "Starting…"; startBtn.disabled = true;
         const r = await api(`/api/llm/start`, {
