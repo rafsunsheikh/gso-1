@@ -4,19 +4,29 @@ from __future__ import annotations
 import atexit
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import (
+    FileResponse, JSONResponse, PlainTextResponse, StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, git_ops, health, llm, planner, runner, scanner, sysmon, vscode
+from . import (
+    claudebridge, config, git_ops, health, llm, llmproxy, planner, runner, scanner,
+    sysmon, telegrambot, vscode,
+)
 
-app = FastAPI(title="The Manager", version="0.1.0")
+app = FastAPI(title="GSO-1", version="0.1.0")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 atexit.register(runner.stop_all)
 atexit.register(llm.stop_if_managed)
+
+
+@app.on_event("startup")
+def _start_telegram() -> None:
+    telegrambot.start()  # no-op unless MANAGER_TELEGRAM_TOKEN is set
 
 
 def _require(name: str) -> None:
@@ -39,6 +49,9 @@ def index() -> FileResponse:
 def list_apps() -> JSONResponse:
     running = runner.running_names()
     vscode_open = vscode.open_folders()
+    claude_state: dict[str, str] = {}
+    for s in claudebridge.list_sessions().values():
+        claude_state[s["project"]] = "working" if s.get("busy") else "attached"
     apps = []
     for name in scanner.list_app_names():
         cfg = scanner.effective_config(name)
@@ -53,6 +66,7 @@ def list_apps() -> JSONResponse:
                 "port": cfg["port"],
                 "favourite": cfg["favourite"],
                 "vscode_open": path in vscode_open,
+                "claude_session": claude_state.get(name),
             }
         )
     return JSONResponse(
@@ -282,6 +296,13 @@ class LlmStartBody(BaseModel):
     ngl: int = 99
     jinja: bool = True
     alias: str = ""
+    threads: int | None = None
+    batch: int | None = None
+    parallel: int | None = None
+    reasoning_format: str = ""
+    temp: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
 
 
 @app.post("/api/llm/start")
@@ -293,6 +314,13 @@ def llm_start(body: LlmStartBody) -> JSONResponse:
         ngl=body.ngl,
         jinja=body.jinja,
         alias=body.alias,
+        threads=body.threads,
+        batch=body.batch,
+        parallel=body.parallel,
+        reasoning_format=body.reasoning_format,
+        temp=body.temp,
+        top_p=body.top_p,
+        top_k=body.top_k,
     )
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
@@ -306,6 +334,60 @@ def llm_stop() -> JSONResponse:
 @app.get("/api/llm/logs", response_class=PlainTextResponse)
 def llm_logs(lines: int = 200) -> PlainTextResponse:
     return PlainTextResponse(llm.tail_log(lines) or "(no logs yet)")
+
+
+@app.get("/api/telegram/status")
+def telegram_status() -> JSONResponse:
+    return JSONResponse(telegrambot.status())
+
+
+# --------------------------------------------------------------------------
+# Claude Code permission bridge (called by claude_perm_mcp.py)
+# --------------------------------------------------------------------------
+class PermissionRequest(BaseModel):
+    chat_id: str
+    tool_name: str
+    tool_input: dict = {}
+
+
+@app.post("/api/claude/permission/request")
+def claude_permission_request(body: PermissionRequest) -> JSONResponse:
+    aid = claudebridge.create_approval(body.chat_id, body.tool_name, body.tool_input)
+    return JSONResponse({"id": aid})
+
+
+@app.get("/api/claude/permission/poll/{aid}")
+def claude_permission_poll(aid: str) -> JSONResponse:
+    return JSONResponse({"decision": claudebridge.poll_approval(aid)})
+
+
+@app.get("/api/claude/sessions")
+def claude_sessions() -> JSONResponse:
+    sessions = [
+        {
+            "project": s["project"],
+            "busy": s.get("busy", False),
+            "has_session": bool(s.get("session_id")),
+        }
+        for s in claudebridge.list_sessions().values()
+    ]
+    return JSONResponse({"count": len(sessions), "sessions": sessions})
+
+
+# --------------------------------------------------------------------------
+# Anthropic-compatible proxy (so `local` Claude sessions use the local model)
+# --------------------------------------------------------------------------
+@app.post("/v1/messages")
+async def anthropic_messages(request: Request):
+    body = await request.json()
+    if body.get("stream"):
+        return StreamingResponse(llmproxy.stream(body), media_type="text/event-stream")
+    return JSONResponse(llmproxy.complete(body))
+
+
+@app.post("/v1/messages/count_tokens")
+async def anthropic_count_tokens(request: Request) -> JSONResponse:
+    return JSONResponse(llmproxy.count_tokens(await request.json()))
 
 
 @app.get("/api/llm/metrics")

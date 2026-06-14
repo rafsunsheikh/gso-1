@@ -1,4 +1,4 @@
-"""Configuration and paths for The Manager."""
+"""Configuration and paths for GSO-1."""
 import os
 from pathlib import Path
 
@@ -7,7 +7,7 @@ PROJECTS_DIR = Path(
     os.environ.get("MANAGER_PROJECTS_DIR", str(Path.home() / "Projects"))
 ).expanduser()
 
-# Where The Manager itself lives (this package's parent of parent).
+# Where GSO-1 itself lives (this package's parent of parent).
 APP_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = APP_DIR / "data"
 LOG_DIR = DATA_DIR / "logs"
@@ -19,7 +19,6 @@ PORT = int(os.environ.get("MANAGER_PORT", "8420"))
 
 # Directory names we never list as "apps".
 IGNORED_NAMES = {
-    "the-manager",
     "node_modules",
     "__pycache__",
     ".git",

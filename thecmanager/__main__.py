@@ -1,6 +1,7 @@
 """Entry point: `python -m thecmanager` launches the dashboard."""
 from __future__ import annotations
 
+import os
 import webbrowser
 
 import uvicorn
@@ -12,14 +13,15 @@ def main() -> None:
     config.ensure_dirs()
     url = f"http://{config.HOST}:{config.PORT}"
     print("=" * 60)
-    print("  The Manager — local application registry")
+    print("  GSO-1 — local application registry")
     print(f"  Projects: {config.PROJECTS_DIR}")
     print(f"  Dashboard: {url}")
     print("=" * 60)
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    if not os.environ.get("MANAGER_NO_BROWSER"):
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     uvicorn.run(
         "thecmanager.server:app",
         host=config.HOST,

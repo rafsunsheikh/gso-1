@@ -190,6 +190,13 @@ def start(
     ngl: int = 99,
     jinja: bool = True,
     alias: str = "",
+    threads: Optional[int] = None,
+    batch: Optional[int] = None,
+    parallel: Optional[int] = None,
+    reasoning_format: str = "",
+    temp: Optional[float] = None,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
 ) -> dict:
     global _proc
     bin_ = server_bin()
@@ -217,6 +224,20 @@ def start(
         cmd.append("--jinja")
     if alias:
         cmd += ["--alias", alias]
+    if threads:
+        cmd += ["-t", str(threads)]
+    if batch:
+        cmd += ["-b", str(batch)]
+    if parallel:
+        cmd += ["-np", str(parallel)]
+    if reasoning_format:
+        cmd += ["--reasoning-format", reasoning_format]
+    if temp is not None:
+        cmd += ["--temp", str(temp)]
+    if top_p is not None:
+        cmd += ["--top-p", str(top_p)]
+    if top_k is not None:
+        cmd += ["--top-k", str(top_k)]
     fh.write("$ " + " ".join(cmd) + "\n" + "-" * 60 + "\n")
     fh.flush()
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>The Manager</title>
+  <title>GSO-1</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="apple-touch-icon" href="/static/favicon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -20,7 +20,7 @@
     <header class="flex items-center justify-between mb-5">
       <div>
         <h1 class="text-2xl font-bold text-white flex items-center gap-2">
-          <span>🗂️</span> The Manager
+          <span>🗂️</span> GSO-1
         </h1>
         <p class="text-sm text-slate-400" id="subtitle">Loading…</p>
       </div>
@@ -102,8 +102,13 @@
       LLM = llm || {};
       PLANNER = plan && plan.boards ? plan : {boards: []};
       if (!activeBoardId && PLANNER.boards.length) activeBoardId = PLANNER.boards[0].id;
-      $("#subtitle").textContent =
-        `${data.count} apps in ${data.projects_dir}`;
+      let sub = `${data.count} apps in ${escapeHtml(data.projects_dir)}`;
+      const cs = ALL.filter(a => a.claude_session);
+      if (cs.length) {
+        sub += ` · <span class="text-indigo-300">🤖 ${cs.length} Claude session`
+          + `${cs.length > 1 ? 's' : ''}: ${cs.map(a => escapeHtml(a.name)).join(', ')}</span>`;
+      }
+      $("#subtitle").innerHTML = sub;
       renderViews();
       renderFilters();
       render();
@@ -267,7 +272,7 @@
             </div>
             ${busy ? `<button id="llm-stop" class="shrink-0 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm">■ Stop server</button>` : ''}
           </div>
-          ${busy && !s.managed ? `<p class="mt-3 text-xs text-amber-400">⚠ Started outside The Manager — Stop will terminate the process on port ${s.port}.</p>` : ''}
+          ${busy && !s.managed ? `<p class="mt-3 text-xs text-amber-400">⚠ Started outside GSO-1 — Stop will terminate the process on port ${s.port}.</p>` : ''}
           ${!s.server_bin ? `<p class="mt-3 text-xs text-red-400">llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ''}
         </div>
 
@@ -277,21 +282,78 @@
         </div>
 
         <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5 ${busy?'opacity-50 pointer-events-none':''}">
-          <h3 class="text-sm font-semibold text-slate-300 mb-3">Start a server</h3>
-          <div class="space-y-3 text-sm">
-            <label class="block"><span class="text-slate-400 text-xs">Model</span>
+          <h3 class="text-sm font-semibold text-slate-300 mb-1">Start a server</h3>
+          <p class="text-xs text-slate-500 mb-4">Each option maps to a <span class="mono">llama-server</span> flag. Leave a field blank to use llama.cpp's own default.</p>
+          <div class="space-y-4 text-sm">
+
+            <label class="block"><span class="text-slate-300 text-xs font-medium">Model <span class="mono text-slate-500">-m</span></span>
               <select id="llm-model" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">${opts || '<option>No models found</option>'}</select>
+              <span class="block text-[11px] text-slate-500 mt-1">GGUF model to load, discovered in your model directories.</span>
             </label>
-            <div class="grid grid-cols-3 gap-3">
-              <label class="block"><span class="text-slate-400 text-xs">Context (n_ctx)</span>
-                <input id="llm-ctx" type="number" value="65536" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
-              <label class="block"><span class="text-slate-400 text-xs">GPU layers (-ngl)</span>
-                <input id="llm-ngl" type="number" value="99" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
-              <label class="block"><span class="text-slate-400 text-xs">Port</span>
-                <input id="llm-port" type="number" value="${s.port||8080}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/></label>
+
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Resources</div>
+              <div class="grid grid-cols-3 gap-3">
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Context <span class="mono text-slate-500">-c</span></span>
+                  <input id="llm-ctx" type="number" value="65536" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Context window in tokens. Larger holds more history but uses more memory.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">GPU layers <span class="mono text-slate-500">-ngl</span></span>
+                  <input id="llm-ngl" type="number" value="99" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Layers offloaded to the GPU. 99 puts the whole model on GPU.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Port <span class="mono text-slate-500">--port</span></span>
+                  <input id="llm-port" type="number" value="${s.port||8080}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">TCP port the server listens on.</span></label>
+              </div>
+              <div class="grid grid-cols-3 gap-3 mt-3">
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Threads <span class="mono text-slate-500">-t</span></span>
+                  <input id="llm-threads" type="number" placeholder="auto" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">CPU threads for generation. Blank = auto-detect.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Batch size <span class="mono text-slate-500">-b</span></span>
+                  <input id="llm-batch" type="number" placeholder="2048" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Prompt-processing batch size. Higher speeds long prompts, costs memory.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Parallel slots <span class="mono text-slate-500">-np</span></span>
+                  <input id="llm-parallel" type="number" placeholder="4" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Concurrent request slots; the context is split evenly across them.</span></label>
+              </div>
             </div>
-            <label class="flex items-center gap-2 text-xs text-slate-300">
-              <input id="llm-jinja" type="checkbox" checked/> Use --jinja (chat template)</label>
+
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Generation defaults</div>
+              <div class="grid grid-cols-3 gap-3">
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Temperature <span class="mono text-slate-500">--temp</span></span>
+                  <input id="llm-temp" type="number" step="0.05" placeholder="model default" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Sampling randomness. Lower (≈0.2) gives steadier output & tool calls.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">top-p <span class="mono text-slate-500">--top-p</span></span>
+                  <input id="llm-topp" type="number" step="0.05" placeholder="0.8" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Nucleus sampling: keep tokens within this cumulative probability.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">top-k <span class="mono text-slate-500">--top-k</span></span>
+                  <input id="llm-topk" type="number" placeholder="20" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Sample only from the K most-likely tokens.</span></label>
+              </div>
+              <span class="block text-[11px] text-slate-500 mt-2">These set the server's defaults; a client request (e.g. Claude Code) can still override them per call.</span>
+            </div>
+
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Behavior</div>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Reasoning format <span class="mono text-slate-500">--reasoning-format</span></span>
+                  <select id="llm-reasoning" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">
+                    <option value="">Server default</option>
+                    <option value="auto">auto</option>
+                    <option value="deepseek">deepseek (separate think field)</option>
+                    <option value="none">none (inline think tags)</option>
+                  </select>
+                  <span class="block text-[11px] text-slate-500 mt-1">For thinking models: where &lt;think&gt; tokens go. "deepseek" keeps them out of the reply & tool calls.</span></label>
+                <label class="block"><span class="text-slate-300 text-xs font-medium">Alias <span class="mono text-slate-500">--alias</span></span>
+                  <input id="llm-alias" type="text" placeholder="optional" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/>
+                  <span class="block text-[11px] text-slate-500 mt-1">Model name reported to API clients.</span></label>
+              </div>
+              <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
+                <input id="llm-jinja" type="checkbox" checked class="mt-0.5"/>
+                <span>Use <span class="mono">--jinja</span> (model chat template)
+                  <span class="block text-[11px] text-slate-500">Applies the model's own template — required for function/tool calling. Leave on unless debugging.</span></span></label>
+            </div>
+
             <button id="llm-start" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">▶ Start server</button>
           </div>
         </div>
@@ -314,12 +376,22 @@
       };
       const startBtn = $("#llm-start");
       if (startBtn) startBtn.onclick = async () => {
+        const intOrNull = (sel) => { const v = parseInt($(sel).value); return isNaN(v) ? null : v; };
+        const numOrNull = (sel) => { const v = parseFloat($(sel).value); return isNaN(v) ? null : v; };
         const body = {
           model_path: $("#llm-model").value,
           ctx: parseInt($("#llm-ctx").value)||65536,
           ngl: parseInt($("#llm-ngl").value)||99,
           port: parseInt($("#llm-port").value)||8080,
           jinja: $("#llm-jinja").checked,
+          alias: $("#llm-alias").value.trim(),
+          threads: intOrNull("#llm-threads"),
+          batch: intOrNull("#llm-batch"),
+          parallel: intOrNull("#llm-parallel"),
+          reasoning_format: $("#llm-reasoning").value,
+          temp: numOrNull("#llm-temp"),
+          top_p: numOrNull("#llm-topp"),
+          top_k: intOrNull("#llm-topk"),
         };
         startBtn.textContent = "Starting…"; startBtn.disabled = true;
         const r = await api(`/api/llm/start`, {
@@ -754,6 +826,9 @@
         <div class="mt-3 flex items-center gap-2 flex-wrap">
           <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(a.type)}">${a.type}</span>
           ${a.port ? `<span class="text-[11px] text-slate-400 mono">:${a.port}</span>` : ""}
+          ${a.claude_session ? `<span class="text-[11px] px-2 py-0.5 rounded border ${a.claude_session==='working'
+            ? 'bg-amber-900/40 text-amber-300 border-amber-700'
+            : 'bg-indigo-900/40 text-indigo-300 border-indigo-700'}">🤖 ${a.claude_session==='working'?'working…':'Claude'}</span>` : ""}
         </div>
         <button id="vsc-${cssId(a.name)}"
           class="mt-3 w-full text-xs px-3 py-1.5 rounded-md border ${a.vscode_open

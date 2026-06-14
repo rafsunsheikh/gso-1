@@ -208,6 +208,13 @@ def _loop() -> None:
             time.sleep(2)  # idle: nobody watching, stay cheap
 
 
+def sample(llm_pid: Optional[int]) -> dict:
+    """Synchronous one-off sample (blocks ~2-3s). Used by non-polling callers."""
+    global _llm_pid
+    _llm_pid = llm_pid
+    return _collect()
+
+
 def get_snapshot(llm_pid: Optional[int]) -> Optional[dict]:
     """Return the latest cached snapshot (None while the first sample warms up).
 
