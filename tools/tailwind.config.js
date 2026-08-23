@@ -7,15 +7,32 @@ module.exports = {
         sans: ["Readex Pro", "system-ui", "-apple-system", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
+      // The existing markup is ~1,500 lines of slate-*/indigo-* utilities.
+      // Rather than rewrite every class, the palette itself now points at the
+      // design tokens, so those classes follow the active theme unchanged.
+      // Channel triplets keep Tailwind's /opacity modifiers working.
       colors: {
         slate: {
-          50: "#f6f5fb", 100: "#edecf3", 200: "#e7e6f0", 300: "#c4c2d6",
-          400: "#9a96b3", 500: "#6f6a8f", 600: "#4a4668", 700: "#2e2a4d",
-          800: "#211d3d", 900: "#171430", 950: "#0a0717",
+          50: "rgb(var(--c-text) / <alpha-value>)",
+          100: "rgb(var(--c-text) / <alpha-value>)",
+          200: "rgb(var(--c-text) / <alpha-value>)",
+          300: "rgb(var(--c-text-2) / <alpha-value>)",
+          400: "rgb(var(--c-text-2) / <alpha-value>)",
+          500: "rgb(var(--c-text-3) / <alpha-value>)",
+          600: "rgb(var(--c-idle) / <alpha-value>)",
+          700: "rgb(var(--c-line) / <alpha-value>)",
+          800: "rgb(var(--c-card) / <alpha-value>)",
+          900: "rgb(var(--c-surface) / <alpha-value>)",
+          950: "rgb(var(--c-bg) / <alpha-value>)",
         },
         indigo: {
-          300: "#b3a0f5", 400: "#9b82f5", 500: "#7c5cf0", 600: "#502ce7",
-          700: "#4322c4", 800: "#351c9c", 900: "#241a4d",
+          300: "rgb(var(--c-primary-text) / <alpha-value>)",
+          400: "rgb(var(--c-primary-text) / <alpha-value>)",
+          500: "rgb(var(--c-primary-hi) / <alpha-value>)",
+          600: "rgb(var(--c-primary) / <alpha-value>)",
+          700: "rgb(var(--c-primary) / <alpha-value>)",
+          800: "rgb(var(--c-primary) / <alpha-value>)",
+          900: "rgb(var(--c-primary) / <alpha-value>)",
         },
       },
     },

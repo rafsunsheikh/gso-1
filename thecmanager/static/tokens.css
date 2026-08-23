@@ -1,0 +1,256 @@
+/*
+ * GSO-1 design tokens — from the Decara-derived redesign handoff (2026-08-23).
+ *
+ * Dark is the default surface; [data-theme="light"] overrides. Every value
+ * here is the shipping value from the handoff's token table.
+ *
+ * Contrast rule (non-negotiable, quoted from the handoff): all muted text is
+ * small (10.5–12px), so the light values were tuned to clear WCAG AA 4.5:1 on
+ * white — --text-2 4.8:1+, --text-3 4.5:1+, --kind-node 5.0:1,
+ * --kind-python 6.7:1. Do not swap these for lighter greys, and never let a
+ * status colour keep its dark-theme hex in light mode.
+ */
+
+:root,
+[data-theme="dark"] {
+  /* surfaces */
+  --bg: #09080f;
+  --surface: #0e0c17;
+  --card: #171425;
+  --card-2: #141120;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.05);
+
+  /* text */
+  --text: #f7f5fd;
+  --text-2: #9a95b5;
+  --text-3: #6b6684;
+  --label: #5c5878;
+
+  /* interaction */
+  --hover: rgba(255, 255, 255, 0.06);
+  --chip: rgba(255, 255, 255, 0.04);
+
+  /* brand */
+  --primary: #502ce7;
+  --primary-hi: #5f3df0;
+  --primary-soft: rgba(80, 44, 231, 0.18);
+  --primary-line: rgba(80, 44, 231, 0.45);
+  --primary-text: #c9bffa;
+  --on-primary: #ffffff;
+
+  /* live / running */
+  --live: #00e0b7;
+  --live-text: #00e0b7;
+  --live-soft: rgba(0, 224, 183, 0.12);
+  --live-line: rgba(0, 224, 183, 0.3);
+  --on-live: #04231d;
+
+  /* warn / dirty */
+  --warn: #f0a92c;
+  --warn-text: #f0c88a;
+  --warn-soft: rgba(240, 169, 44, 0.14);
+
+  /* error */
+  --err: #f0555f;
+  --err-text: #f4959b;
+  --err-soft: rgba(240, 85, 95, 0.12);
+  --err-line: rgba(240, 85, 95, 0.28);
+
+  /* misc state */
+  --sel: rgba(80, 44, 231, 0.14);
+  --idle: #4a4661;
+  --kind-node: #4ade80;
+  --kind-python: #a99cf5;
+  --kind-make: #ec4899;
+  --state-editor: #a99cf5;
+  --skeleton: #221e38;
+  --skeleton-hi: #302a4d;
+
+  --glow: radial-gradient(1100px 520px at 12% -12%, rgba(80, 44, 231, 0.22), transparent 62%);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+
+
+  /* Channel triplets so Tailwind utilities keep working with /opacity.
+     These mirror the tokens above; keep them in sync. */
+  --c-bg: 9 8 15;
+  --c-surface: 14 12 23;
+  --c-card: 23 20 37;
+  --c-card-2: 20 17 32;
+  --c-line: 46 42 77;
+  --c-text: 247 245 253;
+  --c-text-2: 154 149 181;
+  --c-text-3: 107 102 132;
+  --c-idle: 74 70 97;
+  --c-primary: 80 44 231;
+  --c-primary-hi: 95 61 240;
+  --c-primary-text: 201 191 250;
+  --c-live: 0 224 183;
+  --c-warn: 240 169 44;
+  --c-err: 240 85 95;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-2: #f8f9fb;
+  --line: rgba(0, 0, 0, 0.09);
+  --line-2: rgba(0, 0, 0, 0.06);
+
+  --text: #1a1a2e;
+  --text-2: #5c5c6b;
+  --text-3: #717182;
+  --label: #6b6b7c;
+
+  --hover: rgba(0, 0, 0, 0.04);
+  --chip: rgba(0, 0, 0, 0.03);
+
+  --primary: #502ce7;
+  --primary-hi: #4325c9;
+  --primary-soft: rgba(80, 44, 231, 0.1);
+  --primary-line: rgba(80, 44, 231, 0.32);
+  --primary-text: #3f22b8;
+  --on-primary: #ffffff;
+
+  --live: #00b795;
+  --live-text: #04705c;
+  --live-soft: rgba(0, 224, 183, 0.14);
+  --live-line: rgba(0, 183, 149, 0.4);
+  --on-live: #04231d;
+
+  --warn: #d98b06;
+  --warn-text: #8a5a03;
+  --warn-soft: rgba(240, 169, 44, 0.16);
+
+  --err: #d4183d;
+  --err-text: #a8102f;
+  --err-soft: rgba(212, 24, 61, 0.08);
+  --err-line: rgba(212, 24, 61, 0.24);
+
+  --sel: rgba(80, 44, 231, 0.07);
+  --idle: #c3c3ce;
+  --kind-node: #15803d;
+  --kind-python: #5b3fd6;
+  --kind-make: #be1a63;
+  --state-editor: #5b3fd6;
+  --skeleton: #e4e6eb;
+  --skeleton-hi: #f2f3f6;
+
+  --glow: radial-gradient(1100px 520px at 12% -12%, rgba(80, 44, 231, 0.08), transparent 62%);
+  --shadow: 0 8px 28px rgba(26, 26, 46, 0.12);
+
+
+  --c-bg: 248 249 251;
+  --c-surface: 255 255 255;
+  --c-card: 255 255 255;
+  --c-card-2: 248 249 251;
+  --c-line: 214 214 222;
+  --c-text: 26 26 46;
+  --c-text-2: 92 92 107;
+  --c-text-3: 113 113 130;
+  --c-idle: 195 195 206;
+  --c-primary: 80 44 231;
+  --c-primary-hi: 67 37 201;
+  --c-primary-text: 63 34 184;
+  --c-live: 0 183 149;
+  --c-warn: 217 139 6;
+  --c-err: 212 24 61;
+
+  color-scheme: light;
+}
+
+/* ---------------------------------------------------------------- motion
+   The handoff allows exactly two infinite animations and asks that nothing
+   else move. Both are disabled under prefers-reduced-motion. */
+@keyframes gsoPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+@keyframes gsoShimmer {
+  from { background-position: -260px 0; }
+  to   { background-position: 260px 0; }
+}
+@keyframes gsoToast {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gso-pulse, .gso-shimmer { animation: none !important; }
+}
+
+.gso-pulse { animation: gsoPulse 2s ease-in-out infinite; }
+
+/* ------------------------------------------------------------ primitives
+   Small pieces the redesign uses everywhere. Built by hand because this
+   codebase has no component library; the handoff assumed shadcn. */
+
+/* Status dot. Colour alone is never the whole story — callers pair this
+   with an aria-label. */
+.gso-dot {
+  width: 7px; height: 7px;
+  border-radius: 999px;
+  flex: none;
+  display: inline-block;
+  background: var(--idle);
+}
+.gso-dot[data-state="live"]   { background: var(--live); }
+.gso-dot[data-state="warn"]   { background: var(--warn); }
+.gso-dot[data-state="err"]    { background: var(--err); }
+.gso-dot[data-state="editor"] { background: var(--state-editor); }
+.gso-dot[data-state="brand"]  { background: var(--primary); }
+
+/* Section rule: dot, mono label, hairline, optional trailing action. */
+.gso-rule {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.gso-rule-label {
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--label);
+  white-space: nowrap;
+}
+.gso-rule-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line-2);
+}
+
+/* Theme toggle pill in the title bar. */
+.gso-theme-toggle {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-3);
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.gso-theme-toggle:hover { background: var(--hover); color: var(--text-2); }
+
+/* ------------------------------------------------- light-theme text repair
+   `text-white` is used two ways in the existing markup: as a label on a
+   coloured button (must stay white) and as an emphasis colour on a dark
+   surface (must follow the theme, or it turns invisible on white).
+   Remapping the `white` colour wholesale would break the first case, so
+   scope the override to elements that are NOT on a coloured background. */
+[data-theme="light"] .text-white:not([class*="bg-indigo"]):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-amber"]):not([class*="bg-purple"]) {
+  color: var(--text);
+}
+[data-theme="light"] .hover\:text-white:hover:not([class*="bg-indigo"]):not([class*="bg-red"]):not([class*="bg-green"]) {
+  color: var(--text);
+}
+
+/* Same problem for the two hard-coded status colours that predate the tokens. */
+[data-theme="light"] .text-green-400 { color: var(--kind-node); }
+[data-theme="light"] .text-amber-400 { color: var(--warn-text); }
+[data-theme="light"] .text-red-400,
+[data-theme="light"] .text-red-300   { color: var(--err-text); }
+[data-theme="light"] .bg-green-400   { background-color: var(--live); }

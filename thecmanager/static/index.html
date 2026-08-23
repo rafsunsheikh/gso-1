@@ -7,15 +7,16 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="apple-touch-icon" href="/static/favicon.svg" />
   <link rel="stylesheet" href="/static/fonts.css" />
+  <link rel="stylesheet" href="/static/tokens.css" />
   <link rel="stylesheet" href="/static/app.css" />
   <script src="/static/vendor/marked.min.js"></script>
   <!-- Theme lives in tools/tailwind.config.js and is compiled into
        /static/app.css. Regenerate with: cd tools && npm run css -->
   <style>
-    body { background: #0c0a17; }
+    body { background: var(--bg); color: var(--text); }
     ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-thumb { background: #2e2a4d; border-radius: 6px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3a345e; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
     .mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
     /* card soft depth on bordered cards/panels */
     [class~="rounded-xl"][class~="border"] { box-shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 26px rgba(0,0,0,.30); }
@@ -34,7 +35,18 @@
     #site-preview blockquote { border-left: 3px solid #2e2a4d; padding-left: .8em; color: #9a96b3; }
   </style>
 </head>
-<body class="text-slate-200">
+<script>
+    // Inline and synchronous on purpose: set the theme before first paint,
+    // otherwise a light-theme user gets a dark flash on every load.
+    (function () {
+      try {
+        var t = localStorage.getItem("gsoTheme");
+        if (!t) t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    })();
+  </script>
+  <body class="text-slate-200">
     <a href="#grid" class="skip-link">Skip to app list</a>
     <!-- Screen readers announce changes here: app started/stopped, errors. -->
     <div id="a11y-live" class="sr-only-live" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -52,6 +64,8 @@
       <div class="flex items-center gap-3">
         <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
+        <button id="theme-toggle" class="gso-theme-toggle" aria-label="Switch colour theme"
+          title="Switch between dark and light">DARK</button>
         <button id="ops-open" aria-label="Toggle Ops Room panel" aria-controls="ops-panel" class="bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded-lg px-3 py-2 text-sm font-medium">◉ Ops Room</button>
         <button id="refresh" aria-label="Refresh app list" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-sm">↻ Refresh</button>
       </div>
@@ -1801,5 +1815,24 @@
   setInterval(refreshStatus, 15000);
 })();
 </script>
+<script>
+    // ---- theme -----------------------------------------------------------
+    (function () {
+      var btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+      function apply(t) {
+        document.documentElement.setAttribute("data-theme", t);
+        btn.textContent = t.toUpperCase();
+        btn.setAttribute("aria-pressed", t === "light" ? "true" : "false");
+        try { localStorage.setItem("gsoTheme", t); } catch (e) {}
+      }
+      apply(document.documentElement.getAttribute("data-theme") || "dark");
+      btn.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        apply(next);
+        if (typeof announce === "function") announce("Theme set to " + next);
+      });
+    })();
+  </script>
 </body>
 </html>
