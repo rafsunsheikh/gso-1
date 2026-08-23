@@ -480,3 +480,64 @@
 }
 .ops-chip:hover { border-color: var(--primary-line); color: var(--text); }
 .ops-chip[data-more="1"] { border-style: dashed; color: var(--text-3); }
+
+/* ==================================================================
+   Library — status strip + repo cards
+   ================================================================== */
+.lib-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin-bottom: 16px; }
+@media (max-width: 1000px) { .lib-strip { grid-template-columns: repeat(2, 1fr); } }
+.lib-stat {
+  padding: 12px 14px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+  text-align: left; cursor: pointer;
+}
+.lib-stat:hover { border-color: var(--primary-line); }
+.lib-stat[aria-current="page"] { background: var(--primary-soft); border-color: var(--primary-line); }
+.lib-stat-h { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-2); }
+.lib-stat-v { margin-top: 5px; display: flex; align-items: baseline; gap: 7px; }
+.lib-stat-n { font: 700 19px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.lib-stat-s { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 11px; }
+.lib-card {
+  border-radius: 11px; padding: 13px 14px;
+  background: var(--card); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px;
+  cursor: pointer;
+}
+.lib-card:hover { border-color: var(--primary-line); }
+.lib-card:focus-visible { outline: 2px solid var(--primary-line); outline-offset: 2px; }
+.lib-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lib-name {
+  font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+}
+.lib-port { font: 600 11px ui-monospace, Menlo, monospace; color: var(--live-text); flex: none; }
+.lib-star { background: none; border: 0; cursor: pointer; font-size: 14px; line-height: 1; flex: none; color: var(--idle); padding: 0; }
+.lib-star[aria-pressed="true"] { color: var(--warn); }
+.lib-path { font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lib-badge {
+  font: 600 10.5px ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 5px;
+  background: var(--chip); border: 1px solid var(--line); color: var(--text-2);
+}
+.lib-badge[data-kind="node"]   { color: var(--kind-node); }
+.lib-badge[data-kind="python"] { color: var(--kind-python); }
+.lib-badge[data-kind="make"]   { color: var(--kind-make); }
+.lib-dirty { font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--warn-text); }
+.lib-actions { display: flex; align-items: center; gap: 7px; margin-top: 1px; }
+.lib-primary {
+  flex: 1; height: 30px; border-radius: 10px; border: 0;
+  background: var(--primary); color: var(--on-primary);
+  font: 600 12px "Readex Pro", system-ui, sans-serif; cursor: pointer;
+}
+.lib-primary:hover { background: var(--primary-hi); }
+.lib-primary[data-tone="stop"] { background: transparent; border: 1px solid var(--err-line); color: var(--err-text); }
+.lib-primary[data-tone="stop"]:hover { background: var(--err-soft); }
+.lib-primary:disabled { background: var(--chip); color: var(--text-3); cursor: not-allowed; }
+.lib-icon {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  border: 1px solid var(--line); background: transparent; color: var(--text-2); cursor: pointer;
+}
+.lib-icon:hover { background: var(--hover); color: var(--text); }

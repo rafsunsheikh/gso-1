@@ -718,8 +718,8 @@
       if (activeView === "site") return renderSite();
 
       const gridEl = $("#grid");
-      gridEl.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
-      gridEl.style.display = "grid";
+      gridEl.className = "";
+      gridEl.style.display = "block";
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
         (activeType === "all" || a.type === activeType) &&
@@ -747,7 +747,30 @@
           <button id="goto-all" class="text-indigo-400 hover:underline">your projects</button> to browse.</p>
         </div>`;
       }
-      $("#grid").innerHTML = apps.map(card).join("") || empty;
+      const c = (OVERVIEW && OVERVIEW.counts) || {};
+      // Status strip: state before catalogue — these double as filters.
+      const strip = `<div class="lib-strip">
+        <button class="lib-stat" data-goto="opsroom">
+          <span class="lib-stat-h"><span class="gso-dot gso-pulse" data-state="live" aria-hidden="true"></span>Running now</span>
+          <span class="lib-stat-v"><span class="lib-stat-n">${c.live ?? "–"}</span><span class="lib-stat-s">processes</span></span>
+        </button>
+        <button class="lib-stat" data-goto="uncommitted" ${activeView === "uncommitted" ? 'aria-current="page"' : ""}>
+          <span class="lib-stat-h"><span class="gso-dot" data-state="warn" aria-hidden="true"></span>Uncommitted work</span>
+          <span class="lib-stat-v"><span class="lib-stat-n">${c.dirty ?? "–"}</span><span class="lib-stat-s">repos dirty</span></span>
+        </button>
+        <button class="lib-stat" data-goto="vscode" ${activeView === "vscode" ? 'aria-current="page"' : ""}>
+          <span class="lib-stat-h"><span class="gso-dot" data-state="editor" aria-hidden="true"></span>Open in VSCode</span>
+          <span class="lib-stat-v"><span class="lib-stat-n">${VSCODE.length}</span><span class="lib-stat-s">windows</span></span>
+        </button>
+        <button class="lib-stat" data-goto="failed" ${activeView === "failed" ? 'aria-current="page"' : ""}>
+          <span class="lib-stat-h"><span class="gso-dot" data-state="err" aria-hidden="true"></span>Failed runs</span>
+          <span class="lib-stat-v"><span class="lib-stat-n">${c.failed ?? "–"}</span><span class="lib-stat-s">need a look</span></span>
+        </button>
+      </div>`;
+      $("#grid").innerHTML = strip +
+        (apps.length ? `<div class="lib-grid">${apps.map(card).join("")}</div>` : empty);
+      $("#grid").querySelectorAll("[data-goto]").forEach(b =>
+        b.onclick = () => selectView(b.dataset.goto));
       const clearBtn = $("#clear-filters");
       if (clearBtn) clearBtn.onclick = () => {
         $("#search").value = "";
@@ -774,11 +797,14 @@
             openDrawer(a.name);
           }
         };
-        const sb = $(`#start-${cssId(a.name)}`);
-        if (sb) sb.onclick = () => {
+        const sb = cardEl.querySelector("[data-run]");
+        if (sb) sb.onclick = (e) => {
+          e.stopPropagation();
           announce(`${a.running ? "Stopping" : "Starting"} ${a.name}`);
           toggleRun(a.name, a.running);
         };
+        const cfgb = cardEl.querySelector("[data-cfg]");
+        if (cfgb) cfgb.onclick = (e) => { e.stopPropagation(); openDrawer(a.name); };
         const fb = $(`#fav-${cssId(a.name)}`);
         if (fb) fb.onclick = () => toggleFav(a.name);
         const vb = $(`#vsc-${cssId(a.name)}`);
@@ -1071,8 +1097,8 @@
     // -------- "Opened in VSCode" view --------
     function renderVscode() {
       const gridEl = $("#grid");
-      gridEl.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
-      gridEl.style.display = "grid";
+      gridEl.className = "";
+      gridEl.style.display = "block";
       const q = $("#search").value.toLowerCase();
       const folders = VSCODE.filter(f =>
         f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
@@ -1683,47 +1709,49 @@
 
     const cssId = s => s.replace(/[^a-zA-Z0-9]/g, "_");
 
+    function dirtyFor(name) {
+      if (!OVERVIEW) return null;
+      return (OVERVIEW.dirty || []).find(r => r.name === name) || null;
+    }
+
     function card(a) {
-      const dot = a.running
-        ? '<span class="w-2 h-2 rounded-full bg-green-400 animate-pulse" role="img" aria-label="Running"></span>'
-        : '<span class="w-2 h-2 rounded-full bg-slate-600" role="img" aria-label="Stopped"></span>';
-      const btn = a.has_start_command
-        ? `<button id="start-${cssId(a.name)}"
-             aria-label="${a.running ? 'Stop' : 'Start'} ${escapeHtml(a.name)}"
-             class="text-xs px-3 py-1.5 rounded-md font-medium ${a.running
-               ? 'bg-red-600 hover:bg-red-500 text-white'
-               : 'bg-indigo-600 hover:bg-indigo-500 text-white'}">
-             ${a.running ? '■ Stop' : '▶ Start'}</button>`
-        : `<span class="text-xs text-slate-500">no run cmd</span>`;
-      const star = `<button id="fav-${cssId(a.name)}" title="${a.favourite?'Unfavourite':'Favourite'}"
-          aria-label="${a.favourite ? 'Remove' : 'Add'} ${escapeHtml(a.name)} ${a.favourite ? 'from' : 'to'} favourites"
-          aria-pressed="${a.favourite ? 'true' : 'false'}"
-          class="text-lg leading-none ${a.favourite?'text-amber-400':'text-slate-600 hover:text-amber-300'}">
-          ${a.favourite?'★':'☆'}</button>`;
+      const id = cssId(a.name);
+      const d = dirtyFor(a.name);
+      const kind = (a.type || "").toLowerCase();
+      const badge = a.language || a.type
+        ? `<span class="lib-badge" data-kind="${escapeHtml(kind)}">${escapeHtml(a.language || a.type)}</span>` : "";
+      const dirty = d && d.changed_count
+        ? `<span class="lib-dirty">${d.changed_count} changed</span>` : "";
+      const branch = d && d.branch
+        ? `<span class="lib-badge">${escapeHtml(d.branch)}</span>` : "";
+
+      // One primary action per card, per the handoff; secondaries are icons.
+      const primary = a.has_start_command
+        ? `<button class="lib-primary" data-tone="${a.running ? "stop" : "start"}" data-run="${escapeHtml(a.name)}"
+             aria-label="${a.running ? "Stop" : "Start"} ${escapeHtml(a.name)}">${a.running ? "Stop" : "Start"}</button>`
+        : (a.is_self
+            ? `<button class="lib-primary" disabled title="This is GSO-1 itself">Running (this app)</button>`
+            : `<button class="lib-primary" data-cfg="${escapeHtml(a.name)}">Set run command</button>`);
+
       return `
-      <div id="card-${cssId(a.name)}" role="button" tabindex="0"
-        aria-label="${escapeHtml(a.name)} details"
-        class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer transition">
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
-            ${star}
-            ${dot}
-            <span class="font-semibold text-white truncate">${a.name}</span>
-          </div>
-          ${btn}
+      <div id="card-${id}" class="lib-card" role="button" tabindex="0"
+        aria-label="${escapeHtml(a.name)} details">
+        <div class="lib-top">
+          <span class="gso-dot${a.running ? " gso-pulse" : ""}" data-state="${a.running ? "live" : ""}"
+            role="img" aria-label="${a.running ? "Running" : "Stopped"}"></span>
+          <span class="lib-name">${escapeHtml(a.name)}</span>
+          ${a.port ? `<span class="lib-port">:${a.port}</span>` : ""}
+          <button id="fav-${id}" class="lib-star" aria-pressed="${a.favourite ? "true" : "false"}"
+            aria-label="${a.favourite ? "Remove" : "Add"} ${escapeHtml(a.name)} ${a.favourite ? "from" : "to"} favourites"
+            title="${a.favourite ? "Unfavourite" : "Favourite"}">${a.favourite ? "★" : "☆"}</button>
         </div>
-        <div class="mt-3 flex items-center gap-2 flex-wrap">
-          <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(a.type)}">${a.type}</span>
-          ${a.port ? `<span class="text-[11px] text-slate-400 mono">:${a.port}</span>` : ""}
-          ${a.claude_session ? `<span class="text-[11px] px-2 py-0.5 rounded border ${a.claude_session==='working'
-            ? 'bg-amber-900/40 text-amber-300 border-amber-700'
-            : 'bg-indigo-900/40 text-indigo-300 border-indigo-700'}">🤖 ${a.claude_session==='working'?'working…':'Claude'}</span>` : ""}
+        <div class="lib-path">${escapeHtml(a.root_label || "")}${a.vscode_open ? " · in editor" : ""}</div>
+        <div class="lib-meta">${badge}${branch}${dirty}</div>
+        <div class="lib-actions">
+          ${primary}
+          <button id="vsc-${id}" class="lib-icon" title="Open in VS Code"
+            aria-label="Open ${escapeHtml(a.name)} in VS Code">&#9998;</button>
         </div>
-        <button id="vsc-${cssId(a.name)}"
-          class="mt-3 w-full text-xs px-3 py-1.5 rounded-md border ${a.vscode_open
-            ? 'bg-sky-900/40 border-sky-700 text-sky-300'
-            : 'bg-slate-700/50 border-slate-600 text-slate-200 hover:bg-slate-700'}">
-          ${a.vscode_open ? '✓ Opened in VSCode' : '⧉ Edit with VSCode'}</button>
       </div>`;
     }
 
