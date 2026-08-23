@@ -399,3 +399,84 @@
 @media (max-width: 900px) {
   .gso-side { position: absolute; z-index: 70; height: 100%; box-shadow: var(--shadow); }
 }
+
+/* ==================================================================
+   Ops Room view — LIVE / NEEDS YOU / ROUTINES / RECENT
+   ================================================================== */
+.ops-view { display: flex; flex-direction: column; gap: 19px; }
+
+.ops-live-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+@media (max-width: 1100px) { .ops-live-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px)  { .ops-live-grid { grid-template-columns: 1fr; } }
+
+.ops-live-card {
+  border-radius: 13px; padding: 14px;
+  background: var(--live-soft); border: 1px solid var(--live-line);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.ops-live-head { display: flex; align-items: baseline; gap: 8px; }
+.ops-live-name { font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-live-port { margin-left: auto; font: 600 11px ui-monospace, Menlo, monospace; color: var(--live-text); flex: none; }
+.ops-live-meta { font: 400 11.5px/1.45 ui-monospace, Menlo, monospace; color: var(--text-2); }
+.ops-live-foot { display: flex; align-items: center; gap: 10px; }
+.ops-live-up { font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-3); }
+.ops-stop {
+  margin-left: auto; height: 26px; padding: 0 12px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--err-line); color: var(--err-text);
+  font-size: 11.5px; cursor: pointer; flex: none;
+}
+.ops-stop:hover { background: var(--err-soft); }
+
+.ops-empty {
+  border-radius: 13px; padding: 26px; text-align: center;
+  border: 1px dashed var(--line);
+}
+.ops-empty-t { font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.ops-empty-s { font-size: 12px; color: var(--text-3); margin: 6px 0 14px; }
+.ops-pill-live {
+  height: 31px; padding: 0 15px; border-radius: 999px; border: 0;
+  background: var(--live); color: var(--on-live); font: 600 12px "Readex Pro", sans-serif;
+  cursor: pointer;
+}
+
+.ops-rows { display: flex; flex-direction: column; gap: 7px; }
+.ops-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+}
+.ops-row:hover { border-color: var(--primary-line); }
+.ops-row[data-kind="err"] { background: var(--err-soft); border-color: var(--err-line); }
+.ops-row-name { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  width: 220px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-row-metric { font: 400 11.5px ui-monospace, Menlo, monospace; width: 110px; flex: none; color: var(--warn-text); }
+.ops-row[data-kind="err"] .ops-row-metric { color: var(--err-text); }
+.ops-row-ctx { font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-3);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-link {
+  background: none; border: 0; cursor: pointer; font-size: 12px; flex: none;
+  color: var(--primary-text); padding: 0;
+}
+.ops-link[data-tone="muted"] { color: var(--text-3); }
+.ops-link[data-tone="err"]   { color: var(--err-text); }
+.ops-link:hover { text-decoration: underline; }
+
+.ops-routines { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+@media (max-width: 900px) { .ops-routines { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.ops-routine {
+  height: 38px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text-2);
+  font: 500 12px "Readex Pro", system-ui, sans-serif; cursor: pointer;
+}
+.ops-routine:hover { background: var(--hover); border-color: var(--primary-line); color: var(--text); }
+
+.ops-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.ops-chip {
+  display: flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 12px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line);
+  color: var(--text-2); font-size: 12px; cursor: pointer;
+}
+.ops-chip:hover { border-color: var(--primary-line); color: var(--text); }
+.ops-chip[data-more="1"] { border-style: dashed; color: var(--text-3); }

@@ -18,6 +18,7 @@ from . import (
 from . import chat as chat_agent
 from . import scheduler
 from . import opsroom as opsroom_bridge
+from . import overview as overview_mod
 from . import site as site_cms
 
 app = FastAPI(title="GSO-1", version="0.1.0")
@@ -365,6 +366,16 @@ def llm_stop() -> JSONResponse:
 @app.get("/api/llm/logs", response_class=PlainTextResponse)
 def llm_logs(lines: int = 200) -> PlainTextResponse:
     return PlainTextResponse(llm.tail_log(lines) or "(no logs yet)")
+
+
+@app.get("/api/overview")
+def api_overview(force: bool = False) -> JSONResponse:
+    """Live processes, dirty repos and failed runs in one call.
+
+    Per-repo from the browser would be ~270 round trips; the git sweep alone
+    is ~12s of subprocesses, so results are cached (see overview.py).
+    """
+    return JSONResponse(overview_mod.get(force=force))
 
 
 # --------------------------------------------------------------------------

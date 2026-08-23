@@ -306,7 +306,7 @@
     let PLANNER = {boards: []};     // kanban boards + tasks
     let activeBoardId = null;       // currently shown board
     let activeType = "all";
-    let activeView = "library";  // home shows favourites by default
+    let activeView = "opsroom";  // home shows favourites by default
     let setupPoll = null;           // interval id for the running setup job
     let llmPoll = null;             // interval id for llm status/log polling
     let metricsPoll = null;         // interval id for system load polling
@@ -382,7 +382,7 @@
       ROOTS = data.roots || [];
       // If the remembered view points at a root that no longer exists, reset.
       if (activeView.startsWith("root:") && !ROOTS.includes(activeView.slice(5)))
-        activeView = "library";
+        activeView = "opsroom";
       VSCODE = vsc.folders || [];
       LLM = llm || {};
       PLANNER = plan && plan.boards ? plan : {boards: []};
@@ -405,6 +405,14 @@
     // type/search filters.
     function viewApps() {
       if (activeView === "favourites") return ALL.filter(a => a.favourite);
+      if (activeView === "uncommitted") {
+        const names = new Set((OVERVIEW && OVERVIEW.dirty || []).map(r => r.name));
+        return ALL.filter(a => names.has(a.name));
+      }
+      if (activeView === "failed") {
+        const names = new Set((OVERVIEW && OVERVIEW.failed || []).map(r => r.name));
+        return ALL.filter(a => names.has(a.name));
+      }
       if (activeView.startsWith("root:")) {
         const label = activeView.slice(5);
         return ALL.filter(a => a.root_label === label);
@@ -412,6 +420,177 @@
       return ALL;
     }
     function firstRootView() { return ROOTS.length ? `root:${ROOTS[0]}` : "favourites"; }
+
+
+    // ================= Ops Room view =================================
+    let OVERVIEW = null;
+    let _ovLoading = false;
+    let _ovError = null;
+
+    async function loadOverview(force) {
+      if (_ovLoading) return;
+      _ovLoading = true;
+      try {
+        OVERVIEW = await api("/api/overview" + (force ? "?force=true" : ""), { timeoutMs: 90000 });
+        _ovError = null;
+      } catch (e) {
+        // Record the failure rather than toasting here: renderOpsRoom() calls
+        // this and re-renders on completion, so toasting on every attempt
+        // produced an unbounded storm when the endpoint was down.
+        _ovError = e.message || String(e);
+      } finally {
+        _ovLoading = false;
+      }
+    }
+
+    function fmtUptime(sec) {
+      sec = Math.max(0, Math.floor(sec || 0));
+      const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      if (d) return `${d}d ${h}h`;
+      if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
+      return `${m}m`;
+    }
+
+    function sectionRule(dotState, label, right) {
+      return `<div class="gso-rule">
+        <span class="gso-dot${dotState === "live" ? " gso-pulse" : ""}" data-state="${dotState}" aria-hidden="true"></span>
+        <span class="gso-rule-label">${escapeHtml(label)}</span>
+        <span class="gso-rule-line"></span>
+        ${right ? `<span style="font-size:11.5px;color:var(--text-3);flex:none">${right}</span>` : ""}
+      </div>`;
+    }
+
+    function renderOpsRoom() {
+      const grid = $("#grid");
+      grid.style.display = "block";
+      grid.className = "ops-view";
+
+      if (_ovError) {
+        grid.innerHTML = `<div class="ops-empty" style="border-color:var(--err-line)">
+          <div class="ops-empty-t" style="color:var(--err-text)">Could not read your machine</div>
+          <div class="ops-empty-s">${escapeHtml(_ovError)}</div>
+          <button class="ops-pill-live" id="ov-retry">Try again</button></div>`;
+        const r = $("#ov-retry");
+        if (r) r.onclick = async () => {
+          _ovError = null; renderOpsRoom();
+          await loadOverview(true);
+          if (activeView === "opsroom") renderOpsRoom();
+        };
+        return;
+      }
+      if (!OVERVIEW) {
+        grid.innerHTML = `<div class="ops-empty"><div class="ops-empty-t">Reading your machine&hellip;</div>
+          <div class="ops-empty-s">Scanning repos and running processes.</div></div>`;
+        if (!_ovLoading) {
+          loadOverview().then(() => { if (activeView === "opsroom") renderOpsRoom(); });
+        }
+        return;
+      }
+
+      const c = OVERVIEW.counts || {};
+      const hour = new Date().getHours();
+      const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+      $("#view-title").textContent = `${greet}, Rafsun`;
+      $("#subtitle").textContent =
+        `${c.live || 0} running · ${c.dirty || 0} uncommitted · ${c.failed || 0} failed runs`;
+
+      // ---- LIVE
+      const live = OVERVIEW.live || [];
+      const liveBody = live.length
+        ? `<div class="ops-live-grid">${live.map(a => `
+            <div class="ops-live-card">
+              <div class="ops-live-head">
+                <span class="ops-live-name">${escapeHtml(a.name)}</span>
+                ${a.port ? `<span class="ops-live-port">:${a.port}</span>` : ""}
+              </div>
+              <div class="ops-live-meta">${escapeHtml(a.type || "process")}${a.pid ? ` · pid ${a.pid}` : ""}</div>
+              <div class="ops-live-foot">
+                <span class="ops-live-up">up ${fmtUptime(a.uptime_seconds)}</span>
+                <button class="ops-stop" data-stop="${escapeHtml(a.name)}"
+                  aria-label="Stop ${escapeHtml(a.name)}">Stop</button>
+              </div>
+            </div>`).join("")}</div>`
+        : `<div class="ops-empty">
+             <div class="ops-empty-t">Nothing running</div>
+             <div class="ops-empty-s">Start a repo from the Library, or ask Ops Room to bring up your usual stack.</div>
+             <button class="ops-pill-live" data-goto="library">Browse the Library</button>
+           </div>`;
+
+      // ---- NEEDS YOU
+      const dirty = (OVERVIEW.dirty || []).slice(0, 6);
+      const unsynced = (OVERVIEW.unsynced || []).slice(0, 3);
+      const rows = [
+        ...dirty.map(r => ({
+          name: r.name, metric: `${r.changed_count} changed`,
+          ctx: `on ${r.branch || "?"}${r.last_commit ? " · " + r.last_commit.slice(0, 60) : ""}`,
+          primary: "Open", kind: "warn",
+        })),
+        ...unsynced.map(r => ({
+          name: r.name,
+          metric: r.behind ? `behind ${r.behind}` : `ahead ${r.ahead}`,
+          ctx: `branch ${r.branch || "?"}`, primary: "Open", kind: "warn",
+        })),
+        ...(OVERVIEW.failed || []).slice(0, 3).map(f => ({
+          name: f.name, metric: f.state || `exit ${f.exit_code}`,
+          ctx: "last run did not stay up", primary: "Logs", kind: "err",
+        })),
+      ];
+      const needsBody = rows.length
+        ? `<div class="ops-rows">${rows.map(r => `
+            <div class="ops-row" data-kind="${r.kind}">
+              <span class="ops-row-name">${escapeHtml(r.name)}</span>
+              <span class="ops-row-metric">${escapeHtml(r.metric)}</span>
+              <span class="ops-row-ctx">${escapeHtml(r.ctx)}</span>
+              <button class="ops-link" data-open="${escapeHtml(r.name)}">${r.primary}</button>
+            </div>`).join("")}</div>`
+        : `<div class="ops-empty"><div class="ops-empty-t">Everything is committed</div>
+             <div class="ops-empty-s">No dirty repos, nothing out of sync, no failed runs.</div></div>`;
+
+      // ---- ROUTINES
+      const routines = [
+        { label: "Rescan projects", act: "rescan", hint: "Re-read every repo" },
+        { label: "Sweep git state", act: "sweep", hint: "Refresh dirty counts" },
+        { label: "Open Ops Room", act: "ops", hint: "Ask the assistant" },
+        { label: "Browse Library", act: "library", hint: `${c.apps || 0} apps` },
+      ];
+
+      // ---- RECENT
+      const recent = ALL.slice(0, 8);
+
+      grid.innerHTML = `
+        <section>${sectionRule("live", "Live", `${c.live || 0} of ${c.apps || 0} up`)}
+          <div style="margin-top:11px">${liveBody}</div></section>
+        <section>${sectionRule("warn", "Needs you", rows.length ? `${rows.length} items` : "")}
+          <div style="margin-top:11px">${needsBody}</div></section>
+        <section>${sectionRule("brand", "Routines", "")}
+          <div style="margin-top:11px" class="ops-routines">${routines.map(r =>
+            `<button class="ops-routine" data-routine="${r.act}" title="${escapeHtml(r.label)} · ${escapeHtml(r.hint)}">${escapeHtml(r.label)}</button>`).join("")}</div></section>
+        <section>${sectionRule("editor", "Recent", `${c.repos || 0} repos`)}
+          <div style="margin-top:11px" class="ops-chips">${recent.map(a =>
+            `<button class="ops-chip" data-open="${escapeHtml(a.name)}">
+              <span class="gso-dot" data-state="${a.running ? "live" : ""}" aria-hidden="true"></span>
+              ${escapeHtml(a.name)}</button>`).join("")}
+            <button class="ops-chip" data-more="1" data-goto="library">+${Math.max(0, (c.apps || 0) - recent.length)} more</button>
+          </div></section>`;
+
+      grid.querySelectorAll("[data-stop]").forEach(b =>
+        b.onclick = () => toggleRun(b.dataset.stop, true));
+      grid.querySelectorAll("[data-open]").forEach(b =>
+        b.onclick = () => openDrawer(b.dataset.open));
+      grid.querySelectorAll("[data-goto]").forEach(b =>
+        b.onclick = () => selectView(b.dataset.goto));
+      grid.querySelectorAll("[data-routine]").forEach(b => b.onclick = async () => {
+        const a = b.dataset.routine;
+        if (a === "library") return selectView("library");
+        if (a === "ops") return $("#ops-open").click();
+        b.disabled = true; b.textContent = "Working…";
+        await loadOverview(true);
+        if (a === "rescan") await load();
+        renderOpsRoom();
+        toast("Refreshed", "success");
+      });
+    }
 
     /** Sidebar nav, per the handoff's four groups. */
     function navGroups() {
@@ -428,8 +607,10 @@
         { label: "Attention", items: [
           // These three need per-repo git and health state in the list payload,
           // which /api/apps does not yet return — wired up in a later phase.
-          { id: "uncommitted", label: "Uncommitted", dot: "warn", n: null, disabled: "Needs bulk git state" },
-          { id: "failed",      label: "Failed runs", dot: "err",  n: null, disabled: "Needs run-health state" },
+          { id: "uncommitted", label: "Uncommitted", dot: "warn",
+            n: OVERVIEW ? OVERVIEW.counts.dirty : null },
+          { id: "failed", label: "Failed runs", dot: "err",
+            n: OVERVIEW ? OVERVIEW.counts.failed : null },
           { id: "vscode",      label: "In VSCode",   dot: "editor", n: VSCODE.length },
         ]},
         { label: "Collections", items: [
@@ -490,6 +671,7 @@
 
     function viewTitle() {
       const map = { opsroom: "Ops Room", library: "Library", vscode: "In VSCode",
+                    uncommitted: "Uncommitted", failed: "Failed runs",
                     favourites: "Favourites", planner: "Planner", llm: "Local LLM",
                     chat: "Chat", site: "Site" };
       if (activeView.startsWith("root:")) return activeView.slice(5);
@@ -498,13 +680,11 @@
 
     function selectView(id) {
       // Ops Room is a dock, not a page — until its own view lands.
-      if (id === "opsroom") {
-        const b = $("#ops-open");
-        if (b) b.click();
-        return;
-      }
       activeView = id;
       activeType = "all";
+      if ((id === "uncommitted" || id === "failed") && !OVERVIEW) {
+        loadOverview().then(() => { renderViews(); render(); });
+      }
       try { localStorage.setItem("gsoView", id); } catch (e) {}
       renderViews(); renderFilters(); render();
       announce(viewTitle() + " view");
@@ -530,12 +710,16 @@
       const isGrid = (activeView === "favourites" || activeView.startsWith("root:"));
       $("#filters").style.display = isGrid ? "flex" : "none";
       if (metricsPoll && activeView !== "llm") { clearInterval(metricsPoll); metricsPoll = null; }
+      if (activeView === "opsroom") return renderOpsRoom();
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
       if (activeView === "chat") return renderChat();
       if (activeView === "site") return renderSite();
 
+      const gridEl = $("#grid");
+      gridEl.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
+      gridEl.style.display = "grid";
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
         (activeType === "all" || a.type === activeType) &&
@@ -886,6 +1070,9 @@
 
     // -------- "Opened in VSCode" view --------
     function renderVscode() {
+      const gridEl = $("#grid");
+      gridEl.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
+      gridEl.style.display = "grid";
       const q = $("#search").value.toLowerCase();
       const folders = VSCODE.filter(f =>
         f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
