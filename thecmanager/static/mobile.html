@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <title>GSO-1</title>
+  <!-- viewport-fit=cover so the tab bar can pad past the home indicator -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GSO-1" />
+  <meta name="theme-color" content="#09080f" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" href="/static/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- The token table is shared with the desktop app; only the layout differs. -->
+  <link rel="stylesheet" href="/static/tokens.css" />
+  <script>
+    // Apply the stored theme before first paint.
+    (function () {
+      try {
+        var t = localStorage.getItem("gsoTheme");
+        if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    /* ============================================================
+       Phone companion. Check and unblock, not manage: no 270-row
+       table, browsing is search-first, every target is 44pt+.
+       ============================================================ */
+    /* tokens.css carries no reset; without border-box every padded input is
+       wider than its column and the whole page scrolls sideways. */
+    *, *::before, *::after { box-sizing: border-box; }
+    * { -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      overflow-x: hidden;
+      font-family: "Readex Pro", system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior-y: none;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .app { display: flex; flex-direction: column; height: 100dvh; }
+    .scroll {
+      flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 0 16px 22px;
+    }
+
+    /* ---- header ---- */
+    .hd {
+      flex: none; display: flex; align-items: center; gap: 11px;
+      padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+      background: var(--bg);
+    }
+    .hd-logo { width: 30px; height: 30px; border-radius: 9px; flex: none; }
+    .hd-live {
+      width: 9px; height: 9px; border-radius: 999px; flex: none; margin: 0 5px 0 3px;
+      background: var(--live); animation: mPulse 2s ease-in-out infinite;
+    }
+    @keyframes mPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @media (prefers-reduced-motion: reduce) { .hd-live { animation: none; } }
+    .hd-txt { flex: 1; min-width: 0; }
+    .hd-t {
+      font: 700 19px/1.15 "Readex Pro", system-ui, sans-serif; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hd-s {
+      margin-top: 2px; font-size: 11.5px; color: var(--text-3);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hd-btn {
+      width: 38px; height: 38px; flex: none; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--card); color: var(--text-2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hd-btn:active { background: var(--hover); }
+    .hd-back {
+      width: 34px; height: 38px; flex: none; border: 0; background: none;
+      color: var(--text-2); font-size: 24px; line-height: 1; padding: 0; text-align: left;
+    }
+
+    /* ---- section rule ---- */
+    .rule {
+      display: flex; align-items: center; gap: 8px; margin: 18px 0 9px;
+      font: 600 10.5px ui-monospace, Menlo, monospace;
+      letter-spacing: 0.11em; text-transform: uppercase; color: var(--label);
+    }
+    .rule .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--idle); flex: none; }
+    .rule .n { margin-left: auto; font-size: 11px; color: var(--text-3); letter-spacing: 0; }
+
+    /* ---- live cards ---- */
+    .live {
+      display: flex; align-items: center; gap: 11px; margin-bottom: 9px;
+      padding: 13px 14px; border-radius: 15px;
+      background: var(--live-soft); border: 1px solid var(--live-line);
+    }
+    .live-b { flex: 1; min-width: 0; }
+    .live-n {
+      font: 600 14px "Readex Pro", system-ui, sans-serif; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .live-m {
+      margin-top: 3px; font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-2);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .btn-stop {
+      flex: none; height: 34px; padding: 0 14px; border-radius: 999px;
+      background: transparent; border: 1px solid var(--err-line); color: var(--err-text);
+      font: 500 13px "Readex Pro", system-ui, sans-serif;
+    }
+    .btn-stop:active { background: var(--err-soft); }
+
+    /* ---- needs-you rows ---- */
+    .need {
+      display: flex; align-items: center; gap: 11px; margin-bottom: 9px;
+      padding: 12px 14px; border-radius: 15px;
+      background: var(--card); border: 1px solid var(--line);
+    }
+    .need[data-tone="err"] { background: var(--err-soft); border-color: var(--err-line); }
+    .need-b { flex: 1; min-width: 0; }
+    .need-n {
+      font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .need-m { margin-top: 3px; font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--warn-text); }
+    .need[data-tone="err"] .need-m { color: var(--err-text); }
+    .btn {
+      flex: none; height: 34px; padding: 0 14px; border-radius: 999px;
+      font: 500 13px "Readex Pro", system-ui, sans-serif;
+      background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary);
+    }
+    .btn:disabled { opacity: 0.45; }
+    .btn[data-tone="outline"] { background: transparent; border-color: var(--line); color: var(--text-2); }
+    .btn[data-tone="teal"] { background: transparent; border-color: var(--live-line); color: var(--live-text); }
+    .btn[data-tone="solid-teal"] { background: var(--live); border-color: var(--live); color: var(--on-live); }
+
+    /* ---- meter card ---- */
+    .meter {
+      padding: 12px 14px; border-radius: 15px;
+      background: var(--card); border: 1px solid var(--line);
+    }
+    .meter-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--text-2); }
+    .meter-row b { margin-left: auto; font: 600 11.5px ui-monospace, Menlo, monospace; color: var(--text); }
+    .meter-row b[data-tone="warn"] { color: var(--warn-text); }
+    .meter-row b[data-tone="err"] { color: var(--err-text); }
+    .track {
+      height: 6px; border-radius: 999px; background: var(--hover);
+      margin: 7px 0 4px; display: flex; overflow: hidden;
+    }
+    .track > i { display: block; height: 100%; }
+
+    /* ---- search + repo list ---- */
+    .search {
+      width: 100%; height: 44px; padding: 0 14px; margin: 4px 0 12px;
+      border-radius: 14px; background: var(--card); border: 1px solid var(--line);
+      color: var(--text); font-size: 15px;   /* 15px+ stops iOS zooming on focus */
+    }
+    .search:focus { outline: none; border-color: var(--primary); }
+    .repo {
+      display: flex; align-items: center; gap: 11px; width: 100%;
+      padding: 13px 14px; margin-bottom: 8px; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--line);
+      text-align: left; color: inherit;
+    }
+    .repo:active { border-color: var(--primary-line); }
+    .repo-b { flex: 1; min-width: 0; display: block; }
+    .repo-n {
+      display: block;
+      font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .repo-m {
+      display: block;
+      margin-top: 3px; font: 400 11px ui-monospace, Menlo, monospace; color: var(--text-3);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .repo-m b { color: var(--warn-text); font-weight: 600; }
+    .chev { flex: none; color: var(--text-3); font-size: 19px; }
+
+    /* ---- repo sheet ---- */
+    .sheet-actions { display: flex; gap: 9px; margin: 4px 0 14px; }
+    .sheet-actions .btn { flex: 1; height: 48px; border-radius: 14px; font-size: 15px; }
+    .sq {
+      width: 48px; height: 48px; flex: none; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--line); color: var(--text-2);
+      font-size: 17px;
+    }
+    .card {
+      padding: 13px 14px; margin-bottom: 12px; border-radius: 15px;
+      background: var(--card); border: 1px solid var(--line);
+    }
+    .card[data-tone="err"] { background: var(--err-soft); border-color: var(--err-line); }
+    .card-l {
+      font: 600 10.5px ui-monospace, Menlo, monospace;
+      letter-spacing: 0.09em; text-transform: uppercase; color: var(--label); margin-bottom: 9px;
+    }
+    .kv { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; font-size: 13px; color: var(--text-3); }
+    .kv b {
+      margin-left: auto; min-width: 0; text-align: right;
+      font: 500 13px ui-monospace, Menlo, monospace; color: var(--text-2);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .kv b[data-tone="warn"] { color: var(--warn-text); font-weight: 600; }
+    .kv b[data-tone="live"] { color: var(--live-text); font-weight: 600; }
+    .divide { height: 1px; background: var(--line-2); margin: 9px 0; }
+    .commit { font: 400 11.5px/1.5 ui-monospace, Menlo, monospace; color: var(--text-3); overflow-wrap: anywhere; }
+    .pair { display: flex; gap: 9px; margin-top: 10px; }
+    .pair .btn { flex: 1; height: 40px; }
+    .switch {
+      margin-left: auto; width: 42px; height: 25px; flex: none; padding: 0;
+      border-radius: 999px; border: 0; background: var(--hover); position: relative;
+    }
+    .switch[aria-checked="true"] { background: var(--primary); }
+    .switch::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 19px; height: 19px; border-radius: 999px; background: #fff;
+      transition: transform 0.15s ease;
+    }
+    .switch[aria-checked="true"]::after { transform: translateX(17px); }
+    .fail-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .fail-b {
+      width: 17px; height: 17px; border-radius: 999px; flex: none; background: var(--err-text);
+      color: #fff; font: 700 11px/17px "Readex Pro", sans-serif; text-align: center;
+    }
+    .fail-t { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--err-text); }
+    .fail-w { margin-left: auto; font: 400 11px ui-monospace, Menlo, monospace; color: var(--text-3); }
+    .log {
+      padding: 9px 10px; border-radius: 10px; background: var(--card-2);
+      font: 400 11.5px/1.55 ui-monospace, Menlo, monospace; color: var(--text-2);
+      white-space: pre-wrap; max-height: 150px; overflow: auto; margin-bottom: 10px;
+    }
+
+    /* ---- planner ---- */
+    .colbar { display: flex; gap: 7px; overflow-x: auto; padding: 4px 0 12px; }
+    .colbtn {
+      flex: none; height: 34px; padding: 0 13px; border-radius: 999px;
+      background: var(--chip); border: 1px solid var(--line); color: var(--text-2);
+      font-size: 12.5px; white-space: nowrap;
+    }
+    .colbtn[aria-pressed="true"] {
+      background: var(--primary-soft); border-color: var(--primary-line);
+      color: var(--primary-text); font-weight: 600;
+    }
+    .task {
+      padding: 13px 14px; margin-bottom: 9px; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--line);
+      width: 100%; text-align: left; color: inherit;
+    }
+    .task-t { font: 500 13.5px/1.45 "Readex Pro", system-ui, sans-serif; color: var(--text); }
+    .task[data-done="1"] .task-t { color: var(--text-3); text-decoration: line-through; }
+    .task-m { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .task-r {
+      flex: 1; min-width: 0; font: 400 11px ui-monospace, Menlo, monospace; color: var(--text-3);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .tag {
+      flex: none; padding: 2px 8px; border-radius: 999px; background: var(--chip);
+      font: 600 10px ui-monospace, Menlo, monospace; color: var(--text-2);
+    }
+
+    /* ---- chat ---- */
+    .chat { display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
+    .bub { padding: 11px 14px; font: 400 14px/1.5 "Readex Pro", system-ui, sans-serif; overflow-wrap: anywhere; }
+    .bub[data-who="user"] {
+      align-self: flex-end; max-width: 86%; border-radius: 16px 16px 5px 16px;
+      background: var(--primary); color: #fff;
+    }
+    .bub[data-who="agent"] {
+      align-self: flex-start; max-width: 92%; border-radius: 16px 16px 16px 5px;
+      background: var(--card); border: 1px solid var(--line); color: var(--text-2);
+      white-space: pre-wrap;
+    }
+    .bub-err { font-size: 12.5px; color: var(--err-text); }
+    .replies { display: flex; gap: 8px; flex-wrap: wrap; }
+    .reply {
+      height: 34px; padding: 0 13px; border-radius: 999px; font-size: 12.5px;
+      background: transparent; border: 1px solid var(--line); color: var(--text-2);
+    }
+    .reply[data-tone="yes"] { border-color: var(--live-line); color: var(--live-text); }
+    .typing { display: flex; gap: 5px; padding: 12px 14px; width: 56px;
+      border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+    .typing i { width: 6px; height: 6px; border-radius: 999px; background: var(--text-3);
+      animation: mDots 1.1s infinite ease-in-out; }
+    .typing i:nth-child(2) { animation-delay: 0.15s; }
+    .typing i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes mDots { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .typing i { animation: none; } }
+
+    .composer {
+      flex: none; display: flex; align-items: flex-end; gap: 9px;
+      padding: 9px 16px; border-top: 1px solid var(--line-2); background: var(--surface);
+    }
+    .composer textarea {
+      flex: 1; min-height: 46px; max-height: 130px; padding: 13px 16px;
+      border-radius: 23px; background: var(--card); border: 1px solid var(--line);
+      color: var(--text); font-size: 15px; resize: none; font-family: inherit;
+    }
+    .composer textarea:focus { outline: none; border-color: var(--primary); }
+    .send {
+      width: 34px; height: 34px; margin-bottom: 6px; flex: none; border: 0;
+      border-radius: 999px; background: var(--live); color: var(--on-live); font-size: 16px;
+    }
+    .send:disabled { opacity: 0.45; }
+
+    /* ---- tab bar ---- */
+    .tabs {
+      flex: none; display: flex; justify-content: space-around;
+      padding: 7px 12px calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line-2); background: var(--surface);
+    }
+    .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      min-width: 56px; padding: 6px 12px; border-radius: 12px;
+      border: 0; background: none; color: var(--text-3);
+      font: 600 9.5px "Readex Pro", system-ui, sans-serif;
+    }
+    .tab svg { display: block; }
+    .tab[aria-current="page"] { background: var(--primary-soft); color: var(--primary-text); }
+
+    /* ---- misc ---- */
+    .empty { text-align: center; padding: 34px 16px; }
+    .empty-t { font: 600 14px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+    .empty-s { font-size: 12.5px; color: var(--text-3); margin-top: 6px; }
+    .toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 60;
+      display: flex; align-items: center; gap: 9px; max-width: calc(100vw - 32px);
+      padding: 11px 16px; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      font: 500 13px "Readex Pro", system-ui, sans-serif; box-shadow: var(--shadow);
+      animation: mToast 0.18s ease-out;
+    }
+    .toast .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--live); flex: none; }
+    .toast[data-kind="error"] .dot { background: var(--err); }
+    @keyframes mToast { from { opacity: 0; transform: translate(-50%, 8px); } }
+    .skel { height: 13px; border-radius: 6px; background: var(--skeleton); margin: 7px 0; }
+
+    /* ---- login gate ---- */
+    .gate { display: flex; flex-direction: column; justify-content: center; height: 100dvh; padding: 0 26px; gap: 14px; }
+    .gate img { width: 54px; height: 54px; border-radius: 16px; }
+    .gate h1 { font: 700 21px "Readex Pro", system-ui, sans-serif; margin: 0; color: var(--text); }
+    .gate p { font-size: 13px; line-height: 1.55; color: var(--text-3); margin: 0; }
+    .gate input {
+      height: 50px; padding: 0 16px; border-radius: 14px; font-size: 16px;
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      font-family: ui-monospace, Menlo, monospace;
+    }
+    .gate input:focus { outline: none; border-color: var(--primary); }
+    .gate .btn { height: 50px; border-radius: 14px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div id="root" class="app"></div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <script>
+  "use strict";
+
+  // ---------------------------------------------------------------- utils
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      credentials: "same-origin",
+      headers: opts.body ? { "Content-Type": "application/json" } : undefined,
+      ...opts,
+    });
+    if (res.status === 401) { STATE.locked = true; render(); throw new Error("locked"); }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const type = res.headers.get("content-type") || "";
+    return type.includes("json") ? res.json() : res.text();
+  }
+
+  let _toastTimer = null;
+  function toast(msg, kind) {
+    const host = $("#toasts");
+    clearTimeout(_toastTimer);
+    host.innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.dataset.kind = kind || "info";
+    el.innerHTML = `<span class="dot"></span><span></span>`;
+    el.lastElementChild.textContent = msg;
+    host.appendChild(el);
+    _toastTimer = setTimeout(() => el.remove(), kind === "error" ? 6000 : 3200);
+  }
+
+  function fmtUptime(s) {
+    s = Math.max(0, Math.round(s || 0));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.round(s / 60)}m`;
+    const h = Math.floor(s / 3600);
+    return `${h}h ${Math.round((s % 3600) / 60)}m`;
+  }
+  function ago(ts) {
+    const m = Math.max(0, Math.round(Date.now() / 1000 - ts) / 60);
+    if (m < 1) return "just now";
+    if (m < 60) return `${Math.round(m)}m ago`;
+    const h = m / 60;
+    if (h < 24) return `${Math.round(h)}h ago`;
+    const d = Math.round(h / 24);
+    return d === 1 ? "yesterday" : `${d} days ago`;
+  }
+  const gb = (b) => (b / 1e9).toFixed(1);
+
+  // ---------------------------------------------------------------- state
+  const STATE = {
+    tab: "ops",
+    locked: false,
+    overview: null,
+    apps: null,
+    planner: null,
+    query: "",
+    repo: null,          // open repo sheet (detail payload)
+    repoName: null,
+    plannerBoard: null,
+    plannerCol: "todo",
+    chat: [],            // {who, text}
+    chatBusy: false,
+    replies: [],
+  };
+
+  const COLS = [
+    { id: "backlog", label: "Backlog" }, { id: "todo", label: "Today" },
+    { id: "doing", label: "In progress" }, { id: "done", label: "Done" },
+  ];
+
+  const ICONS = {
+    ops: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7.2"/><circle cx="11" cy="11" r="2.4" fill="currentColor" stroke="none"/></svg>',
+    repos: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.2" y="3.2" width="6.4" height="6.4" rx="1.8"/><rect x="12.4" y="3.2" width="6.4" height="6.4" rx="1.8"/><rect x="3.2" y="12.4" width="6.4" height="6.4" rx="1.8"/><rect x="12.4" y="12.4" width="6.4" height="6.4" rx="1.8"/></svg>',
+    planner: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7.6"/><path d="M11 6.4V11l3 1.8"/></svg>',
+    room: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M11 3.4v15.2M3.4 11h15.2M5.6 5.6l10.8 10.8M16.4 5.6 5.6 16.4"/></svg>',
+    search: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="5"/><path d="M11.8 11.8 15.5 15.5"/></svg>',
+  };
+
+  // ---------------------------------------------------------------- loads
+  async function loadOverview(force) {
+    STATE.overview = await api("/api/overview" + (force ? "?force=true" : ""));
+  }
+  async function loadApps() {
+    const d = await api("/api/apps");
+    STATE.apps = d.apps || [];
+  }
+  async function loadPlanner() {
+    const d = await api("/api/planner");
+    STATE.planner = d.boards || [];
+    if (!STATE.plannerBoard && STATE.planner.length) STATE.plannerBoard = STATE.planner[0].id;
+  }
+
+  // ---------------------------------------------------------------- views
+  function header(title, sub, right, back, lead) {
+    return `<div class="hd">
+      ${back ? `<button class="hd-back" data-act="back" aria-label="Back">&lsaquo;</button>`
+        : lead === "live" ? `<span class="hd-live" aria-hidden="true"></span>`
+        : `<img class="hd-logo" src="/static/favicon.svg" alt="" />`}
+      <div class="hd-txt">
+        <div class="hd-t">${esc(title)}</div>
+        <div class="hd-s">${sub || ""}</div>
+      </div>
+      ${right || ""}
+    </div>`;
+  }
+
+  function tabbar() {
+    const tabs = [["ops", "Ops"], ["repos", "Repos"], ["planner", "Planner"], ["room", "Room"]];
+    return `<nav class="tabs">${tabs.map(([id, label]) =>
+      `<button class="tab" data-tab="${id}" ${STATE.tab === id ? 'aria-current="page"' : ""}>
+        ${ICONS[id]}<span>${label}</span></button>`).join("")}</nav>`;
+  }
+
+  // ---- 1. Ops feed
+  function viewOps() {
+    const ov = STATE.overview;
+    if (!ov) {
+      return header("Ops", "reading your machine…") +
+        `<div class="scroll">${'<div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div>'}</div>` +
+        tabbar();
+    }
+    const c = ov.counts || {};
+    const live = ov.live || [];
+
+    const liveCards = live.length ? live.map(a => `
+      <div class="live">
+        <div class="live-b">
+          <div class="live-n">${esc(a.name)}</div>
+          <div class="live-m">${a.port ? `:${a.port} · ` : ""}${esc(
+            (a.detail || a.type || "process")).slice(0, 42)}${
+            a.uptime_seconds ? ` · up ${fmtUptime(a.uptime_seconds)}` : ""}</div>
+        </div>
+        ${a.stoppable === false ? "" :
+          `<button class="btn-stop" data-stop="${esc(a.name)}"
+             data-kind="${a.stop === "llm" ? "llm" : "app"}">Stop</button>`}
+      </div>`).join("")
+      : `<div class="empty"><div class="empty-t">Nothing running</div>
+           <div class="empty-s">Start something from Repos, or ask the Room.</div></div>`;
+
+    // One row per problem, one action each — the phone is for unblocking.
+    const needs = [
+      ...(ov.conflicts || []).slice(0, 3).map(k => ({
+        name: k.name, metric: `:${k.port} held by ${k.held_by}`,
+        action: "Resolve", tone: "err", act: "resolve", port: k.port,
+      })),
+      ...(ov.failed || []).slice(0, 3).map(f => ({
+        name: f.name, metric: f.state || `exit ${f.exit_code}`,
+        action: "Open", tone: "err", act: "open",
+      })),
+      ...(ov.dirty || []).slice(0, 5).map(r => ({
+        name: r.name, metric: `${r.changed_count} files uncommitted`,
+        action: "Commit", tone: "warn", act: "commit",
+      })),
+      ...(ov.unsynced || []).slice(0, 3).map(r => ({
+        name: r.name, metric: r.behind ? `${r.behind} behind` : `${r.ahead} ahead`,
+        action: "Pull", tone: "warn", act: "pull",
+      })),
+    ].slice(0, 8);
+
+    const needRows = needs.length ? needs.map(n => `
+      <div class="need" data-tone="${n.tone}">
+        <div class="need-b">
+          <div class="need-n">${esc(n.name)}</div>
+          <div class="need-m">${esc(n.metric)}</div>
+        </div>
+        <button class="btn" data-need="${n.act}" data-name="${esc(n.name)}"
+          data-tone="${n.act === "resolve" ? "" : n.act === "commit" ? "outline" : "teal"}">${n.action}</button>
+      </div>`).join("")
+      : `<div class="empty"><div class="empty-t">Nothing needs you</div>
+           <div class="empty-s">No conflicts, no failures, nothing uncommitted.</div></div>`;
+
+    const sys = STATE.sys;
+    const meter = sys ? `<div class="meter">
+        <div class="meter-row">RAM<b data-tone="${sys.ram.percent > 90 ? "err" : sys.ram.percent > 75 ? "warn" : ""}">${
+          gb(sys.ram.used_bytes)} / ${gb(sys.ram.total_bytes)} GB</b></div>
+        <div class="track">
+          <i style="width:${(sys.ram.llm_bytes / sys.ram.total_bytes) * 100}%;background:var(--primary)"></i>
+          <i style="width:${(sys.ram.other_bytes / sys.ram.total_bytes) * 100}%;background:var(--live)"></i>
+        </div>
+        <div class="meter-row" style="margin-top:9px">CPU<b>${Math.round(sys.cpu.busy)}%</b></div>
+        <div class="track">
+          <i style="width:${Math.max(0, sys.cpu.llm)}%;background:var(--primary)"></i>
+          <i style="width:${Math.max(0, sys.cpu.other)}%;background:var(--warn)"></i>
+        </div>
+      </div>` : "";
+
+    return header("Ops", `${esc(HOSTNAME)} · online`,
+        `<button class="hd-btn" data-act="search" aria-label="Search repos">${ICONS.search}</button>`) +
+      `<div class="scroll">
+        <div class="rule"><span class="dot" style="background:var(--live)"></span>Live
+          <span class="n">${c.live || 0} of ${c.apps || 0} up</span></div>
+        ${liveCards}
+        <div class="rule"><span class="dot" style="background:var(--warn)"></span>Needs you
+          <span class="n">${needs.length || ""}</span></div>
+        ${needRows}
+        <div class="rule">Machine</div>
+        ${meter}
+      </div>` + tabbar();
+  }
+
+  // ---- 2. Repos (search-first) + repo sheet
+  function viewRepos() {
+    if (STATE.repo || STATE.repoName) return viewRepoSheet();
+    const apps = STATE.apps || [];
+    const q = STATE.query.trim().toLowerCase();
+    const idx = (STATE.overview && STATE.overview.repo_index) || {};
+    // No 270-row list on a phone: show running and dirty first, then search.
+    const shown = q
+      ? apps.filter(a => a.name.toLowerCase().includes(q)).slice(0, 40)
+      : apps.filter(a => a.running || (idx[a.name] && idx[a.name].dirty)).slice(0, 25);
+
+    const rows = shown.map(a => {
+      const g = idx[a.name];
+      const meta = a.running ? `running${a.port ? ` · :${a.port}` : ""}`
+        : g ? (g.dirty ? `<b>${g.changed} changed</b> · ${esc(g.branch || "")}` : `clean · ${esc(g.branch || "")}`)
+        : esc(a.root_label || "");
+      return `<button class="repo" data-repo="${esc(a.name)}">
+        <span class="repo-b"><span class="repo-n">${esc(a.name)}</span>
+          <span class="repo-m">${meta}</span></span>
+        <span class="chev">&rsaquo;</span>
+      </button>`;
+    }).join("") || `<div class="empty"><div class="empty-t">${q ? "No match" : "Nothing needs attention"}</div>
+        <div class="empty-s">${q ? "Try another name." : "Search to find any of your repos."}</div></div>`;
+
+    return header("Repos", q ? `${shown.length} matching` : "running and uncommitted") +
+      `<div class="scroll">
+        <input class="search" id="q" type="search" placeholder="Search repos…"
+          autocapitalize="off" autocorrect="off" value="${esc(STATE.query)}" />
+        ${rows}
+      </div>` + tabbar();
+  }
+
+  function viewRepoSheet() {
+    const d = STATE.repo;
+    if (!d) {
+      return header(STATE.repoName || "Repo", "loading…", "", true) +
+        `<div class="scroll"><div class="skel" style="width:60%"></div><div class="skel"></div></div>` + tabbar();
+    }
+    const g = d.git || {}, p = d.process, c = d.config || {};
+    const running = !!(p && p.running);
+    const failed = (p && !p.running && p.exit_code) || (d.health || {}).state === "crashed";
+
+    const git = g.is_repo ? `<div class="card">
+        <div class="card-l">Git</div>
+        <div class="kv">Branch<b>${esc(g.branch || "?")}</b></div>
+        <div class="kv">Status<b data-tone="${g.dirty ? "warn" : "live"}">${
+          g.dirty ? `${g.changed_count} changed` : "clean"}</b></div>
+        <div class="kv">Ahead / behind<b>${g.ahead} / ${g.behind}</b></div>
+        <div class="divide"></div>
+        <div class="commit">${esc((g.last_commit || "").slice(0, 130))}</div>
+        <div class="pair">
+          <button class="btn" data-tone="outline" data-act="commit">Commit all</button>
+          <button class="btn" data-tone="outline" data-act="pull">Pull</button>
+        </div>
+      </div>` : "";
+
+    const fail = failed ? `<div class="card" data-tone="err">
+        <div class="fail-h"><span class="fail-b">!</span><span class="fail-t">Last run failed</span>
+          <span class="fail-w">${p && p.exit_code != null ? `exit ${p.exit_code}` : (d.health || {}).state}</span></div>
+        <pre class="log" id="faillog">Reading the log…</pre>
+        <button class="btn" data-tone="outline" style="width:100%;border-color:var(--err-line);color:var(--err-text)"
+          data-act="askops">Ask Ops Room to fix</button>
+      </div>` : "";
+
+    return header(d.name, esc(d.path), `<button class="hd-btn" data-act="fav"
+        aria-pressed="${c.favourite ? "true" : "false"}" aria-label="Favourite"
+        style="${c.favourite ? "color:var(--primary-text);border-color:var(--primary-line)" : ""}">★</button>`, true) +
+      `<div class="scroll">
+        <div class="sheet-actions">
+          <button class="btn" data-act="run" ${c.start_command ? "" : "disabled"}
+            ${running ? 'data-tone="outline" style="border-color:var(--err-line);color:var(--err-text)"' : ""}>${
+            running ? "Stop" : "Start"}</button>
+          <button class="sq" data-act="vscode" aria-label="Open in VSCode">&#8599;</button>
+          <button class="sq" data-act="more" aria-label="More">&#8943;</button>
+        </div>
+        ${fail}
+        ${git}
+        <div class="card">
+          <div class="card-l">Run config</div>
+          <div class="kv">Start<b>${esc(c.start_command || "not set")}</b></div>
+          <div class="kv">Port<b>${c.port || "not set"}</b></div>
+          ${p ? `<div class="kv">Process<b>${p.pid} · ${p.running ? `up ${fmtUptime(p.uptime_seconds)}` : `exit ${p.exit_code}`}</b></div>` : ""}
+          <div class="kv" style="align-items:center">Favourite
+            <button class="switch" data-act="fav" role="switch"
+              aria-checked="${c.favourite ? "true" : "false"}" aria-label="Favourite"></button></div>
+        </div>
+        ${d.description ? `<div class="card"><div class="card-l">About</div>
+          <div style="font-size:13px;line-height:1.55;color:var(--text-2)">${esc(d.description)}</div></div>` : ""}
+      </div>` + tabbar();
+  }
+
+  // ---- 3. Planner
+  function viewPlanner() {
+    const boards = STATE.planner;
+    if (!boards) {
+      return header("Planner", "loading…") + `<div class="scroll"><div class="skel"></div></div>` + tabbar();
+    }
+    const board = boards.find(b => b.id === STATE.plannerBoard) || boards[0];
+    if (!board) {
+      return header("Planner", "no boards") +
+        `<div class="scroll"><div class="empty"><div class="empty-t">No boards yet</div>
+          <div class="empty-s">Create one on the desktop app.</div></div></div>` + tabbar();
+    }
+    const counts = {};
+    COLS.forEach(col => counts[col.id] = board.tasks.filter(t => t.status === col.id).length);
+    const tasks = board.tasks.filter(t => t.status === STATE.plannerCol)
+      .sort((a, b) => a.order - b.order);
+
+    const boardPills = boards.length > 1 ? `<div class="colbar">${boards.map(b =>
+      `<button class="colbtn" data-board="${b.id}" aria-pressed="${b.id === board.id}">${esc(b.name)}</button>`
+      ).join("")}</div>` : "";
+
+    return header("Planner", `${esc(board.name)} · ${board.tasks.length} tasks`) +
+      `<div class="scroll">
+        ${boardPills}
+        <div class="colbar">${COLS.map(col =>
+          `<button class="colbtn" data-col="${col.id}" aria-pressed="${col.id === STATE.plannerCol}">
+            ${col.label} ${counts[col.id]}</button>`).join("")}</div>
+        ${tasks.map(t => `<button class="task" data-task="${t.id}" data-done="${t.status === "done" ? "1" : "0"}">
+            <div class="task-t">${esc(t.title)}</div>
+            ${(t.app || t.due) ? `<div class="task-m">
+              <span class="task-r">${esc(t.app || "")}</span>
+              ${t.due ? `<span class="tag">${esc(t.due)}</span>` : ""}</div>` : ""}
+          </button>`).join("") ||
+          `<div class="empty"><div class="empty-t">Nothing in ${esc(
+            (COLS.find(c => c.id === STATE.plannerCol) || {}).label)}</div>
+           <div class="empty-s">Tap a task in another column to move it here.</div></div>`}
+      </div>` + tabbar();
+  }
+
+  // ---- 4. Ops Room chat
+  function viewRoom() {
+    const bubbles = STATE.chat.map(m =>
+      m.who === "err" ? `<div class="bub-err">${esc(m.text)}</div>`
+        : `<div class="bub" data-who="${m.who}">${esc(m.text)}</div>`).join("");
+    const replies = (!STATE.chatBusy && STATE.replies.length)
+      ? `<div class="replies">${STATE.replies.map((r, i) =>
+          `<button class="reply" data-reply="${i}" ${i === 0 ? 'data-tone="yes"' : ""}>${esc(r)}</button>`).join("")}</div>`
+      : "";
+
+    return header("Ops Room", `${esc(MODEL_NAME)} · on your Mac`,
+        `<button class="hd-btn" data-act="clear" aria-label="Clear">&#8635;</button>`, false, "live") +
+      `<div class="scroll" id="chatscroll">
+        <div class="chat" id="chatlog">
+          ${bubbles || `<div class="empty" style="padding-top:52px">
+            <div class="empty-t">Ask about your machine</div>
+            <div class="empty-s">Git state, what is running, what failed — or have it change its own code.
+              Runs on the local model; a reply takes ~30s.</div></div>`}
+          ${STATE.chatBusy ? `<div class="typing"><i></i><i></i><i></i></div>` : ""}
+          ${replies}
+        </div>
+      </div>
+      <div class="composer">
+        <textarea id="ask" rows="1" placeholder="Ask about your machine…"
+          ${STATE.chatBusy ? "disabled" : ""}></textarea>
+        <button class="send" id="sendbtn" ${STATE.chatBusy ? "disabled" : ""} aria-label="Send">&uarr;</button>
+      </div>` + tabbar();
+  }
+
+  // ---- login gate
+  function viewGate(err) {
+    return `<div class="gate">
+      <img src="/static/favicon.svg" alt="" />
+      <h1>GSO-1</h1>
+      <p>This Mac is asking for the access code from its <span class="mono">.env</span>
+         (<span class="mono">MANAGER_MOBILE_TOKEN</span>). It is stored on this device only.</p>
+      <input id="code" type="password" inputmode="text" autocomplete="one-time-code"
+        placeholder="Access code" />
+      ${err ? `<div class="bub-err">${esc(err)}</div>` : ""}
+      <button class="btn" id="unlock">Connect</button>
+    </div>`;
+  }
+
+  // ---------------------------------------------------------------- render
+  let HOSTNAME = "this Mac";
+  let MODEL_NAME = "local model";
+
+  function render(gateError) {
+    const root = $("#root");
+    if (STATE.locked) { root.className = ""; root.innerHTML = viewGate(gateError); return wireGate(); }
+    root.className = "app";
+    root.innerHTML =
+      STATE.tab === "ops" ? viewOps()
+      : STATE.tab === "repos" ? viewRepos()
+      : STATE.tab === "planner" ? viewPlanner()
+      : viewRoom();
+    wire();
+  }
+
+  function wireGate() {
+    $("#unlock").onclick = async () => {
+      const token = $("#code").value.trim();
+      if (!token) return;
+      const res = await fetch("/api/remote/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }), credentials: "same-origin",
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.ok) { STATE.locked = false; boot(); }
+      else render(d.error || "Could not connect.");
+    };
+    $("#code").onkeydown = (e) => { if (e.key === "Enter") $("#unlock").click(); };
+  }
+
+  function wire() {
+    document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
+      STATE.tab = b.dataset.tab;
+      STATE.repo = STATE.repoName = null;
+      render();
+      refresh();
+    });
+
+    const q = $("#q");
+    if (q) {
+      q.oninput = () => { STATE.query = q.value; const at = q.selectionStart; render();
+        const nq = $("#q"); if (nq) { nq.focus(); nq.setSelectionRange(at, at); } };
+    }
+
+    document.querySelectorAll("[data-repo]").forEach(b =>
+      b.onclick = () => openRepo(b.dataset.repo));
+
+    document.querySelectorAll("[data-stop]").forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = "…";
+      try {
+        if (b.dataset.kind === "llm") await api("/api/llm/stop", { method: "POST" });
+        else await api(`/api/apps/${encodeURIComponent(b.dataset.stop)}/stop`, { method: "POST" });
+        toast(`${b.dataset.stop} — stopped`);
+        await loadOverview(true); render();
+      } catch (e) { toast(`Could not stop it: ${e.message}`, "error"); }
+    });
+
+    document.querySelectorAll("[data-need]").forEach(b => b.onclick = () => needAction(b));
+    document.querySelectorAll("[data-board]").forEach(b =>
+      b.onclick = () => { STATE.plannerBoard = b.dataset.board; render(); });
+    document.querySelectorAll("[data-col]").forEach(b =>
+      b.onclick = () => { STATE.plannerCol = b.dataset.col; render(); });
+    document.querySelectorAll("[data-task]").forEach(b =>
+      b.onclick = () => moveTask(b.dataset.task));
+    document.querySelectorAll("[data-reply]").forEach(b =>
+      b.onclick = () => ask(STATE.replies[Number(b.dataset.reply)]));
+
+    document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => sheetAction(b.dataset.act));
+
+    const send = $("#sendbtn");
+    if (send) send.onclick = () => ask($("#ask").value);
+    const ta = $("#ask");
+    if (ta) {
+      ta.oninput = () => { ta.style.height = "auto"; ta.style.height = Math.min(130, ta.scrollHeight) + "px"; };
+      if (!STATE.chatBusy && STATE.chat.length) scrollChat();
+    }
+    const fl = $("#faillog");
+    if (fl && STATE.repoName) {
+      api(`/api/apps/${encodeURIComponent(STATE.repoName)}/logs`)
+        .then(t => { fl.textContent = (String(t).trim().split("\n").slice(-8).join("\n")) || "No output captured."; })
+        .catch(() => { fl.textContent = "Could not read the log."; });
+    }
+  }
+
+  function scrollChat() {
+    const s = $("#chatscroll");
+    if (s) s.scrollTop = s.scrollHeight;
+  }
+
+  // ---------------------------------------------------------------- actions
+  async function openRepo(name) {
+    STATE.tab = "repos"; STATE.repoName = name; STATE.repo = null; render();
+    try { STATE.repo = await api(`/api/apps/${encodeURIComponent(name)}`); }
+    catch (e) { toast(e.message, "error"); }
+    render();
+  }
+
+  async function needAction(btn) {
+    const name = btn.dataset.name, act = btn.dataset.need;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      if (act === "open" || act === "resolve") {
+        if (act === "resolve") {
+          // Free the port by stopping whatever GSO-1 has on it, then open the repo.
+          const holder = (STATE.overview.conflicts || []).find(c => c.name === name);
+          const owner = holder && (STATE.overview.live || []).find(l => l.port === holder.port);
+          if (owner && owner.stoppable !== false) {
+            await api(`/api/apps/${encodeURIComponent(owner.name)}/stop`, { method: "POST" });
+            toast(`Freed :${holder.port} — ${owner.name} stopped`);
+            await loadOverview(true); return render();
+          }
+        }
+        return openRepo(name);
+      }
+      if (act === "commit") {
+        await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
+          method: "POST", body: JSON.stringify({ message: `Update ${name} via GSO-1 mobile` }) });
+        toast(`${name} — committed`);
+      }
+      if (act === "pull") {
+        await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
+        toast(`${name} — pulled`);
+      }
+      await loadOverview(true); render();
+    } catch (e) {
+      toast(`${act} failed: ${e.message}`, "error");
+      render();
+    }
+  }
+
+  async function sheetAction(act) {
+    if (act === "back") { STATE.repo = STATE.repoName = null; return render(); }
+    if (act === "search") { STATE.tab = "repos"; render(); const q = $("#q"); if (q) q.focus(); return; }
+    if (act === "clear") { STATE.chat = []; STATE.replies = []; return render(); }
+
+    const name = STATE.repoName;
+    if (!name) return;
+    const d = STATE.repo || {};
+    try {
+      if (act === "run") {
+        const running = !!(d.process && d.process.running);
+        await api(`/api/apps/${encodeURIComponent(name)}/${running ? "stop" : "start"}`, { method: "POST" });
+        toast(`${name} — ${running ? "stopped" : "started"}`);
+      } else if (act === "vscode") {
+        await api(`/api/apps/${encodeURIComponent(name)}/vscode/open`, { method: "POST" });
+        toast(`Opening ${name} in VSCode on your Mac`);
+      } else if (act === "fav") {
+        await api(`/api/apps/${encodeURIComponent(name)}/favourite`, { method: "POST" });
+      } else if (act === "commit") {
+        await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
+          method: "POST", body: JSON.stringify({ message: `Update ${name} via GSO-1 mobile` }) });
+        toast(`${name} — committed`);
+      } else if (act === "pull") {
+        await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
+        toast(`${name} — pulled`);
+      } else if (act === "askops") {
+        STATE.tab = "room";
+        render();
+        return ask(`The repo "${name}" at ${d.path} failed its last run. Read its logs, find the cause and tell me the fix.`);
+      } else if (act === "more") {
+        return toast("Setup, config and logs live in the desktop app.");
+      }
+      STATE.repo = await api(`/api/apps/${encodeURIComponent(name)}`);
+      loadOverview(true).catch(() => {});
+      render();
+    } catch (e) { toast(`${act} failed: ${e.message}`, "error"); }
+  }
+
+  async function moveTask(id) {
+    const board = (STATE.planner || []).find(b => b.id === STATE.plannerBoard);
+    if (!board) return;
+    const task = board.tasks.find(t => t.id === id);
+    if (!task) return;
+    // Tapping advances a task one column — the phone gesture for "done with this".
+    const i = COLS.findIndex(c => c.id === task.status);
+    const next = COLS[Math.min(COLS.length - 1, i + 1)].id;
+    if (next === task.status) return toast("Already done");
+    try {
+      await api(`/api/planner/boards/${board.id}/tasks/${id}/move`, {
+        method: "PUT", body: JSON.stringify({ status: next, index: 0 }) });
+      toast(`Moved to ${COLS.find(c => c.id === next).label}`);
+      await loadPlanner(); render();
+    } catch (e) { toast(`Could not move it: ${e.message}`, "error"); }
+  }
+
+  // ---- Ops Room over SSE. The cookie carries the token; EventSource cannot
+  // set headers, which is exactly why login sets one.
+  let es = null;
+  function ask(text) {
+    text = (text || "").trim();
+    if (!text || STATE.chatBusy) return;
+    STATE.chat.push({ who: "user", text });
+    STATE.replies = [];
+    STATE.chatBusy = true;
+    render();
+    const ta = $("#ask"); if (ta) ta.value = "";
+
+    const out = { who: "agent", text: "" };
+    STATE.chat.push(out);
+    es = new EventSource(`/api/opsroom/ask?prompt=${encodeURIComponent(text)}`);
+    es.addEventListener("output", (e) => {
+      out.text += (out.text ? "\n" : "") + e.data;
+      const log = $("#chatlog");
+      if (log) {
+        const bubs = log.querySelectorAll('.bub[data-who="agent"]');
+        const last = bubs[bubs.length - 1];
+        if (last) { last.textContent = out.text; scrollChat(); }
+      }
+    });
+    es.addEventListener("error", (e) => { if (e.data) STATE.chat.push({ who: "err", text: e.data }); finish(); });
+    es.addEventListener("done", finish);
+    es.onerror = finish;
+  }
+  function finish() {
+    if (es) { es.close(); es = null; }
+    STATE.chatBusy = false;
+    STATE.replies = ["Yes, do it", "Show me the log", "Not now"];
+    render();
+    scrollChat();
+  }
+
+  // ---------------------------------------------------------------- boot
+  async function refresh() {
+    try {
+      if (STATE.tab === "ops") {
+        await Promise.all([
+          loadOverview(),
+          api("/api/llm/metrics").then(s => { if (s && !s.warming) STATE.sys = s; }).catch(() => {}),
+        ]);
+      }
+      if (STATE.tab === "repos" && !STATE.apps) await Promise.all([loadApps(), loadOverview()]);
+      if (STATE.tab === "planner" && !STATE.planner) await loadPlanner();
+      render();
+    } catch (e) {
+      if (e.message !== "locked") toast(e.message, "error");
+    }
+  }
+
+  async function boot() {
+    try {
+      const st = await api("/api/remote/status");
+      STATE.locked = false;
+      if (st.loopback) HOSTNAME = "this Mac";
+    } catch (e) {
+      if (e.message === "locked") return;     // render() already switched to the gate
+      STATE.locked = true; return render();
+    }
+    api("/api/llm/status").then(s => { if (s && s.model) MODEL_NAME = s.model.split("-").slice(0, 2).join("-"); }).catch(() => {});
+    render();
+    await refresh();
+    // Keep the Ops tab honest without hammering: the overview is cached at 45s.
+    setInterval(() => { if (STATE.tab === "ops" && !document.hidden) refresh(); }, 20000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  }
+
+  boot();
+  </script>
+</body>
+</html>

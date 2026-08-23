@@ -189,3 +189,72 @@ cd opsroom && node src/selfcheck.ts   # sidecar integrity + behavioural checks
 
 `status` warns when `current`/`previous` point at a release that no longer
 exists — worth checking before relying on `rollback`.
+
+## The phone companion
+
+The iPhone app is the same server: a phone-shaped page at `/m`, served by GSO-1
+itself. There is nothing to install and nothing in the App Store — you add it to
+the Home Screen and it runs full-screen.
+
+### Turning it on
+
+```bash
+./scripts/mobile-setup.sh                  # writes .env, prints code + URL
+python -m supervisor stop && python -m supervisor start --daemon
+```
+
+The script generates an access code, sets `MANAGER_MOBILE_TOKEN` and
+`MANAGER_HOST=0.0.0.0` in `.env`, and prints the address. On the phone: open
+`http://<mac-ip>:8420/m` in Safari, enter the code once, then **Share → Add to
+Home Screen**. Re-run the script to rotate the code.
+
+### How the phone reaches the Mac
+
+| Where you are | How | Notes |
+|---|---|---|
+| Same Wi-Fi | `http://<mac-ip>:8420/m` or `http://<hostname>.local:8420/m` | What the setup script prints. The `.local` name survives a DHCP lease change; the IP does not. |
+| Anywhere | Tailscale (or any WireGuard mesh) | Install it on both, then use the Mac's tailnet IP — same URL, no ports opened on your router. Encrypted, and the device stays private. |
+| Public internet | Cloudflare Tunnel / ngrok | Works, but puts a start-stop-and-run-an-agent surface on the open web behind one shared code. Prefer the mesh. |
+
+**Never port-forward 8420 on the router.** The access code is one secret over
+plain HTTP; on a LAN or a tailnet that is proportionate, on the public internet
+it is not.
+
+### What the gate does
+
+`remoteauth.py` is a middleware in front of everything:
+
+- Requests from `127.0.0.1` pass untouched — the desktop app is unchanged and
+  needs no code.
+- Anything else must present the code, as `Authorization: Bearer <code>` or the
+  `gso_token` cookie. The cookie exists because `EventSource` cannot set
+  headers and the Ops Room stream is SSE. It is HttpOnly, so page scripts
+  cannot read it back out.
+- With no code configured, non-loopback requests are refused outright. Binding
+  the wrong interface by accident cannot expose the machine.
+- `/m`, `/static/*` and `/health` are reachable without the code — enough to
+  paint a login screen, and nothing else.
+
+Verify it from another machine on the network:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://<mac-ip>:8420/api/apps    # 401
+curl -s -o /dev/null -w '%{http_code}\n' http://<mac-ip>:8420/m           # 200
+```
+
+### What the phone can do
+
+Four tabs — **Ops · Repos · Planner · Room**:
+
+- **Ops** — what is live (with Stop), what needs you (Resolve a port clash,
+  Commit, Pull), and a CPU/RAM meter.
+- **Repos** — search-first; with no query it shows only what is running or
+  dirty. A repo opens a sheet: Start/Stop, open in VSCode **on the Mac**,
+  git status with Commit all / Pull, run config, and a failed-run card that
+  hands the problem to the Ops Room.
+- **Planner** — one column at a time; tapping a task advances it to the next
+  column.
+- **Room** — the agent, streaming over SSE, same model and same limits.
+
+Setup commands, log tails, the LLM start form and the site CMS stay on the
+desktop. The phone is for checking and unblocking, not configuring.

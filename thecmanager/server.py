@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import (
     claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage, planner,
-    runner, scanner, sysmon, telegrambot, vscode,
+    remoteauth, runner, scanner, sysmon, telegrambot, vscode,
 )
 from . import chat as chat_agent
 from . import scheduler
@@ -22,6 +22,8 @@ from . import overview as overview_mod
 from . import site as site_cms
 
 app = FastAPI(title="GSO-1", version="0.1.0")
+# Loopback is untouched; anything arriving from another device needs the token.
+app.add_middleware(remoteauth.RemoteAuthMiddleware)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -51,6 +53,68 @@ def _require(name: str) -> None:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/health")
+def health_probe() -> JSONResponse:
+    """Unauthenticated liveness — the supervisor and the phone both poll it."""
+    return JSONResponse({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Phone companion
+# --------------------------------------------------------------------------
+@app.get("/m")
+def mobile_index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "mobile.html")
+
+
+@app.get("/manifest.webmanifest")
+def mobile_manifest() -> JSONResponse:
+    """Lets iOS "Add to Home Screen" install it as a standalone app."""
+    return JSONResponse({
+        "name": "GSO-1", "short_name": "GSO-1", "id": "/m",
+        "start_url": "/m", "scope": "/", "display": "standalone",
+        "background_color": "#09080f", "theme_color": "#09080f",
+        "icons": [{"src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml"}],
+    })
+
+
+class RemoteLogin(BaseModel):
+    token: str
+
+
+@app.post("/api/remote/login")
+def remote_login(body: RemoteLogin, request: Request) -> JSONResponse:
+    """Exchange the shared secret for a cookie.
+
+    A cookie rather than a header because EventSource cannot set headers and
+    the Ops Room stream is SSE. HttpOnly so page scripts cannot read it back.
+    """
+    if remoteauth.is_loopback(request):
+        return JSONResponse({"ok": True, "loopback": True})
+    if not config.MOBILE_TOKEN:
+        return JSONResponse(
+            {"ok": False, "error": "Remote access is off: MANAGER_MOBILE_TOKEN is not set."},
+            status_code=403)
+    if not remoteauth.token_ok((body.token or "").strip()):
+        return JSONResponse({"ok": False, "error": "Wrong code."}, status_code=401)
+
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(
+        remoteauth.COOKIE, config.MOBILE_TOKEN,
+        max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax", path="/",
+    )
+    return resp
+
+
+@app.get("/api/remote/status")
+def remote_status(request: Request) -> JSONResponse:
+    return JSONResponse({
+        "loopback": remoteauth.is_loopback(request),
+        "authed": True,           # the middleware would have refused otherwise
+        "token_configured": bool(config.MOBILE_TOKEN),
+    })
 
 
 # --------------------------------------------------------------------------
@@ -243,6 +307,22 @@ def update_config(name: str, patch: ConfigPatch) -> JSONResponse:
     data = patch.model_dump(exclude_unset=True)
     registry.update(name, data)
     return JSONResponse({"ok": True, "config": scanner.effective_config(name)})
+
+
+class CommitBody(BaseModel):
+    message: str | None = None
+
+
+@app.post("/api/apps/{name}/commit")
+def commit_app(name: str, body: CommitBody) -> JSONResponse:
+    """Stage and commit everything in a repo — the phone's one-tap Commit all."""
+    _require(name)
+    msg = (body.message or "").strip() or f"Update {name} via GSO-1"
+    result = git_ops.commit_all(scanner.app_path(name), msg)
+    events.record("git" if result["ok"] else "fail", name,
+                  "nothing to commit" if result.get("nochange")
+                  else f"committed — {msg}"[:110] if result["ok"] else "commit failed")
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
 @app.post("/api/apps/{name}/favourite")

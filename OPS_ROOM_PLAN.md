@@ -1064,3 +1064,53 @@ made the timeline unreadable. And LLM traffic is **rolled up per 15-minute
 slot** rather than per request, so the feed reads
 `llama-server · 42 requests · 318k tokens · 0 errors`, which is exactly the line
 the handoff's sample data shows — arrived at from real counters.
+
+## 14. iPhone companion (2026-08-23)
+
+The desktop is frozen as shipped; this is additive. The handoff's mobile design
+is deliberately *not* a reflow of the desktop shell — "check and unblock, not
+manage" — so it is a separate page, `static/mobile.html`, served at `/m` by the
+same FastAPI process. No App Store, no second stack, no API to keep in sync:
+Add to Home Screen and iOS runs it standalone.
+
+Four tabs, three of them from the artboards (Ops feed, repo sheet, Ops Room
+chat) plus Planner, which the tab bar showed but no artboard specified — built
+as one column at a time, where tapping a task advances it.
+
+**The real design question was not layout, it was exposure.** GSO-1 starts
+processes, edits files and runs an agent, and until now it only ever answered
+on loopback. A phone means binding an interface the rest of the network can
+reach, and every one of those capabilities comes along.
+
+`remoteauth.py` is the answer, and the shape of it matters more than the code:
+
+- **Loopback is untouched and unauthenticated.** The desktop app needed no
+  change, which was the constraint.
+- **Everything else needs a shared secret**, as a bearer header or the
+  `gso_token` cookie. The cookie is not laziness: `EventSource` cannot set
+  headers, and the Ops Room stream is SSE, so the token has to ride the cookie
+  to make the chat work at all. HttpOnly, so page scripts cannot read it back.
+- **It fails closed.** With no `MANAGER_MOBILE_TOKEN` set, non-loopback requests
+  are refused outright rather than allowed — a mistyped `MANAGER_HOST` cannot
+  quietly open the machine to the network.
+- Only `/m`, `/static/*` and `/health` are public: enough to paint a login
+  screen and nothing more.
+
+Verified from a second address on the LAN: `/api/apps` 401 without the code,
+200 with it; wrong code 401; the SSE stream 401 without the cookie and streaming
+with it; mutating calls (favourite, commit, start/stop) all work remotely; and
+with the token unset, LAN requests 401 while loopback still returns 200.
+
+**Supporting work.** `config.py` learned to read `<repo>/.env` (real env vars
+still win, and a release resolves the canonical file through `.release.json`)
+so the token lives in one place. `POST /api/apps/{name}/commit` is new — the
+repo sheet's "Commit all" had no endpoint behind it. `scripts/mobile-setup.sh`
+generates the code, rewrites `.env` whole (never `>>` — appending onto a file
+without a trailing newline once corrupted a key) and prints the LAN and
+`.local` URLs.
+
+**One bug worth naming.** `tokens.css` carries no CSS reset — the desktop gets
+one from Tailwind's preflight, which the phone page does not load. Without
+`box-sizing: border-box` every padded input was wider than its column and the
+whole page scrolled sideways. Reusing a token file is not the same as reusing a
+stylesheet.
