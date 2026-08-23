@@ -15,6 +15,10 @@ from . import (
     claudebridge, config, git_ops, health, llm, llmproxy, planner, runner, scanner,
     sysmon, telegrambot, vscode,
 )
+from . import chat as chat_agent
+from . import scheduler
+from . import opsroom as opsroom_bridge
+from . import site as site_cms
 
 app = FastAPI(title="GSO-1", version="0.1.0")
 
@@ -27,6 +31,11 @@ atexit.register(llm.stop_if_managed)
 @app.on_event("startup")
 def _start_telegram() -> None:
     telegrambot.start()  # no-op unless MANAGER_TELEGRAM_TOKEN is set
+    chat_agent.register_web_handlers()  # web Chat tab's bridge routing
+    scheduler.start()  # recurring reports; jobs live in data/schedule.json
+
+
+atexit.register(scheduler.stop)
 
 
 def _require(name: str) -> None:
@@ -52,25 +61,40 @@ def list_apps() -> JSONResponse:
     claude_state: dict[str, str] = {}
     for s in claudebridge.list_sessions().values():
         claude_state[s["project"]] = "working" if s.get("busy") else "attached"
+    # GSO-1 lists itself. It is running (the supervisor started it), but not via
+    # runner, so `running` reads False and the UI would offer a Start button —
+    # which would launch a second copy and collide on the same port. Flag it so
+    # the client can show state honestly and refuse to start it.
+    self_path = str(opsroom_bridge.repo_root().resolve())
+
     apps = []
     for name in scanner.list_app_names():
         cfg = scanner.effective_config(name)
         path = str(scanner.app_path(name).resolve())
+        is_self = path == self_path
         apps.append(
             {
                 "name": name,
                 "type": cfg["type"],
                 "language": cfg["language"],
-                "running": name in running,
-                "has_start_command": bool(cfg["start_command"]),
+                "running": True if is_self else (name in running),
+                "is_self": is_self,
+                "has_start_command": False if is_self else bool(cfg["start_command"]),
                 "port": cfg["port"],
                 "favourite": cfg["favourite"],
                 "vscode_open": path in vscode_open,
                 "claude_session": claude_state.get(name),
+                "root_label": scanner.root_label(name),
             }
         )
     return JSONResponse(
-        {"projects_dir": str(config.PROJECTS_DIR), "count": len(apps), "apps": apps}
+        {
+            "projects_dir": str(config.PROJECTS_DIR),
+            "projects_dirs": [str(d) for d in config.PROJECTS_DIRS],
+            "roots": [label for label, _ in config.PROJECT_ROOTS],
+            "count": len(apps),
+            "apps": apps,
+        }
     )
 
 
@@ -245,14 +269,13 @@ def vscode_focus(name: str) -> JSONResponse:
 @app.get("/api/vscode/folders")
 def vscode_folders() -> JSONResponse:
     """Folders currently open in VS Code windows (for the 'Opened in VSCode' view)."""
-    proj_root = str(config.PROJECTS_DIR.resolve())
     folders = []
     for p in sorted(vscode.open_folders()):
         folders.append(
             {
                 "name": Path(p).name,
                 "path": p,
-                "in_projects": p.startswith(proj_root),
+                "in_projects": config.under_any_root(p),
             }
         )
     return JSONResponse(
@@ -342,6 +365,56 @@ def llm_stop() -> JSONResponse:
 @app.get("/api/llm/logs", response_class=PlainTextResponse)
 def llm_logs(lines: int = 200) -> PlainTextResponse:
     return PlainTextResponse(llm.tail_log(lines) or "(no logs yet)")
+
+
+# --------------------------------------------------------------------------
+# Ops Room sidecar
+# --------------------------------------------------------------------------
+@app.get("/api/opsroom/status")
+def opsroom_status() -> JSONResponse:
+    return JSONResponse(opsroom_bridge.available())
+
+
+@app.post("/api/opsroom/cancel")
+def opsroom_cancel() -> JSONResponse:
+    return JSONResponse({"cancelled": opsroom_bridge.cancel()})
+
+
+@app.get("/api/opsroom/ask")
+def opsroom_ask(prompt: str):
+    """SSE stream. GET so EventSource can consume it directly."""
+    return StreamingResponse(
+        opsroom_bridge.ask_stream(prompt),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# --------------------------------------------------------------------------
+# Scheduler
+# --------------------------------------------------------------------------
+@app.get("/api/schedule")
+def schedule_status() -> JSONResponse:
+    return JSONResponse(scheduler.status())
+
+
+@app.post("/api/schedule/{job_id}/run")
+def schedule_run(job_id: str, notify: bool = True) -> JSONResponse:
+    for job in scheduler.load_jobs():
+        if job.get("id") == job_id:
+            return JSONResponse(scheduler.run_job(job, notify=notify))
+    raise HTTPException(status_code=404, detail=f"No such job: {job_id}")
+
+
+@app.post("/api/schedule/{job_id}/enabled")
+def schedule_enabled(job_id: str, enabled: bool) -> JSONResponse:
+    jobs = scheduler.load_jobs()
+    for job in jobs:
+        if job.get("id") == job_id:
+            job["enabled"] = enabled
+            scheduler.save_jobs(jobs)
+            return JSONResponse({"ok": True, "id": job_id, "enabled": enabled})
+    raise HTTPException(status_code=404, detail=f"No such job: {job_id}")
 
 
 @app.get("/api/telegram/status")
@@ -523,6 +596,98 @@ def chat(name: str, msg: ChatMessage) -> JSONResponse:
             ),
         }
     )
+
+
+# --------------------------------------------------------------------------
+# Computer assistant chat (tool-using agent on the local LLM)
+# --------------------------------------------------------------------------
+class ChatSend(BaseModel):
+    message: str
+
+
+class ChatApprove(BaseModel):
+    id: str
+    approve: bool
+
+
+@app.get("/api/chat")
+def chat_get() -> JSONResponse:
+    return JSONResponse(chat_agent.history())
+
+
+@app.post("/api/chat/send")
+def chat_send(body: ChatSend) -> JSONResponse:
+    return JSONResponse(chat_agent.send(body.message))
+
+
+@app.post("/api/chat/approve")
+def chat_approve(body: ChatApprove) -> JSONResponse:
+    return JSONResponse(chat_agent.approve(body.id, body.approve))
+
+
+@app.post("/api/chat/reset")
+def chat_reset() -> JSONResponse:
+    return JSONResponse(chat_agent.reset())
+
+
+# --------------------------------------------------------------------------
+# Site CMS — edit the Jekyll website and publish to GitHub
+# --------------------------------------------------------------------------
+class SiteSave(BaseModel):
+    frontmatter: dict
+    body: str
+
+
+class SiteCreate(BaseModel):
+    file: str
+    frontmatter: dict = {}
+    body: str = ""
+
+
+class SitePublish(BaseModel):
+    message: str = ""
+
+
+@app.get("/api/site")
+def site_overview() -> JSONResponse:
+    return JSONResponse(site_cms.overview())
+
+
+@app.get("/api/site/{coll}")
+def site_list(coll: str) -> JSONResponse:
+    try:
+        return JSONResponse({"items": site_cms.list_items(coll)})
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/site/{coll}/{name}")
+def site_read(coll: str, name: str) -> JSONResponse:
+    try:
+        return JSONResponse(site_cms.read_item(coll, name))
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.put("/api/site/{coll}/{name}")
+def site_save(coll: str, name: str, body: SiteSave) -> JSONResponse:
+    try:
+        return JSONResponse(site_cms.save_item(coll, name, body.frontmatter, body.body))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/site/{coll}")
+def site_create(coll: str, body: SiteCreate) -> JSONResponse:
+    try:
+        return JSONResponse(site_cms.create_item(coll, body.file, body.frontmatter, body.body))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/site/publish")
+def site_publish(body: SitePublish) -> JSONResponse:
+    return JSONResponse(site_cms.publish(body.message))
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
