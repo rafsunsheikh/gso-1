@@ -1,0 +1,16 @@
+{
+  "name": "opsroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ops Room — pi-based agent sidecar for GSO-1",
+  "scripts": {
+    "ask": "node src/ask.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.84.2",
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "typebox": "1.3.7"
+  }
+}
