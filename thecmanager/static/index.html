@@ -108,7 +108,7 @@
 
       <div class="gso-body">
         <!-- Search + filter row -->
-        <div class="flex items-center gap-3 mb-4">
+        <div id="search-row" class="flex items-center gap-3 mb-4">
         <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
           <div id="filters" role="group" aria-label="Filter by type"
@@ -121,6 +121,17 @@
           style="display:grid"></main>
       </div>
     </div>
+
+    <aside id="drawer" class="gso-dock" data-open="0" role="complementary" aria-label="App details">
+    <div class="gso-dock-head">
+      <div style="flex:1;min-width:0">
+        <div class="gso-dock-title">Details</div>
+        <div class="gso-dock-sub" id="drawer-sub">No app selected</div>
+      </div>
+      <button id="drawer-close" class="gso-icon-btn" aria-label="Close details" title="Close">&times;</button>
+    </div>
+    <div id="drawer-content" class="gso-dock-body"></div>
+  </aside>
 
     <aside id="ops-panel" aria-label="Ops Room" role="complementary" class="gso-dock" data-open="0">
   <div class="gso-dock-head">
@@ -159,13 +170,7 @@
   </div>
 
   <!-- Detail drawer -->
-  <div id="drawer" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="App details">
-    <div id="drawer-bg" class="absolute inset-0 bg-black/60"></div>
-    <div class="absolute right-0 top-0 h-full w-full max-w-2xl bg-slate-900 border-l border-slate-700 shadow-2xl overflow-y-auto">
-      <div id="drawer-content" class="p-6"></div>
-    </div>
-  </div>
-
+  
   <script>
 
     // ---- accessibility helpers -------------------------------------------
@@ -208,7 +213,7 @@
     }
     /** Move focus to the first focusable child once async content has landed. */
     function focusFirstIn(container) {
-      if (!container || container.classList.contains("hidden")) return;
+      if (!container || container.dataset.open === "0") return;
       const sel = 'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])';
       const first = Array.from(container.querySelectorAll(sel)).find(e => e.offsetParent !== null);
       if (first && !container.contains(document.activeElement)) first.focus();
@@ -660,6 +665,14 @@
       { id: "planner", short: "PLAN" }, { id: "llm", short: "LLM" }, { id: "site", short: "SITE" },
     ];
 
+    const APP_LIST_VIEWS = new Set(["library", "favourites", "uncommitted", "failed", "vscode"]);
+
+    function syncChrome() {
+      const row = $("#search-row");
+      const isList = APP_LIST_VIEWS.has(activeView) || activeView.startsWith("root:");
+      if (row) row.style.display = isList ? "flex" : "none";
+    }
+
     function renderViews() {
       const nav = $("#side-nav");
       if (nav) {
@@ -695,6 +708,7 @@
 
       const t = $("#view-title");
       if (t) t.textContent = viewTitle();
+      syncChrome();
     }
 
     function viewTitle() {
@@ -1795,7 +1809,7 @@
         toast(`Could not ${action} ${name}: ${e.message || e}`, "error");
       }
       await load();
-      if (!$("#drawer").classList.contains("hidden")) openDrawer(name);
+      if ($("#drawer").dataset.open === "1") openDrawer(name);
     }
 
     function flash(msg, ok=true) {
@@ -1807,22 +1821,25 @@
     }
 
     // -------- Drawer --------
+    let lastDrawerApp = null;
+
     async function openDrawer(name) {
+      lastDrawerApp = name;
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
-      $("#drawer").classList.remove("hidden");
-      trapFocus($("#drawer"));
+      $("#drawer").setAttribute("data-open", "1");
+      $("#dock-details").setAttribute("aria-pressed", "true");
       $("#drawer-content").innerHTML = `<p class="text-slate-400">Loading ${name}…</p>`;
       const d = await api(`/api/apps/${encodeURIComponent(name)}`);
       $("#drawer-content").innerHTML = drawerHtml(d);
       wireDrawer(d);
-      focusFirstIn($("#drawer"));
+      const sub = $("#drawer-sub"); if (sub) sub.textContent = name;
       announce(`${name} details opened`);
     }
 
     function closeDrawer() {
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
-      $("#drawer").classList.add("hidden");
-      releaseFocus($("#drawer"));
+      $("#drawer").setAttribute("data-open", "0");
+      $("#dock-details").setAttribute("aria-pressed", "false");
     }
 
     // Poll setup logs + status until the job finishes.
@@ -1871,17 +1888,6 @@
         </div>` : `<p class="text-slate-500 text-sm">Not a git repository.</p>`;
 
       return `
-      <div class="flex items-start justify-between mb-4">
-        <div>
-          <h2 class="text-xl font-bold text-white">${d.name}</h2>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="text-[11px] px-2 py-0.5 rounded border ${typeClass(c.type)}">${c.type}</span>
-            <span class="text-xs text-slate-400">${c.language||""}</span>
-            ${healthBadge(h)}
-          </div>
-        </div>
-        <button id="close-drawer" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
-      </div>
 
       <p class="text-xs text-slate-500 mono mb-4 break-all">${d.path}</p>
 
@@ -2017,7 +2023,7 @@
     setInterval(() => {
       // Don't auto-reload while a drawer/modal is open or on the LLM/Planner/
       // Chat views (it would reset inputs / drag state); those self-refresh.
-      const busy = !$("#drawer").classList.contains("hidden")
+      const busy = $("#drawer").dataset.open === "1"
         || !$("#task-modal").classList.contains("hidden")
         || activeView === "llm" || activeView === "planner" || activeView === "chat"
         || activeView === "site";
@@ -2155,10 +2161,18 @@
       if (d) d.addEventListener("click", function () {
         var dr = document.getElementById("drawer");
         if (!dr) return;
-        if (dr.classList.contains("hidden")) {
+        if (dr.dataset.open !== "1") {
           if (typeof lastDrawerApp !== "undefined" && lastDrawerApp) openDrawer(lastDrawerApp);
           else if (typeof toast === "function") toast("Select an app to see its details", "info");
         } else { closeDrawer(); }
+      });
+    })();
+  </script>
+<script>
+    (function () {
+      var c = document.getElementById("drawer-close");
+      if (c) c.addEventListener("click", function () {
+        if (typeof closeDrawer === "function") closeDrawer();
       });
     })();
   </script>
