@@ -3,3 +3,11 @@
 *.pyc
 __pycache__/
 data/logs/
+var/
+node_modules/
+.env
+.env.*
+.DS_Store
+data/*.json
+data/schedule_state.json
+!data/.gitkeep
