@@ -122,6 +122,34 @@
       </div>
     </div>
 
+    <aside id="ops-panel" aria-label="Ops Room" role="complementary" class="gso-dock" data-open="0">
+  <div class="gso-dock-head">
+    <div style="flex:1;min-width:0">
+      <div class="gso-dock-title">Ops Room</div>
+      <div id="ops-status" class="gso-dock-sub">checking&hellip;</div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="ops-cancel" class="hidden text-[11px] bg-rose-700 hover:bg-rose-600 rounded px-2 py-1">Stop</button>
+      <button id="ops-clear" class="text-[11px] bg-slate-800 hover:bg-slate-700 rounded px-2 py-1">Clear</button>
+    </div>
+  </div>
+  <div id="ops-log" class="gso-dock-body space-y-2 text-[13px] leading-relaxed">
+    <div class="text-slate-500 text-xs">
+      Ask about your projects &mdash; git state, apps, logs &mdash; or have it change its own code.
+      Runs on the local model; a reply takes ~30s.
+    </div>
+  </div>
+  <div class="gso-dock-foot">
+    <textarea id="ops-input" rows="3" placeholder="Ask Ops Room&hellip;   (Cmd+Enter to send)"
+      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm resize-none
+             focus:outline-none focus:border-indigo-500"></textarea>
+    <div class="flex justify-between items-center mt-2">
+      <span id="ops-hint" class="text-[11px] text-slate-600"></span>
+      <button id="ops-send" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-1.5 text-sm">Send</button>
+    </div>
+  </div>
+</aside>
+
   <!-- Task editor modal -->
   <div id="task-modal" class="fixed inset-0 z-[55] hidden" role="dialog" aria-modal="true" aria-label="Edit task">
     <div id="task-modal-bg" class="absolute inset-0 bg-black/60"></div>
@@ -1997,50 +2025,11 @@
     }, 8000);
   </script>
 <!-- ============ Ops Room docked sidebar ============ -->
-<button id="ops-toggle" title="Ops Room (Cmd+J)" aria-label="Toggle Ops Room panel" aria-controls="ops-panel" aria-expanded="false"
-  class="fixed top-1/2 -translate-y-1/2 right-0 z-[60] bg-indigo-600 hover:bg-indigo-500 text-white
-         rounded-l-xl w-12 h-44 flex flex-col items-center justify-center gap-2 shadow-2xl
-         ring-2 ring-indigo-400/40 transition-all">
-  <span id="ops-toggle-icon" class="text-xl leading-none">&#9664;</span>
-  <span class="text-[11px] font-semibold tracking-wide"
-        style="writing-mode:vertical-rl; text-orientation:mixed;">OPS ROOM</span>
-</button>
-
-<aside id="ops-panel" aria-label="Ops Room" role="complementary"
-  class="fixed top-0 right-0 h-full z-[59] bg-slate-900 border-l border-slate-700 shadow-2xl
-         flex flex-col transition-transform duration-200"
-  style="width:420px; transform:translateX(100%);">
-  <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
-    <div>
-      <div class="font-semibold text-white text-sm">Ops Room</div>
-      <div id="ops-status" class="text-[11px] text-slate-500">checking&hellip;</div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button id="ops-cancel" class="hidden text-[11px] bg-rose-700 hover:bg-rose-600 rounded px-2 py-1">Stop</button>
-      <button id="ops-clear" class="text-[11px] bg-slate-800 hover:bg-slate-700 rounded px-2 py-1">Clear</button>
-    </div>
-  </div>
-  <div id="ops-log" class="flex-1 overflow-auto p-3 space-y-2 text-[13px] leading-relaxed">
-    <div class="text-slate-500 text-xs">
-      Ask about your projects &mdash; git state, apps, logs &mdash; or have it change its own code.
-      Runs on the local model; a reply takes ~30s.
-    </div>
-  </div>
-  <div class="p-3 border-t border-slate-800 shrink-0">
-    <textarea id="ops-input" rows="3" placeholder="Ask Ops Room&hellip;   (Cmd+Enter to send)"
-      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm resize-none
-             focus:outline-none focus:border-indigo-500"></textarea>
-    <div class="flex justify-between items-center mt-2">
-      <span id="ops-hint" class="text-[11px] text-slate-600"></span>
-      <button id="ops-send" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-1.5 text-sm">Send</button>
-    </div>
-  </div>
-</aside>
 
 <script>
 (function () {
-  var panel=document.getElementById('ops-panel'), toggle=document.getElementById('ops-toggle'),
-      icon=document.getElementById('ops-toggle-icon'), log=document.getElementById('ops-log'),
+  var panel=document.getElementById('ops-panel'),
+      log=document.getElementById('ops-log'),
       input=document.getElementById('ops-input'), send=document.getElementById('ops-send'),
       cancel=document.getElementById('ops-cancel'), clear=document.getElementById('ops-clear'),
       statusEl=document.getElementById('ops-status'), hint=document.getElementById('ops-hint');
@@ -2048,17 +2037,15 @@
 
   function setOpen(v){
     open=v;
-    panel.style.transform = v ? 'translateX(0)' : 'translateX(100%)';
-    toggle.style.right = v ? WIDTH+'px' : '0px';
-    icon.innerHTML = v ? '&#9654;' : '&#9664;';
-    toggle.setAttribute('aria-expanded', v ? 'true' : 'false');
+    // A dock is a shell column, not an overlay: the content simply narrows.
+    panel.setAttribute('data-open', v ? '1' : '0');
     var hb = document.getElementById('ops-open');
-    if (hb) hb.setAttribute('aria-expanded', v ? 'true' : 'false');
-    document.body.style.paddingRight = v ? WIDTH+'px' : '0px';
+    if (hb) { hb.setAttribute('aria-expanded', v ? 'true' : 'false');
+              hb.setAttribute('aria-pressed', v ? 'true' : 'false'); }
     try { localStorage.setItem('opsPanelOpen', v?'1':'0'); } catch(e){}
-    if (v) setTimeout(function(){ input.focus(); }, 220);
+    if (v) setTimeout(function(){ input.focus(); }, 120);
   }
-  toggle.addEventListener('click', function(){ setOpen(!open); });
+
   var headerBtn = document.getElementById('ops-open');
   if (headerBtn) headerBtn.addEventListener('click', function(){ setOpen(!open); });
   document.addEventListener('keydown', function(e){

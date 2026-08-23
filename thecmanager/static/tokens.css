@@ -541,3 +541,26 @@
   border: 1px solid var(--line); background: transparent; color: var(--text-2); cursor: pointer;
 }
 .lib-icon:hover { background: var(--hover); color: var(--text); }
+
+/* ==================================================================
+   Docks — a third shell column rather than an overlay
+   ================================================================== */
+.gso-dock {
+  width: 322px; flex: none;
+  background: var(--surface);
+  border-left: 1px solid var(--line-2);
+  display: none; flex-direction: column; min-height: 0;
+}
+.gso-dock[data-open="1"] { display: flex; }
+.gso-dock-head {
+  padding: 13px 14px; border-bottom: 1px solid var(--line-2);
+  display: flex; align-items: center; gap: 9px; flex: none;
+}
+.gso-dock-title { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.gso-dock-sub { font-size: 10.5px; color: var(--text-3); }
+.gso-dock-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+.gso-dock-foot { flex: none; padding: 12px 14px; border-top: 1px solid var(--line-2); }
+
+@media (max-width: 1180px) {
+  .gso-dock { position: absolute; right: 0; top: 0; height: 100%; z-index: 65; box-shadow: var(--shadow); }
+}
