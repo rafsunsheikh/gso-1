@@ -265,6 +265,7 @@ Constrain built-ins by supplying custom operation objects, not by forking.
 | 2026-08-22 | **M2 ✅** | Path rings + immutable supervisor + approval-gated bash. Guards verified to actually refuse, not just to allow. |
 | 2026-08-22 | **M3 ✅** | `web_search` via Tavily, after surveying 6 agents. Live query returned next-day-fresh data with a cited URL. |
 | 2026-08-22 | **§9 1-4 ✅** | GLM @ 64K loaded. Unassisted self-build works. Agent hallucinated an API and the gate missed it — behavioural checks added. |
+| 2026-08-23 | **Redesign ✅** | All 7 phases of the Decara handoff: tokens + light/dark, sidebar shell, Ops Room view, Library, docks, view polish, backend gaps. |
 | 2026-08-23 | **M6 ✅** | Scheduler in GSO-1 (stdlib, no new deps). Unattended git sweep fired and delivered to Telegram. |
 | 2026-08-23 | **M5 ✅** | Electron shell: `.app` bundle, tray, real icon, adopts-or-spawns lifecycle, clean 3 s teardown with no orphans. |
 | 2026-08-22 | **M4 ✅** | Self-build loop complete. Both acceptance criteria pass: agent wrote `disk_free` into itself, built, verified, and promoted it through a human gate; a broken build was refused. |
@@ -896,3 +897,57 @@ code was right — `_mark_run` stamps *real* now (~01:00) while `due()` was bein
 called with a fake 09:30, so "last run" landed before the slot and firing was
 correct. Re-tested by writing the state timestamp explicitly. *When a frozen
 clock meets code that reads the real one, the test is usually what is broken.*
+
+---
+
+## 13. UI redesign (2026-08-23)
+
+Implemented the Decara-derived handoff in seven phases, each verified and
+committed separately. The handoff assumed Electron + React with shadcn
+primitives; this codebase is one vanilla file, so every primitive was built by
+hand against CSS custom properties.
+
+| Phase | Shipped |
+|---|---|
+| 1 | `tokens.css` — full light/dark token table, theme toggle, pre-paint apply |
+| 2 | 216px sidebar with four groups, 60px icon rail, content header |
+| 3 | Ops Room default view — LIVE / NEEDS YOU / ROUTINES / RECENT |
+| 4 | Library — status strip, redesigned cards, one primary action each |
+| 5 | Ops Room becomes a 322px dock column instead of an overlay |
+| 6 | Details dock, per-view chrome |
+| 7 | `overview.py` — live processes, git sweep, failed runs, port conflicts |
+
+**The highest-leverage decision: do not rewrite the markup.** ~1,500 lines of
+`slate-*`/`indigo-*` utilities became theme-aware by remapping Tailwind's own
+palette to the tokens as channel triplets (`rgb(var(--c-card) / <alpha-value>)`),
+which preserves the `/opacity` modifiers. Migrating class by class would have
+been days of churn for the same result.
+
+`overview.py` exists because the design needs data `/api/apps` never returned —
+pid, uptime, per-repo git state, failed runs, port clashes. Per-repo from the
+browser is ~270 round trips; aggregated and cached it is ~3s, refreshed every
+45s or on demand.
+
+**Bugs found and fixed during the phases:**
+
+- A retry loop in the first Ops Room cut re-rendered on failure, which
+  re-triggered the load, which failed again — an unbounded toast storm. Failure
+  now records state and renders a retry panel.
+- `body { background: #0c0a17 }` and the scrollbar colours were hard-coded and
+  would have defeated light mode entirely.
+- White repo names on white cards: `text-white` is used both as a label on
+  purple buttons (must stay white) and as emphasis on dark surfaces (must follow
+  the theme). The override is scoped to elements not on a coloured background.
+- The dock refactor deleted `#close-drawer` and `#drawer-bg` while their
+  `onclick` bindings remained, throwing a TypeError on every drawer open.
+  Verified afterwards: nine views render with **zero console errors**.
+
+**Deliberately not done.** The ⌘K palette — the handoff states the overlay is
+not designed yet, so only its trigger exists (it focuses search). The iPhone
+companion is a separate application, not part of the desktop redesign.
+
+**Standing hazard, hit twice.** An orphaned `python -m thecmanager` holding 8420
+makes the supervisor's child fail `rc=1` on every restart, forever, while the
+stale process keeps serving old code. Both times it looked like broken code.
+`supervisor status` should learn to distinguish "my child crashed" from
+"someone else owns my port".
