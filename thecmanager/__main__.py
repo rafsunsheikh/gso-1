@@ -14,7 +14,7 @@ def main() -> None:
     url = f"http://{config.HOST}:{config.PORT}"
     print("=" * 60)
     print("  GSO-1 — local application registry")
-    print(f"  Projects: {config.PROJECTS_DIR}")
+    print(f"  Projects: {', '.join(str(d) for d in config.PROJECTS_DIRS)}")
     print(f"  Dashboard: {url}")
     print("=" * 60)
     if not os.environ.get("MANAGER_NO_BROWSER"):

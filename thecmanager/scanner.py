@@ -10,28 +10,51 @@ from . import config, detector, registry
 
 
 def list_app_names() -> list[str]:
-    """Top-level directories under PROJECTS_DIR that look like real projects."""
+    """Top-level project directories across every configured root.
+
+    Names are de-duplicated (the first root that has a given name wins) and
+    returned alphabetically.
+    """
     names: list[str] = []
-    if not config.PROJECTS_DIR.exists():
-        return names
-    for entry in sorted(config.PROJECTS_DIR.iterdir(), key=lambda p: p.name.lower()):
-        if not entry.is_dir():
+    seen: set[str] = set()
+    for root in config.PROJECTS_DIRS:
+        if not root.exists():
             continue
-        if entry.name in config.IGNORED_NAMES:
-            continue
-        if entry.name.startswith(config.IGNORED_PREFIXES):
-            continue
-        names.append(entry.name)
-    return names
+        for entry in root.iterdir():
+            if not entry.is_dir():
+                continue
+            if entry.name in config.IGNORED_NAMES:
+                continue
+            if entry.name.startswith(config.IGNORED_PREFIXES):
+                continue
+            if entry.name in seen:
+                continue
+            seen.add(entry.name)
+            names.append(entry.name)
+    return sorted(names, key=str.lower)
 
 
 def app_path(name: str) -> Path:
-    return config.PROJECTS_DIR / name
+    """Path to a project, searching each root in order. Falls back to the
+    primary root if it isn't found anywhere (e.g. for a not-yet-created dir)."""
+    for root in config.PROJECTS_DIRS:
+        p = root / name
+        if p.is_dir():
+            return p
+    return config.PROJECTS_DIRS[0] / name
 
 
 def exists(name: str) -> bool:
     p = app_path(name)
     return p.exists() and p.is_dir()
+
+
+def root_label(name: str) -> str:
+    """Display label of the root that contains `name` (first match wins)."""
+    for label, root in config.PROJECT_ROOTS:
+        if (root / name).is_dir():
+            return label
+    return config.PROJECT_ROOTS[0][0]
 
 
 # Simple in-memory detection cache (path mtime keyed).

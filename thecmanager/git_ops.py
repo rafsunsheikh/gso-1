@@ -67,3 +67,30 @@ def update(path: Path) -> dict:
         return {"ok": False, "output": "Not a git repository."}
     rc, out = _run(path, "pull", "--ff-only", timeout=120)
     return {"ok": rc == 0, "output": out or "(no output)"}
+
+
+def commit_all(path: Path, message: str) -> dict:
+    """Stage everything and commit. No-op (ok) when there's nothing to commit."""
+    path = Path(path)
+    if not is_repo(path):
+        return {"ok": False, "output": "Not a git repository."}
+    if not (message or "").strip():
+        return {"ok": False, "output": "Empty commit message."}
+    _run(path, "add", "-A")
+    rc, out = _run(path, "commit", "-m", message)
+    low = out.lower()
+    if rc != 0 and ("nothing to commit" in low or "no changes added" in low):
+        return {"ok": True, "output": "Nothing to commit.", "nochange": True}
+    return {"ok": rc == 0, "output": out or "(committed)"}
+
+
+def push(path: Path) -> dict:
+    """Push the current branch, setting upstream if needed."""
+    path = Path(path)
+    if not is_repo(path):
+        return {"ok": False, "output": "Not a git repository."}
+    rc, out = _run(path, "push", timeout=180)
+    if rc != 0 and "no upstream" in out.lower():
+        _, br = _run(path, "rev-parse", "--abbrev-ref", "HEAD")
+        rc, out = _run(path, "push", "-u", "origin", br, timeout=180)
+    return {"ok": rc == 0, "output": out or "(pushed)"}

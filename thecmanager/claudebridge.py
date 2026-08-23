@@ -109,16 +109,29 @@ def _build_env(sess: dict, chat_id) -> dict:
 # How to reach the bot for streamed output: fn(chat_id, text).
 _sender: Optional[Callable] = None
 
+# Per-chat web sinks: chat_id(str) -> {"sender": fn, "notifier": fn}. Lets the
+# web Chat tab receive a session's output/approvals while Telegram keeps using
+# the global callbacks. Routing is by chat_id.
+_web_handlers: dict[str, dict] = {}
+
 
 def set_sender(fn: Callable) -> None:
     global _sender
     _sender = fn
 
 
+def register_web(chat_id, sender: Callable, notifier: Callable) -> None:
+    _web_handlers[str(chat_id)] = {"sender": sender, "notifier": notifier}
+
+
 def _emit(chat_id, text: str) -> None:
-    if _sender and text:
+    if not text:
+        return
+    h = _web_handlers.get(str(chat_id))
+    fn = h["sender"] if h else _sender
+    if fn:
         try:
-            _sender(chat_id, text)
+            fn(chat_id, text)
         except Exception:
             pass
 
@@ -150,6 +163,29 @@ def attach(chat_id, project: str, mode: str = "continue",
             "started": False,  # whether the long-lived process has been launched
         }
     return True, project
+
+
+def attach_path(chat_id, cwd: str, llm: str = "local", mode: str = "continue") -> tuple[bool, str]:
+    """Attach a session to an explicit directory (for the web Chat tab), rather
+    than a named scanner project. Defaults to the local LLM."""
+    if not _claude_bin():
+        return False, "The `claude` CLI was not found on this machine."
+    cwd = str(Path(cwd).expanduser())
+    if not Path(cwd).is_dir():
+        return False, f"Directory not found: {cwd}"
+    detach(chat_id)
+    with _sess_lock:
+        _sessions[str(chat_id)] = {
+            "project": Path(cwd).name or cwd,
+            "cwd": cwd,
+            "session_id": None,
+            "busy": False,
+            "mode": mode if mode in ("continue", "new") else "continue",
+            "llm": llm if llm in ("cloud", "local") else "local",
+            "proc": None,
+            "started": False,
+        }
+    return True, cwd
 
 
 def detach(chat_id) -> bool:
@@ -366,9 +402,11 @@ def create_approval(chat_id, tool_name: str, tool_input: dict) -> str:
             "decision": None, "chat_id": chat_id,
             "tool_name": tool_name, "tool_input": tool_input,
         }
-    if _notifier:
+    h = _web_handlers.get(str(chat_id))
+    notifier = h["notifier"] if h else _notifier
+    if notifier:
         try:
-            _notifier(chat_id, aid, tool_name, tool_input)
+            notifier(chat_id, aid, tool_name, tool_input)
         except Exception:
             pass
     return aid
