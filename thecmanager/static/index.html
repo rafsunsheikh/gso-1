@@ -1948,7 +1948,8 @@
 
     function wireDrawer(d) {
       const name = d.name, enc = encodeURIComponent(name);
-      $("#close-drawer").onclick = closeDrawer;
+      // Close lives in the dock header now; guard in case it is absent.
+      const dc = $("#close-drawer"); if (dc) dc.onclick = closeDrawer;
       $("#d-refresh").onclick = () => openDrawer(name);
       const runBtn = $("#d-run");
       if (d.config.start_command) runBtn.onclick = async () => {
@@ -2007,7 +2008,7 @@
     // events
     $("#refresh").onclick = load;
     $("#search").oninput = render;
-    $("#drawer-bg").onclick = closeDrawer;
+    // (no #drawer-bg: the Details dock is a column, not an overlay)
     document.addEventListener("keydown", e => {
       if (e.key !== "Escape") return;
       const modal = $("#task-modal");
