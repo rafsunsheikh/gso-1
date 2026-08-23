@@ -52,38 +52,75 @@
     <div id="a11y-live" class="sr-only-live" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="conn-banner" class="conn-banner" data-state="up" role="alert" aria-live="assertive"></div>
     <div id="toasts" aria-live="polite" aria-atomic="false"></div>
-  <div class="max-w-7xl mx-auto p-5">
-    <!-- Header -->
-    <header class="flex items-center justify-between mb-5">
-      <div>
-        <h1 class="text-2xl font-bold text-white">
-          GSO-1
-        </h1>
-        <p class="text-sm text-slate-400" id="subtitle">Loading…</p>
+  <div class="gso-shell">
+    <!-- ============ Sidebar ============ -->
+    <aside class="gso-side" aria-label="Main navigation">
+      <div class="gso-side-full" style="display:contents">
+        <div class="gso-logo-row">
+          <img src="/static/favicon.svg" alt="" class="gso-logo" />
+          <span class="gso-wordmark">GSO-1</span>
+          <button id="side-collapse" class="gso-collapse" aria-label="Collapse sidebar"
+            title="Collapse sidebar">&lsaquo;</button>
+        </div>
+        <nav id="side-nav" aria-label="Views"></nav>
+        <div class="gso-side-foot">
+          <div class="gso-user">
+            <span class="gso-avatar" aria-hidden="true">RS</span>
+            <span>
+              <span class="gso-user-name" style="display:block">Rafsun</span>
+              <span class="gso-user-sub">Owner &middot; full access</span>
+            </span>
+          </div>
+        </div>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="gso-side-rail">
+        <button id="rail-expand" class="gso-rail-btn" aria-label="Expand sidebar" title="Expand sidebar"
+          style="width:28px;height:28px;padding:0">
+          <img src="/static/favicon.svg" alt="" style="width:22px;height:22px;border-radius:6px" />
+        </button>
+        <div id="rail-nav" style="display:flex;flex-direction:column;gap:7px;align-items:center"></div>
+        <span class="gso-avatar" aria-hidden="true" style="margin-top:auto">RS</span>
+      </div>
+    </aside>
+
+    <!-- ============ Content column ============ -->
+    <div class="gso-content">
+      <header class="gso-head">
+        <div class="gso-title-block">
+          <div class="gso-title" id="view-title">Library</div>
+          <div class="gso-subtitle" id="subtitle">Loading&hellip;</div>
+        </div>
+        <button id="cmdk" class="gso-cmdk" title="Jump to anything — Cmd+K"
+          aria-label="Jump to anything">
+          <span aria-hidden="true">&#9906;</span><kbd>&#8984;K</kbd>
+        </button>
+        <div class="gso-head-right">
+          <button id="theme-toggle" class="gso-theme-toggle" aria-label="Switch colour theme"
+            title="Switch between dark and light">DARK</button>
+          <button id="refresh" class="gso-icon-btn" aria-label="Rescan projects" title="Rescan">&#10227;</button>
+          <button id="dock-details" class="gso-dock-btn" aria-pressed="false"
+            aria-controls="drawer" title="Show repo details">Details</button>
+          <button id="ops-open" class="gso-dock-btn" aria-pressed="false" aria-controls="ops-panel"
+            title="Toggle Ops Room (Cmd+J)">
+            <span class="gso-dot" data-state="live" aria-hidden="true"></span>Ops Room</button>
+        </div>
+      </header>
+
+      <div class="gso-body">
+        <!-- Search + filter row -->
+        <div class="flex items-center gap-3 mb-4">
         <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
-        <button id="theme-toggle" class="gso-theme-toggle" aria-label="Switch colour theme"
-          title="Switch between dark and light">DARK</button>
-        <button id="ops-open" aria-label="Toggle Ops Room panel" aria-controls="ops-panel" class="bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded-lg px-3 py-2 text-sm font-medium">◉ Ops Room</button>
-        <button id="refresh" aria-label="Refresh app list" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-sm">↻ Refresh</button>
+          <div id="filters" role="group" aria-label="Filter by type"
+            class="flex flex-wrap gap-2 text-xs"></div>
+        </div>
+
+        <!-- App grid -->
+        <main id="grid" tabindex="-1" aria-label="Applications"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+          style="display:grid"></main>
       </div>
-    </header>
-
-    <!-- View tabs -->
-    <nav id="views" aria-label="Views" role="tablist"
-           class="flex items-center gap-2 mb-3 border-b border-slate-800 pb-2"></nav>
-
-    <!-- Filter pills -->
-    <div id="filters" role="group" aria-label="Filter by type"
-           class="flex flex-wrap gap-2 mb-4 text-xs"></div>
-
-    <!-- App grid -->
-    <main id="grid" tabindex="-1" aria-label="Applications"
-           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-           style="display:grid"></main>
-  </div>
+    </div>
 
   <!-- Task editor modal -->
   <div id="task-modal" class="fixed inset-0 z-[55] hidden" role="dialog" aria-modal="true" aria-label="Edit task">
@@ -269,7 +306,7 @@
     let PLANNER = {boards: []};     // kanban boards + tasks
     let activeBoardId = null;       // currently shown board
     let activeType = "all";
-    let activeView = "favourites";  // home shows favourites by default
+    let activeView = "library";  // home shows favourites by default
     let setupPoll = null;           // interval id for the running setup job
     let llmPoll = null;             // interval id for llm status/log polling
     let metricsPoll = null;         // interval id for system load polling
@@ -345,7 +382,7 @@
       ROOTS = data.roots || [];
       // If the remembered view points at a root that no longer exists, reset.
       if (activeView.startsWith("root:") && !ROOTS.includes(activeView.slice(5)))
-        activeView = "favourites";
+        activeView = "library";
       VSCODE = vsc.folders || [];
       LLM = llm || {};
       PLANNER = plan && plan.boards ? plan : {boards: []};
@@ -376,51 +413,101 @@
     }
     function firstRootView() { return ROOTS.length ? `root:${ROOTS[0]}` : "favourites"; }
 
-    function renderViews() {
-      const rootTabs = ROOTS.map(label => ({
-        id: `root:${label}`,
-        label: label,
+    /** Sidebar nav, per the handoff's four groups. */
+    function navGroups() {
+      const liveCount = ALL.filter(a => a.running).length;
+      const rootItems = ROOTS.map(label => ({
+        id: `root:${label}`, label,
         n: ALL.filter(a => a.root_label === label).length,
       }));
-      const tabs = [
-        { id: "favourites", label: `Favourites`, n: favCount() },
-        ...rootTabs,
-        { id: "vscode", label: `Opened in VSCode`, n: VSCODE.length },
-        { id: "llm", label: `Local LLM`, n: null },
-        { id: "chat", label: `Chat`, n: null },
-        { id: "site", label: `Site`, n: null },
-        { id: "planner", label: `Planner`, n: PLANNER.boards ? PLANNER.boards.length : null },
+      return [
+        { label: "Workspace", items: [
+          { id: "opsroom", label: "Ops Room", dot: "live", pulse: true, n: liveCount, action: "dock" },
+          { id: "library",  label: "Library",  dot: "brand", n: ALL.length },
+        ]},
+        { label: "Attention", items: [
+          // These three need per-repo git and health state in the list payload,
+          // which /api/apps does not yet return — wired up in a later phase.
+          { id: "uncommitted", label: "Uncommitted", dot: "warn", n: null, disabled: "Needs bulk git state" },
+          { id: "failed",      label: "Failed runs", dot: "err",  n: null, disabled: "Needs run-health state" },
+          { id: "vscode",      label: "In VSCode",   dot: "editor", n: VSCODE.length },
+        ]},
+        { label: "Collections", items: [
+          { id: "favourites", label: "Favourites", n: favCount() },
+          ...rootItems,
+          { id: "archived", label: "Archived", n: null, disabled: "No archive concept yet" },
+        ]},
+        { label: "Tools", items: [
+          { id: "planner", label: "Planner", n: PLANNER.boards ? PLANNER.boards.length : null },
+          { id: "llm",     label: "Local LLM", dot: LLM && LLM.healthy ? "live" : null, n: null },
+          { id: "chat",    label: "Chat", n: null },
+          { id: "site",    label: "Site", n: null },
+        ]},
       ];
-      $("#views").innerHTML = tabs.map(t => {
-        const active = t.id === activeView;
-        return `<button data-view="${t.id}" role="tab"
-          aria-selected="${active}" tabindex="${active ? 0 : -1}"
-          class="px-4 py-1.5 rounded-lg text-sm font-medium ${active
-            ? 'bg-indigo-600 text-white'
-            : 'text-slate-300 hover:bg-slate-800'}">
-          ${t.label}${t.n!==null?` <span class="opacity-60">${t.n}</span>`:''}</button>`;
-      }).join("");
-      const tabBtns = Array.from($("#views").querySelectorAll("button"));
-      tabBtns.forEach((b, i) => {
-        b.onclick = () => {
-          activeView = b.dataset.view;
-          activeType = "all";
-          renderViews(); renderFilters(); render();
-          announce(b.textContent.trim() + " view");
-        };
-        // WAI-ARIA tabs pattern: arrows move between tabs, Tab leaves the strip.
-        b.onkeydown = (e) => {
-          let next = null;
-          if (e.key === "ArrowRight") next = (i + 1) % tabBtns.length;
-          else if (e.key === "ArrowLeft") next = (i - 1 + tabBtns.length) % tabBtns.length;
-          else if (e.key === "Home") next = 0;
-          else if (e.key === "End") next = tabBtns.length - 1;
-          if (next === null) return;
-          e.preventDefault();
-          tabBtns[next].focus();
-          tabBtns[next].click();
-        };
-      });
+    }
+
+    const RAIL = [
+      { id: "opsroom", short: "OPS" }, { id: "library", short: "REPO" },
+      { id: "planner", short: "PLAN" }, { id: "llm", short: "LLM" }, { id: "site", short: "SITE" },
+    ];
+
+    function renderViews() {
+      const nav = $("#side-nav");
+      if (nav) {
+        nav.innerHTML = navGroups().map(g => `
+          <div class="gso-group" role="group" aria-label="${escapeHtml(g.label)}">
+            <div class="gso-group-label">${escapeHtml(g.label)}</div>
+            ${g.items.map(it => {
+              const active = it.id === activeView;
+              const dot = it.dot
+                ? `<span class="gso-dot${it.pulse ? " gso-pulse" : ""}" data-state="${it.dot}" aria-hidden="true"></span>`
+                : "";
+              const count = it.n !== null && it.n !== undefined
+                ? `<span class="gso-nav-count">${it.n}</span>` : "";
+              return `<button class="gso-nav" data-view="${it.id}"
+                ${active ? 'aria-current="page"' : ""}
+                ${it.disabled ? `disabled title="${escapeHtml(it.disabled)}"` : ""}>
+                ${dot}<span class="gso-nav-label">${escapeHtml(it.label)}</span>${count}</button>`;
+            }).join("")}
+          </div>`).join("");
+
+        nav.querySelectorAll("button[data-view]").forEach(b => {
+          b.onclick = () => selectView(b.dataset.view);
+        });
+      }
+
+      const rail = $("#rail-nav");
+      if (rail) {
+        rail.innerHTML = RAIL.map(r => `<button class="gso-rail-btn" data-view="${r.id}"
+          ${r.id === activeView ? 'aria-current="page"' : ""}
+          title="${escapeHtml(r.short)}" aria-label="${escapeHtml(r.short)}">${r.short}</button>`).join("");
+        rail.querySelectorAll("button").forEach(b => b.onclick = () => selectView(b.dataset.view));
+      }
+
+      const t = $("#view-title");
+      if (t) t.textContent = viewTitle();
+    }
+
+    function viewTitle() {
+      const map = { opsroom: "Ops Room", library: "Library", vscode: "In VSCode",
+                    favourites: "Favourites", planner: "Planner", llm: "Local LLM",
+                    chat: "Chat", site: "Site" };
+      if (activeView.startsWith("root:")) return activeView.slice(5);
+      return map[activeView] || "Library";
+    }
+
+    function selectView(id) {
+      // Ops Room is a dock, not a page — until its own view lands.
+      if (id === "opsroom") {
+        const b = $("#ops-open");
+        if (b) b.click();
+        return;
+      }
+      activeView = id;
+      activeType = "all";
+      try { localStorage.setItem("gsoView", id); } catch (e) {}
+      renderViews(); renderFilters(); render();
+      announce(viewTitle() + " view");
     }
 
     function renderFilters() {
@@ -1831,6 +1918,45 @@
         var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
         apply(next);
         if (typeof announce === "function") announce("Theme set to " + next);
+      });
+    })();
+  </script>
+<script>
+    // ---- sidebar rail ----------------------------------------------------
+    (function () {
+      var root = document.documentElement;
+      function setRail(on) {
+        root.setAttribute("data-rail", on ? "1" : "0");
+        try { localStorage.setItem("gsoRail", on ? "1" : "0"); } catch (e) {}
+        var c = document.getElementById("side-collapse");
+        if (c) c.setAttribute("aria-expanded", on ? "false" : "true");
+      }
+      try { setRail(localStorage.getItem("gsoRail") === "1"); } catch (e) { setRail(false); }
+      var c = document.getElementById("side-collapse");
+      var x = document.getElementById("rail-expand");
+      if (c) c.addEventListener("click", function () { setRail(true); });
+      if (x) x.addEventListener("click", function () { setRail(false); });
+      // Cmd+K is only a trigger for now; the palette itself is not designed.
+      var k = document.getElementById("cmdk");
+      function focusSearch() {
+        var s = document.getElementById("search");
+        if (s) { s.focus(); s.select(); }
+      }
+      if (k) k.addEventListener("click", focusSearch);
+      document.addEventListener("keydown", function (e) {
+        if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "k") {
+          e.preventDefault(); focusSearch();
+        }
+      });
+      // Details dock toggle mirrors the drawer's state.
+      var d = document.getElementById("dock-details");
+      if (d) d.addEventListener("click", function () {
+        var dr = document.getElementById("drawer");
+        if (!dr) return;
+        if (dr.classList.contains("hidden")) {
+          if (typeof lastDrawerApp !== "undefined" && lastDrawerApp) openDrawer(lastDrawerApp);
+          else if (typeof toast === "function") toast("Select an app to see its details", "info");
+        } else { closeDrawer(); }
       });
     })();
   </script>
