@@ -100,21 +100,30 @@
   .conn-banner[data-state="down"]       { transform: translateY(0); }
   .conn-banner[data-state="recovered"]  { transform: translateY(0); background: #14532d; color: #bbf7d0; }
 
-  /* Toasts for action failures: start/stop/update errors were invisible. */
+  /* One toast, bottom-centre — see the redesign's "Toasts" section. */
   #toasts {
-    position: fixed; right: 1rem; bottom: 1rem; z-index: 90;
-    display: flex; flex-direction: column; gap: 0.5rem; max-width: 26rem;
+    position: fixed; left: 50%; bottom: 18px; z-index: 90;
+    transform: translateX(-50%); max-width: min(30rem, calc(100vw - 2rem));
   }
   .toast {
-    display: flex; align-items: flex-start; gap: 0.6rem;
-    padding: 0.7rem 0.9rem; border-radius: 0.6rem;
-    font-size: 0.8125rem; line-height: 1.35;
-    background: #211d3d; border: 1px solid #4a4668; color: #e7e6f0;
-    box-shadow: 0 8px 26px rgba(0,0,0,.45);
-    animation: gso-toast-in .16s ease-out;
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 15px; border-radius: 999px;
+    font: 500 12.5px/1.35 "Readex Pro", system-ui, sans-serif;
+    background: var(--card); border: 1px solid var(--line); color: var(--text);
+    box-shadow: var(--shadow);
+    animation: gso-toast-in .18s ease-out;
   }
-  .toast[data-kind="error"]   { border-color: #b91c1c; background: #2a1520; }
-  .toast[data-kind="success"] { border-color: #15803d; background: #12241a; }
-  @keyframes gso-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  .toast-dot {
+    width: 7px; height: 7px; border-radius: 999px; flex: none; background: var(--live);
+  }
+  .toast[data-kind="error"] .toast-dot   { background: var(--err-text); }
+  .toast[data-kind="error"]  { border-color: var(--err-line); }
+  .toast-msg { flex: 1; min-width: 0; }
+  .toast-undo {
+    flex: none; background: none; border: 0; cursor: pointer;
+    font: 500 12px "Readex Pro", system-ui, sans-serif; color: var(--text-3);
+  }
+  .toast-undo:hover { color: var(--text); }
+  @keyframes gso-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 }

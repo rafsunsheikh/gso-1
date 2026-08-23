@@ -110,7 +110,7 @@
         <!-- Search + filter row -->
         <div id="search-row" class="flex items-center gap-3 mb-4">
         <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
-          class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
+          class="gso-search" />
           <div id="filters" role="group" aria-label="Filter by type"
             class="flex flex-wrap gap-2 text-xs"></div>
         </div>
@@ -128,43 +128,44 @@
         <div class="gso-dock-title">Details</div>
         <div class="gso-dock-sub" id="drawer-sub">No app selected</div>
       </div>
-      <button id="drawer-close" class="gso-icon-btn" aria-label="Close details" title="Close">&times;</button>
+      <button id="drawer-close" class="gso-icon-btn" aria-label="Close details" title="Close">&rsaquo;</button>
     </div>
     <div id="drawer-content" class="gso-dock-body"></div>
   </aside>
 
     <aside id="ops-panel" aria-label="Ops Room" role="complementary" class="gso-dock" data-open="0">
   <div class="gso-dock-head">
+    <span class="gso-dot gso-pulse" data-state="live" aria-hidden="true"></span>
     <div style="flex:1;min-width:0">
       <div class="gso-dock-title">Ops Room</div>
-      <div id="ops-status" class="gso-dock-sub">checking&hellip;</div>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="ops-cancel" class="hidden text-[11px] bg-rose-700 hover:bg-rose-600 rounded px-2 py-1">Stop</button>
-      <button id="ops-clear" class="text-[11px] bg-slate-800 hover:bg-slate-700 rounded px-2 py-1">Clear</button>
-    </div>
+    <span id="ops-status" class="gso-dock-meta">checking&hellip;</span>
+    <button id="ops-cancel" class="gso-icon-btn hidden" title="Stop the running task" aria-label="Stop">&#9632;</button>
+    <button id="ops-clear" class="gso-icon-btn" title="Clear the transcript" aria-label="Clear">&#8635;</button>
+    <button id="ops-close" class="gso-icon-btn" title="Close" aria-label="Close Ops Room">&rsaquo;</button>
   </div>
-  <div id="ops-log" class="gso-dock-body space-y-2 text-[13px] leading-relaxed">
-    <div class="text-slate-500 text-xs">
+
+  <div id="ops-log" class="gso-dock-body ops-chat">
+    <div class="ops-hint">
       Ask about your projects &mdash; git state, apps, logs &mdash; or have it change its own code.
       Runs on the local model; a reply takes ~30s.
     </div>
   </div>
-  <div class="gso-dock-foot">
-    <textarea id="ops-input" rows="3" placeholder="Ask Ops Room&hellip;   (Cmd+Enter to send)"
-      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm resize-none
-             focus:outline-none focus:border-indigo-500"></textarea>
-    <div class="flex justify-between items-center mt-2">
-      <span id="ops-hint" class="text-[11px] text-slate-600"></span>
-      <button id="ops-send" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-1.5 text-sm">Send</button>
-    </div>
+
+  <div id="dock-machine" class="ops-machine" aria-label="Machine load"></div>
+
+  <div class="gso-dock-foot ops-foot">
+    <textarea id="ops-input" rows="1" placeholder="Ask Ops Room&hellip;" class="ops-input"></textarea>
+    <button id="ops-send" class="ops-send" title="Send  (Cmd+Enter)" aria-label="Send">&uarr;</button>
   </div>
+  <div id="ops-hint" class="ops-foot-hint"></div>
 </aside>
 
   <!-- Task editor modal -->
   <div id="task-modal" class="fixed inset-0 z-[55] hidden" role="dialog" aria-modal="true" aria-label="Edit task">
     <div id="task-modal-bg" class="absolute inset-0 bg-black/60"></div>
-    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6">
+    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-6"
+         style="background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)">
       <div id="task-modal-content"></div>
     </div>
   </div>
@@ -296,21 +297,40 @@
     }
 
     // ---- toasts -----------------------------------------------------------
-    function toast(message, kind) {
+    // One toast at a time, bottom-centre. A second message replaces the first
+    // rather than stacking, so a burst of actions cannot bury the screen.
+    let _toastTimer = null;
+    function toast(message, kind, undo) {
       const host = document.getElementById("toasts");
       if (!host) return;
+      clearTimeout(_toastTimer);
+      host.innerHTML = "";
+
       const el = document.createElement("div");
       el.className = "toast";
       el.dataset.kind = kind || "info";
       el.setAttribute("role", kind === "error" ? "alert" : "status");
-      el.innerHTML = `<span aria-hidden="true">${kind === "error" ? "⚠" : kind === "success" ? "✓" : "ℹ"}</span>
-        <span class="flex-1"></span>
-        <button aria-label="Dismiss" class="text-slate-400 hover:text-slate-200">✕</button>`;
-      el.querySelector(".flex-1").textContent = message;
-      el.querySelector("button").onclick = () => el.remove();
+      el.innerHTML = `<span class="toast-dot" aria-hidden="true"></span><span class="toast-msg"></span>`;
+      el.querySelector(".toast-msg").textContent = message;
+
+      if (typeof undo === "function") {
+        const b = document.createElement("button");
+        b.className = "toast-undo";
+        b.textContent = "Undo";
+        b.onclick = () => { clearTimeout(_toastTimer); el.remove(); undo(); };
+        el.appendChild(b);
+      } else {
+        const b = document.createElement("button");
+        b.className = "toast-undo";
+        b.textContent = "Dismiss";
+        b.setAttribute("aria-label", "Dismiss");
+        b.onclick = () => { clearTimeout(_toastTimer); el.remove(); };
+        el.appendChild(b);
+      }
+
       host.appendChild(el);
-      if (kind !== "error") setTimeout(() => el.remove(), 5000);
-      else setTimeout(() => el.remove(), 12000);
+      // Errors stay up long enough to read a stack-trace-ish message.
+      _toastTimer = setTimeout(() => el.remove(), kind === "error" ? 9000 : 3200);
       announce(message);
     }
 
@@ -324,6 +344,11 @@
     }
     let ALL = [];
     let ROOTS = [];                 // project root labels (one tab each)
+    let USAGE = null;               // last-hour proxy traffic for the LLM view
+    let usageLoaded = false;
+    let SYS = null;                 // latest sysmon snapshot (CPU/RAM)
+    let libPage = 0;                // Library table pagination (40/page)
+    const libSel = new Set();       // names ticked for bulk actions
     let CHAT = null;                // chat state (Claude Code on local LLM)
     let chatBusy = false;           // (legacy) immediate-send flag
     let chatPolling = false;        // polling while a turn streams
@@ -365,12 +390,17 @@
     function renderSkeleton(n) {
       const grid = $("#grid");
       if (!grid || grid.children.length) return;   // never clobber real content
-      grid.innerHTML = Array.from({ length: n || 6 }, () => `
-        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-4" aria-hidden="true">
-          <div class="skeleton h-4 w-2/3 mb-3"></div>
-          <div class="skeleton h-3 w-1/3 mb-4"></div>
-          <div class="skeleton h-8 w-full"></div>
-        </div>`).join("");
+      grid.className = ""; grid.style.display = "block";
+      grid.innerHTML = `<div class="lib-table" aria-hidden="true">` +
+        Array.from({ length: n || 8 }, (_, i) => `
+        <div class="lib-row">
+          <span></span>
+          <span><span class="lib-skel-bar" data-lead="${i === 0 ? "1" : "0"}" style="width:${40 + (i % 4) * 12}%"></span></span>
+          <span class="lib-skel-bar" style="width:60%"></span>
+          <span class="lib-skel-bar" style="width:70%"></span>
+          <span class="lib-skel-bar" style="width:80%"></span>
+          <span class="lib-skel-bar" style="width:64px;justify-self:end"></span>
+        </div>`).join("") + `</div>`;
       grid.setAttribute("aria-busy", "true");
     }
 
@@ -390,12 +420,12 @@
         if (_loadedOnce) {
           toast(`Could not refresh: ${e.message || e}`, "error");
         } else if (grid) {
+          grid.className = ""; grid.style.display = "block";
           grid.innerHTML = `
-            <div class="col-span-full bg-slate-800/60 border border-red-800 rounded-xl p-6 text-center">
-              <p class="text-red-300 font-medium mb-1">Could not load your apps</p>
-              <p class="text-slate-400 text-sm mb-4">${escapeHtml(String(e.message || e))}</p>
-              <button id="retry-load"
-                class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm">Retry</button>
+            <div class="dk-card" data-tone="err" style="text-align:center;padding:28px">
+              <div class="dk-fail-t" style="font-size:13.5px">Could not load your apps</div>
+              <div style="font-size:12px;color:var(--text-3);margin:6px 0 14px">${escapeHtml(String(e.message || e))}</div>
+              <button id="retry-load" class="lib-act">Retry</button>
             </div>`;
           const rb = $("#retry-load");
           if (rb) rb.onclick = () => load();
@@ -656,7 +686,8 @@
           { id: "archived", label: "Archived", n: null, disabled: "No archive concept yet" },
         ]},
         { label: "Tools", items: [
-          { id: "planner", label: "Planner", n: PLANNER.boards ? PLANNER.boards.length : null },
+          { id: "planner", label: "Planner",
+            n: PLANNER.boards ? PLANNER.boards.reduce((t, b) => t + b.tasks.length, 0) : null },
           { id: "llm",     label: "Local LLM", dot: LLM && LLM.healthy ? "live" : null, n: null },
           { id: "chat",    label: "Chat", n: null },
           { id: "site",    label: "Site", n: null },
@@ -753,9 +784,7 @@
     }
 
     function render() {
-      const isGrid = (activeView === "favourites" || activeView.startsWith("root:"));
-      $("#filters").style.display = isGrid ? "flex" : "none";
-      if (metricsPoll && activeView !== "llm") { clearInterval(metricsPoll); metricsPoll = null; }
+      $("#filters").style.display = "none";  // the table has its own chip row
       if (activeView === "opsroom") return renderOpsRoom();
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
@@ -766,112 +795,178 @@
       const gridEl = $("#grid");
       gridEl.className = "";
       gridEl.style.display = "block";
+
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
         (activeType === "all" || a.type === activeType) &&
         a.name.toLowerCase().includes(q));
-      // Say why nothing matched, and offer the way out — a bare "No matching
-      // apps." leaves the user to work out which of search/filter is hiding them.
-      const reasons = [];
-      if (q) reasons.push(`search &ldquo;${escapeHtml($("#search").value)}&rdquo;`);
-      if (activeType !== "all") reasons.push(`type <strong>${escapeHtml(activeType)}</strong>`);
-      let empty = `<div class="col-span-full text-center py-16 text-slate-500">
-          <p class="text-lg mb-1">No apps match</p>
-          <p class="text-sm mb-4">${reasons.length
-            ? `Filtered by ${reasons.join(" and ")}.`
-            : "This view has nothing in it yet."}</p>
-          ${reasons.length
-            ? `<button id="clear-filters"
-                 class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-2 text-sm">
-                 Clear filters</button>`
-            : ""}
-        </div>`;
-      if (activeView === "favourites" && favCount() === 0) {
-        empty = `<div class="col-span-full text-center py-16 text-slate-500">
-          <p class="text-lg mb-1">No favourites yet</p>
-          <p class="text-sm">Click the ☆ on any app card, or switch to
-          <button id="goto-all" class="text-indigo-400 hover:underline">your projects</button> to browse.</p>
-        </div>`;
+
+      // The table's git column and the chip counts both come from the overview.
+      // Kick one load (never more than one — _ovLoading guards) and redraw when
+      // it lands; until then rows show a skeleton in the git cell.
+      if (!OVERVIEW && !_ovLoading && !_ovError) {
+        loadOverview().then(() => { renderViews(); render(); });
       }
+
       const c = (OVERVIEW && OVERVIEW.counts) || {};
-      // Status strip: state before catalogue — these double as filters.
-      const strip = `<div class="lib-strip">
-        <button class="lib-stat" data-goto="opsroom">
-          <span class="lib-stat-h"><span class="gso-dot gso-pulse" data-state="live" aria-hidden="true"></span>Running now</span>
-          <span class="lib-stat-v"><span class="lib-stat-n">${c.live ?? "–"}</span><span class="lib-stat-s">processes</span></span>
-        </button>
-        <button class="lib-stat" data-goto="uncommitted" ${activeView === "uncommitted" ? 'aria-current="page"' : ""}>
-          <span class="lib-stat-h"><span class="gso-dot" data-state="warn" aria-hidden="true"></span>Uncommitted work</span>
-          <span class="lib-stat-v"><span class="lib-stat-n">${c.dirty ?? "–"}</span><span class="lib-stat-s">repos dirty</span></span>
-        </button>
-        <button class="lib-stat" data-goto="vscode" ${activeView === "vscode" ? 'aria-current="page"' : ""}>
-          <span class="lib-stat-h"><span class="gso-dot" data-state="editor" aria-hidden="true"></span>Open in VSCode</span>
-          <span class="lib-stat-v"><span class="lib-stat-n">${VSCODE.length}</span><span class="lib-stat-s">windows</span></span>
-        </button>
-        <button class="lib-stat" data-goto="failed" ${activeView === "failed" ? 'aria-current="page"' : ""}>
-          <span class="lib-stat-h"><span class="gso-dot" data-state="err" aria-hidden="true"></span>Failed runs</span>
-          <span class="lib-stat-v"><span class="lib-stat-n">${c.failed ?? "–"}</span><span class="lib-stat-s">need a look</span></span>
-        </button>
+      const PAGE = 40;
+      if (libPage * PAGE >= apps.length) libPage = 0;
+      const pageApps = apps.slice(libPage * PAGE, libPage * PAGE + PAGE);
+      const pages = Math.max(1, Math.ceil(apps.length / PAGE));
+
+      const chips = [
+        { id: "library",     label: "All",         n: ALL.length },
+        { id: "uncommitted", label: "Uncommitted", n: c.dirty },
+        { id: "failed",      label: "Failed runs", n: c.failed },
+        { id: "vscode",      label: "In VSCode",   n: VSCODE.length },
+        { id: "favourites",  label: "Favourites",  n: favCount() },
+      ];
+      const chipRow = `<div class="lib-chiprow">
+        ${chips.map(ch => `<button class="lib-chip" data-goto="${ch.id}"
+          aria-pressed="${activeView === ch.id ? "true" : "false"}">
+          ${escapeHtml(ch.label)}${ch.n !== undefined && ch.n !== null ? ` ${ch.n}` : ""}</button>`).join("")}
+        <span class="lib-sort">Sort: name</span>
       </div>`;
-      $("#grid").innerHTML = strip +
-        (apps.length ? `<div class="lib-grid">${apps.map(card).join("")}</div>` : empty);
-      $("#grid").querySelectorAll("[data-goto]").forEach(b =>
-        b.onclick = () => selectView(b.dataset.goto));
-      const clearBtn = $("#clear-filters");
-      if (clearBtn) clearBtn.onclick = () => {
-        $("#search").value = "";
-        activeType = "all";
-        renderFilters(); render();
-        announce("Filters cleared");
+
+      const bulk = `<div class="lib-bulk" id="lib-bulk" data-on="${libSel.size ? "1" : "0"}">
+        <span class="lib-bulk-n">${libSel.size} selected</span>
+        <span class="lib-bulk-div"></span>
+        <button data-bulk="pull">Pull all</button>
+        <button data-bulk="vscode">Open in VSCode</button>
+        <button data-bulk="fav">Add to favourites</button>
+        <button data-bulk="clear" class="lib-bulk-clear">Clear</button>
+      </div>`;
+
+      const header = `<div class="lib-row lib-head">
+        <button class="lib-check" id="lib-all" role="checkbox"
+          aria-checked="${libSel.size && libSel.size === pageApps.length ? "true" : "false"}"
+          aria-label="Select all on this page"></button>
+        <span>Repo</span><span>Kind</span><span>State</span><span>Git</span>
+        <span style="justify-self:end">Action</span>
+      </div>`;
+
+      const rowFor = (a) => {
+        const g = gitFor(a.name);
+        const kind = (a.type || "").toLowerCase();
+        const sel = libSel.has(a.name);
+        const state = a.running ? "running" : (a.vscode_open ? "in editor" : "idle");
+        const stateDot = a.running ? "live" : (a.vscode_open ? "editor" : "");
+        const act = a.is_self
+          ? `<button class="lib-act" data-tone="neutral" disabled>This app</button>`
+          : a.has_start_command
+            ? `<button class="lib-act" data-tone="${a.running ? "stop" : "start"}" data-run="${escapeHtml(a.name)}">${a.running ? "Stop" : "Start"}</button>`
+            : `<button class="lib-act" data-tone="neutral" data-cfg="${escapeHtml(a.name)}">Configure</button>`;
+        return `<div class="lib-row lib-body-row" data-row="${escapeHtml(a.name)}"
+            data-selected="${sel ? "1" : "0"}" tabindex="0" role="button"
+            aria-label="${escapeHtml(a.name)} details">
+          <button class="lib-check" role="checkbox" aria-checked="${sel}" data-sel="${escapeHtml(a.name)}"
+            aria-label="Select ${escapeHtml(a.name)}"></button>
+          <span class="lib-cell-name"><b>${escapeHtml(a.name)}</b><span>${escapeHtml(a.root_label || "")}</span></span>
+          ${kind && kind !== "unknown"
+            ? `<span class="lib-kind" data-k="${escapeHtml(kind)}">${escapeHtml(kind)}</span>`
+            : `<span class="lib-muted">—</span>`}
+          <span class="lib-state">${stateDot ? `<span class="gso-dot${a.running ? " gso-pulse" : ""}" data-state="${stateDot}" aria-hidden="true"></span>` : ""}${state}${a.port ? ` :${a.port}` : ""}</span>
+          <span class="lib-git" data-dirty="${g && g.dirty ? "1" : "0"}">${
+            !OVERVIEW ? `<span class="lib-skel-bar" style="width:70%"></span>`
+              : g ? `${g.dirty ? `${g.changed} changed` : "clean"} · ${escapeHtml(g.branch || "detached")}`
+              : `<span class="lib-muted">not a repo</span>`}</span>
+          ${act}
+        </div>`;
       };
-      const gotoAll = $("#goto-all");
-      if (gotoAll) gotoAll.onclick = () => {
-        activeView = firstRootView(); renderViews(); renderFilters(); render();
-      };
-      apps.forEach(a => {
-        const cardEl = $(`#card-${cssId(a.name)}`);
-        cardEl.onclick = (e) => {
-          if (e.target.closest("button")) return;
-          openDrawer(a.name);
-        };
-        // role="button" carries an expectation of Enter/Space; a div does not
-        // provide it, so wire it explicitly.
-        cardEl.onkeydown = (e) => {
-          if (e.target.closest("button")) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            openDrawer(a.name);
-          }
-        };
-        const sb = cardEl.querySelector("[data-run]");
-        if (sb) sb.onclick = (e) => {
-          e.stopPropagation();
-          announce(`${a.running ? "Stopping" : "Starting"} ${a.name}`);
-          toggleRun(a.name, a.running);
-        };
-        const cfgb = cardEl.querySelector("[data-cfg]");
-        if (cfgb) cfgb.onclick = (e) => { e.stopPropagation(); openDrawer(a.name); };
-        const fb = $(`#fav-${cssId(a.name)}`);
-        if (fb) fb.onclick = () => toggleFav(a.name);
-        const vb = $(`#vsc-${cssId(a.name)}`);
-        if (vb) vb.onclick = () => openVscode(a.name);
+
+      const skeleton = !OVERVIEW ? `<div class="lib-row">
+          <span></span>
+          <span><span class="lib-skel-bar" data-lead="1" style="width:60%"></span></span>
+          <span class="lib-skel-bar" style="width:70%"></span>
+          <span class="lib-skel-bar" style="width:80%"></span>
+          <span class="lib-skel-bar" style="width:90%"></span><span></span>
+        </div>` : "";
+
+      const body = pageApps.length
+        ? `<div class="lib-table">${header}${pageApps.map(rowFor).join("")}${skeleton}</div>`
+        : `<div style="text-align:center;padding:40px">
+             <div style="font:600 14px 'Readex Pro',sans-serif;color:var(--text)">Nothing in ${escapeHtml(viewTitle())}</div>
+             <div style="font-size:12px;color:var(--text-3);margin:6px 0 14px">No repos match this collection yet. Clear the filter to see all ${ALL.length}.</div>
+             <button class="lib-act" data-goto="library">Show all repos</button>
+           </div>`;
+
+      const foot = `<div class="lib-foot">
+        <span>Showing ${pageApps.length} of ${apps.length}${q ? ` · filtered by “${escapeHtml($("#search").value)}”` : ""} · scanning ${escapeHtml((ROOTS[0] || "~/Projects"))}</span>
+        <span class="lib-page">${Array.from({ length: Math.min(pages, 6) }, (_, i) =>
+          `<button data-page="${i}" ${i === libPage ? 'aria-current="page"' : ""}>${i + 1}</button>`).join("")}
+          ${pages > 6 ? `<button data-page="${pages - 1}">…${pages}</button>` : ""}</span>
+      </div>`;
+
+      $("#subtitle").textContent =
+        `${apps.length} shown · ${viewTitle()}${activeType !== "all" ? ` · ${activeType}` : ""}`;
+      gridEl.innerHTML = chipRow + bulk + body + foot;
+
+      // ---- wiring
+      gridEl.querySelectorAll("[data-goto]").forEach(b =>
+        b.onclick = () => { libPage = 0; libSel.clear(); selectView(b.dataset.goto); });
+      gridEl.querySelectorAll("[data-page]").forEach(b =>
+        b.onclick = () => { libPage = Number(b.dataset.page); render(); });
+      gridEl.querySelectorAll("[data-sel]").forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        const n = b.dataset.sel;
+        libSel.has(n) ? libSel.delete(n) : libSel.add(n);
+        render();
       });
+      const all = $("#lib-all");
+      if (all) all.onclick = () => {
+        const every = pageApps.every(a => libSel.has(a.name));
+        pageApps.forEach(a => every ? libSel.delete(a.name) : libSel.add(a.name));
+        render();
+      };
+      gridEl.querySelectorAll("[data-bulk]").forEach(b => b.onclick = async () => {
+        const names = [...libSel];
+        if (b.dataset.bulk === "clear") { libSel.clear(); return render(); }
+        if (!names.length) return;
+        if (b.dataset.bulk === "fav") {
+          for (const n of names) await toggleFav(n);
+          toast(`Added ${names.length} to favourites`, "success");
+        } else if (b.dataset.bulk === "vscode") {
+          for (const n of names) await openVscode(n);
+          toast(`Opening ${names.length} in VSCode`, "success");
+        } else if (b.dataset.bulk === "pull") {
+          toast(`Pulling ${names.length} repos`, "info");
+          for (const n of names) await guard("Pull " + n, () =>
+            api(`/api/apps/${encodeURIComponent(n)}/update`, { method: "POST" }));
+          await loadOverview(true);
+        }
+        libSel.clear(); render();
+      });
+      gridEl.querySelectorAll("[data-row]").forEach(r => {
+        r.onclick = (e) => { if (!e.target.closest("button")) openDrawer(r.dataset.row); };
+        r.onkeydown = (e) => {
+          if (e.target.closest("button")) return;
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDrawer(r.dataset.row); }
+        };
+      });
+      gridEl.querySelectorAll("[data-run]").forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        const a = ALL.find(x => x.name === b.dataset.run);
+        toggleRun(b.dataset.run, a && a.running);
+      });
+      gridEl.querySelectorAll("[data-cfg]").forEach(b =>
+        b.onclick = (e) => { e.stopPropagation(); openDrawer(b.dataset.cfg); });
+      syncChrome();
     }
 
-    // ---- Chat: Claude Code on the local LLM, streamed into this UI ----
     function chatBubble(m) {
       if (m.role === "user")
-        return `<div class="flex justify-end"><div class="bg-indigo-600 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap">${escapeHtml(m.text)}</div></div>`;
+        return `<div class="ops-bubble" data-who="user">${escapeHtml(m.text)}</div>`;
       if (m.role === "assistant")
-        return `<div class="flex justify-start"><div class="bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-sm px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap">${escapeHtml(m.text)}</div></div>`;
+        return `<div class="ops-bubble" data-who="agent">${escapeHtml(m.text)}</div>`;
       if (m.role === "action")
-        return `<div class="text-xs text-slate-500 mono pl-1">🔧 ${escapeHtml(m.text)}</div>`;
+        return `<div class="ops-tool">▸ ${escapeHtml(m.text)}</div>`;
       if (m.role === "meta")
-        return `<div class="text-[11px] text-slate-600 pl-1">${escapeHtml(m.text)}</div>`;
+        return `<div class="ops-tool" style="opacity:.7">${escapeHtml(m.text)}</div>`;
       if (m.role === "error")
-        return `<div class="text-red-400 text-sm pl-1">${escapeHtml(m.text)}</div>`;
+        return `<div class="ops-err">${escapeHtml(m.text)}</div>`;
       if (m.role === "result")
-        return `<details class="text-xs text-slate-500 pl-1"><summary class="cursor-pointer">tool output</summary><pre class="mono whitespace-pre-wrap bg-black/40 rounded p-2 mt-1 text-slate-400 max-h-48 overflow-auto">${escapeHtml(m.text)}</pre></details>`;
+        return `<details class="chat-details"><summary style="cursor:pointer">tool output</summary>
+          <pre>${escapeHtml(m.text)}</pre></details>`;
       return "";
     }
 
@@ -895,36 +990,42 @@
       const busy = !!CHAT.busy;
       const items = CHAT.messages || [];
       const bubbles = items.map(chatBubble).join("") ||
-        `<p class="text-slate-500 text-sm">Powered by Claude Code on your local LLM, working in <span class="mono">${escapeHtml(CHAT.dir||'~')}</span>.
-         Ask anything about your computer — e.g. "what's using my disk?", "summarise this folder", "create a scratch script". Read-only tools run automatically; commands ask first.</p>`;
-      const banner = llmDown ? `<div class="border border-slate-700 bg-slate-800/60 rounded-xl p-3 mb-3 text-sm text-slate-300">
-          The local LLM isn't running. <button id="chat-goto-llm" class="text-indigo-400 hover:underline">Start it in Local LLM</button> to chat.</div>` : "";
-      const errBox = CHAT.error ? `<div class="text-red-400 text-sm my-2">${escapeHtml(CHAT.error)}</div>` : "";
+        `<div class="ops-hint">Claude Code running on your local model, working in
+          <span class="mono">${escapeHtml(CHAT.dir || "~")}</span>.
+          Ask anything about this computer — "what's using my disk?", "summarise this folder".
+          Read-only tools run automatically; commands ask first.</div>`;
+      const banner = llmDown ? `<div class="chat-banner">
+          <span class="gso-dot" data-state="" aria-hidden="true"></span>
+          <span style="flex:1">The local LLM isn't running.</span>
+          <button id="chat-goto-llm" class="lib-act" data-tone="neutral">Open Local LLM</button></div>` : "";
+      const errBox = CHAT.error ? `<div class="ops-err">${escapeHtml(CHAT.error)}</div>` : "";
       let approval = "";
       if (CHAT.action) {
-        approval = `<div class="border border-amber-700 bg-amber-900/30 rounded-xl p-3 my-2">
-          <div class="text-xs text-amber-300 mb-1">Allow Claude to run <span class="font-semibold">${escapeHtml(CHAT.action.tool||'this tool')}</span>?</div>
-          <pre class="mono text-xs text-slate-200 whitespace-pre-wrap mb-2">${escapeHtml(CHAT.action.command)}</pre>
-          <div class="flex gap-2">
-            <button id="chat-allow" class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm">Allow</button>
-            <button id="chat-deny" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm">Deny</button>
+        approval = `<div class="chat-approve">
+          <div class="chat-approve-t">Allow Claude to run ${escapeHtml(CHAT.action.tool || "this tool")}?</div>
+          <div class="chat-cmd">${escapeHtml(CHAT.action.command)}</div>
+          <div style="display:flex;gap:8px">
+            <button id="chat-allow" class="lib-act" data-tone="publish">Allow</button>
+            <button id="chat-deny" class="lib-act" data-tone="neutral">Deny</button>
           </div></div>`;
       }
       const disabled = busy || llmDown;
-      $("#grid").innerHTML = `
-        <div class="col-span-full max-w-3xl mx-auto w-full">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-white">Chat <span class="text-xs text-slate-500">Claude Code · local LLM</span></h2>
-            <button id="chat-clear" class="text-xs text-slate-400 hover:text-white">Clear</button>
-          </div>
+      const gridEl = $("#grid");
+      gridEl.className = ""; gridEl.style.display = "block";
+      $("#view-title").textContent = "Chat";
+      $("#subtitle").textContent = `Claude Code on the local model · working in ${CHAT.dir || "~"}`;
+
+      gridEl.innerHTML = `
+        <div class="chat-col">
           ${banner}
-          <div id="chat-log" class="space-y-3 mb-3">${bubbles}${errBox}${approval}
-            ${busy && !CHAT.action ? `<div class="text-xs text-slate-500 pl-1">working…</div>` : ""}</div>
-          <div class="flex items-end gap-2">
-            <textarea id="chat-input" rows="2" ${disabled?'disabled':''} placeholder="Ask Claude about your computer…"
-              class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:border-indigo-500"></textarea>
-            <button id="chat-send" ${disabled?'disabled':''}
-              class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium">${busy?'…':'Send'}</button>
+          <div id="chat-log" class="chat-log">${bubbles}${errBox}${approval}
+            ${busy && !CHAT.action ? `<div class="ops-tool">working…</div>` : ""}</div>
+          <div class="chat-foot">
+            <textarea id="chat-input" rows="1" ${disabled ? "disabled" : ""}
+              class="chat-input" placeholder="Ask Claude about your computer…"></textarea>
+            <button id="chat-send" ${disabled ? "disabled" : ""} class="lib-act"
+              style="height:36px">${busy ? "…" : "Send"}</button>
+            <button id="chat-clear" class="lib-act" data-tone="neutral" style="height:36px">Clear</button>
           </div>
         </div>`;
       const goto = $("#chat-goto-llm"); if (goto) goto.onclick = () => { activeView="llm"; renderViews(); render(); };
@@ -962,15 +1063,15 @@
       if (typeof val === "boolean")
         return `<label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" data-key="${k}" data-type="bool" ${val?'checked':''}/> ${k}</label>`;
       if (typeof val === "number")
-        return `<div>${label}<input data-key="${k}" data-type="number" value="${escapeHtml(String(val))}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm mono"/></div>`;
+        return `<div>${label}<input data-key="${k}" data-type="number" value="${escapeHtml(String(val))}" class="f-in mono"/></div>`;
       if (Array.isArray(val))
-        return `<div>${label}<textarea data-key="${k}" data-type="list" rows="${Math.max(2,val.length)}" placeholder="one per line" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm mono">${escapeHtml(val.join("\n"))}</textarea></div>`;
+        return `<div>${label}<textarea data-key="${k}" data-type="list" rows="${Math.max(2,val.length)}" placeholder="one per line" class="f-in mono">${escapeHtml(val.join("\n"))}</textarea></div>`;
       if (val && typeof val === "object")
-        return `<div>${label}<textarea data-key="${k}" data-type="json" rows="3" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono">${escapeHtml(JSON.stringify(val,null,2))}</textarea></div>`;
+        return `<div>${label}<textarea data-key="${k}" data-type="json" rows="3" class="f-in mono">${escapeHtml(JSON.stringify(val,null,2))}</textarea></div>`;
       const s = val==null ? "" : String(val);
       return `<div>${label}${s.length>60
-        ? `<textarea data-key="${k}" data-type="str" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">${escapeHtml(s)}</textarea>`
-        : `<input data-key="${k}" data-type="str" value="${escapeHtml(s)}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"/>`}</div>`;
+        ? `<textarea data-key="${k}" data-type="str" rows="2" class="f-in">${escapeHtml(s)}</textarea>`
+        : `<input data-key="${k}" data-type="str" value="${escapeHtml(s)}" class="f-in"/>`}</div>`;
     }
 
     function siteCollectFm() {
@@ -994,21 +1095,22 @@
       return `
         <div class="space-y-3">
           <div class="flex items-center justify-between">
-            <span class="mono text-xs text-slate-500">${escapeHtml(siteColl)}/${escapeHtml(siteFile)}</span>
-            <button id="site-save" ${siteBusy?'disabled':''} class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm">Save</button>
+            <span class="mono text-xs" style="color:var(--text-3)">${escapeHtml(siteColl)}/${escapeHtml(siteFile)}</span>
+            <button id="site-save" ${siteBusy ? "disabled" : ""} class="lib-act">Save</button>
           </div>
-          <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 space-y-2">
-            <div class="text-[11px] uppercase tracking-wide text-slate-500">Fields</div>
-            ${fields || '<p class="text-xs text-slate-500">No front-matter fields.</p>'}
+          <div class="dk-card">
+            <div class="dk-label">Fields</div>
+            ${fields || '<div class="lib-muted" style="font-size:12px">No front-matter fields.</div>'}
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Body (Markdown)</div>
-              <textarea id="site-body" class="w-full h-[52vh] bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mono resize-none focus:outline-none focus:border-indigo-500">${escapeHtml(siteItem.body||'')}</textarea>
+              <textarea id="site-body" class="f-in h-[52vh] mono">${escapeHtml(siteItem.body||'')}</textarea>
             </div>
             <div>
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Preview</div>
-              <div id="site-preview" class="h-[52vh] overflow-auto bg-slate-900/40 border border-slate-800 rounded-xl p-3 text-sm text-slate-200"></div>
+              <div id="site-preview" class="h-[52vh] overflow-auto" style="background:var(--card-2);
+                   border:1px solid var(--line);border-radius:11px;padding:12px;font-size:12.5px;color:var(--text-2)"></div>
             </div>
           </div>
         </div>`;
@@ -1039,40 +1141,70 @@
         return;
       }
       const cols = SITE.collections || [];
-      const colBtns = cols.map(c =>
-        `<button data-coll="${c.id}" class="w-full text-left px-3 py-2 rounded-lg text-sm ${c.id===siteColl?'bg-indigo-600 text-white':'text-slate-300 hover:bg-slate-800'}">
-           ${escapeHtml(c.label)} <span class="opacity-60">${c.count}</span></button>`).join("");
-      const itemBtns = siteItems.map(it =>
-        `<button data-file="${escapeHtml(it.file)}" title="${escapeHtml(it.title)}" class="w-full text-left px-3 py-1.5 rounded text-[13px] truncate ${it.file===siteFile?'bg-slate-700 text-white':'text-slate-400 hover:bg-slate-800'}">
-           ${escapeHtml(it.title)}</button>`).join("") || `<p class="text-xs text-slate-500 px-2">No items.</p>`;
       const st = SITE.status || {};
       const changed = st.changed_count || 0;
+      const host = (SITE.dir || "").split("/").pop() || "site";
+      // A path shows up in `git status` output as "?? path" or " M path".
+      const dirtySet = new Set((st.changed_files || []).map(f => f.slice(3)));
+
+      $("#view-title").textContent = "Site";
+      $("#subtitle").textContent = `${host} · ${changed
+        ? `${changed} unpublished edit${changed === 1 ? "" : "s"}` : "everything published"}`;
+
+      const chips = cols.map(c => `<button class="lib-chip" data-coll="${c.id}"
+          aria-pressed="${c.id === siteColl ? "true" : "false"}">${escapeHtml(c.label)} ${c.count}</button>`).join("");
+
+      const rows = siteItems.map(it => {
+        const edited = dirtySet.has(`${(siteColl || "").replace(/^_/, "_")}/${it.file}`)
+          || (st.changed_files || []).some(f => f.endsWith("/" + it.file));
+        return `<button class="site-row" data-file="${escapeHtml(it.file)}"
+            data-selected="${it.file === siteFile ? "1" : "0"}">
+          <span class="site-row-t"><b>${escapeHtml(it.title)}</b>
+            <span>${escapeHtml(it.permalink || "/" + it.file.replace(/\.md$/, ""))}</span></span>
+          <span class="site-state" data-s="${edited ? "edited" : "published"}">${edited ? "edited" : "published"}</span>
+          <span class="site-when">${it.modified ? ago(it.modified) : ""}</span>
+          <span class="lib-act" data-tone="${edited ? "start" : "neutral"}">${edited ? "Publish" : "Edit"}</span>
+        </button>`;
+      }).join("") || `<div class="lib-muted" style="padding:12px 2px">No items in this collection.</div>`;
+
+      $("#grid").className = ""; $("#grid").style.display = "block";
       $("#grid").innerHTML = `
-        <div class="col-span-full">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-white">Site — your-site.github.io
-              <span class="text-xs text-slate-500">(${escapeHtml(st.branch||'')})</span></h2>
-            <div class="flex items-center gap-3">
-              <span class="text-xs ${changed?'text-amber-300':'text-slate-500'}">${changed?changed+' file'+(changed>1?'s':'')+' changed':'no changes'}</span>
-              <button id="site-publish" ${siteBusy?'disabled':''} class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-medium">Publish to GitHub</button>
-            </div>
+      <div class="site-wrap">
+        <div class="site-deploy">
+          <span class="site-host">
+            <span class="gso-dot" data-state="live" aria-hidden="true"></span>
+            <b>${escapeHtml(host)}</b>
+            <span class="site-pill">live</span>
+          </span>
+          <div class="site-stat">
+            <span>Unpublished</span>
+            <b data-clean="${changed ? "0" : "1"}">${changed} edit${changed === 1 ? "" : "s"}</b>
           </div>
-          <div class="grid grid-cols-[230px_1fr] gap-4 items-start">
-            <div class="space-y-3">
-              <div class="space-y-1">${colBtns}</div>
-              <div class="border-t border-slate-800 pt-2">
-                <div class="flex items-center justify-between px-1 mb-1">
-                  <span class="text-[11px] uppercase tracking-wide text-slate-500">Items</span>
-                  <button id="site-new" class="text-xs text-indigo-400 hover:underline">+ New</button>
-                </div>
-                <div class="space-y-0.5 max-h-[64vh] overflow-auto">${itemBtns}</div>
-              </div>
-            </div>
-            <div id="site-editor" class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">${siteEditorHtml()}</div>
-          </div>
-        </div>`;
+          <button class="lib-act" data-tone="neutral" id="site-preview">Preview</button>
+          <button class="lib-act" data-tone="publish" id="site-publish" ${siteBusy || !changed ? "disabled" : ""}>
+            ${changed ? `Publish ${changed}` : "Nothing to publish"}</button>
+          <div class="site-sub">branch ${escapeHtml(st.branch || "?")} ·
+            ${escapeHtml(st.remote || "no remote")} · GitHub Pages</div>
+        </div>
+
+        <div class="pl-chiprow" style="margin:0">${chips}</div>
+
+        <section>
+          <div class="sec-rule">Content<span class="sec-note">
+            <button id="site-new" style="all:unset;cursor:pointer;color:var(--primary-text)">New post</button></span></div>
+          <div class="site-rows">${rows}</div>
+        </section>
+
+        ${siteFile ? `<section>
+          <div class="sec-rule">Editing<span class="sec-note">${escapeHtml(siteFile)}</span></div>
+          <div id="site-editor" style="background:var(--card);border:1px solid var(--line);
+               border-radius:13px;padding:15px">${siteEditorHtml()}</div>
+        </section>` : ""}
+      </div>`;
       $$("#grid [data-coll]").forEach(b => b.onclick = () => siteSelectCollection(b.dataset.coll));
       $$("#grid [data-file]").forEach(b => b.onclick = () => siteSelectItem(b.dataset.file));
+      const prev = $("#site-preview");
+      if (prev) prev.onclick = () => window.open("https://" + host, "_blank", "noopener");
       const pub = $("#site-publish"); if (pub) pub.onclick = sitePublish;
       const nw = $("#site-new"); if (nw) nw.onclick = siteNew;
       siteWireEditor();
@@ -1143,36 +1275,42 @@
     // -------- "Opened in VSCode" view --------
     function renderVscode() {
       const gridEl = $("#grid");
-      gridEl.className = "";
-      gridEl.style.display = "block";
+      gridEl.className = ""; gridEl.style.display = "block";
       const q = $("#search").value.toLowerCase();
       const folders = VSCODE.filter(f =>
         f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
+
+      $("#view-title").textContent = "In VSCode";
+      $("#subtitle").textContent = `${folders.length} window${folders.length === 1 ? "" : "s"} open`;
+
       if (!folders.length) {
-        $("#grid").innerHTML = `<div class="col-span-full text-center py-16 text-slate-500">
-          <p class="text-lg mb-1">No VS Code windows detected</p>
-          <p class="text-sm">Open a project with “⧉ Edit with VSCode” from All Apps.</p></div>`;
+        gridEl.innerHTML = `<div style="text-align:center;padding:56px 20px">
+          <div style="font:600 14px 'Readex Pro',sans-serif;color:var(--text)">No VS Code windows detected</div>
+          <div style="font-size:12px;color:var(--text-3);margin:6px 0 14px">
+            Open one from a repo's Details dock, then this list fills in.</div>
+          <button class="lib-act" data-tone="neutral" data-goto="library">Browse the library</button></div>`;
+        const g = gridEl.querySelector("[data-goto]");
+        if (g) g.onclick = () => selectView("library");
         return;
       }
-      $("#grid").innerHTML = folders.map(f => {
-        const id = cssId(f.path);
-        return `<div id="vf-${id}"
-          class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer transition">
-          <div class="flex items-center gap-2 min-w-0">
-            <span>🖥️</span><span class="font-semibold text-white truncate">${f.name}</span>
-          </div>
-          <p class="mt-2 text-[11px] text-slate-500 mono break-all">${f.path}</p>
-          <div class="mt-3 flex items-center justify-between">
-            ${f.in_projects
-              ? `<span class="text-[11px] px-2 py-0.5 rounded border border-indigo-700 bg-indigo-900/40 text-indigo-300">in Projects</span>`
-              : `<span class="text-[11px] text-slate-500">external folder</span>`}
-            <span class="text-xs text-sky-400">Click to focus →</span>
-          </div>
-        </div>`;
-      }).join("");
-      folders.forEach(f => {
-        const el = $(`#vf-${cssId(f.path)}`);
-        if (el) el.onclick = () => focusVscode(f.path);
+
+      // Same row language as the Library table, one column narrower.
+      gridEl.innerHTML = `<div class="lib-table">
+        <div class="lib-row lib-head" style="grid-template-columns:1fr 140px 108px">
+          <span>Folder</span><span>Where</span><span style="justify-self:end">Action</span>
+        </div>
+        ${folders.map(f => `<div class="lib-row lib-body-row" data-vf="${escapeHtml(f.path)}"
+            tabindex="0" role="button" style="grid-template-columns:1fr 140px 108px">
+          <span class="lib-cell-name"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(shortPath(f.path, 3))}</span></span>
+          <span class="lib-git">${f.in_projects ? "in Projects" : "external folder"}</span>
+          <button class="lib-act" data-tone="neutral">Focus</button>
+        </div>`).join("")}
+      </div>`;
+
+      gridEl.querySelectorAll("[data-vf]").forEach(row => {
+        const go = () => focusVscode(row.dataset.vf);
+        row.onclick = go;
+        row.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
       });
     }
 
@@ -1189,40 +1327,107 @@
         modelsLoaded = true;
         api("/api/llm/models").then(d => { MODELS = d.models || []; renderLlm(); });
       }
+      if (!usageLoaded) {
+        usageLoaded = true;
+        api("/api/llm/usage").then(d => { USAGE = d; renderLlm(); }).catch(() => {});
+      }
       const s = LLM || {};
-      const stateColors = {running:"bg-green-600", loading:"bg-amber-600", stopped:"bg-slate-600"};
       const busy = s.state === "running" || s.state === "loading";
       const opts = MODELS.map(m =>
         `<option value="${m.path}">${m.name} · ${m.size_gb}GB</option>`).join("");
-      $("#grid").innerHTML = `
-      <div class="col-span-full max-w-3xl mx-auto w-full space-y-4">
-        <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
-          <div class="flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="px-3 py-1 rounded text-white text-sm ${stateColors[s.state]||'bg-slate-600'}">${s.state||'unknown'}</span>
-              <div class="min-w-0">
-                <div class="font-semibold text-white truncate">${s.model || 'No model loaded'}</div>
-                <div class="text-xs text-slate-400 mono truncate">${s.url||''}${s.ctx?` · ctx ${s.ctx}`:''}${s.pid?` · pid ${s.pid}`:''}${s.managed?' · managed':''}</div>
-              </div>
-            </div>
-            ${busy ? `<button id="llm-stop" class="shrink-0 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm">■ Stop server</button>` : ''}
-          </div>
-          ${busy && !s.managed ? `<p class="mt-3 text-xs text-amber-400">⚠ Started outside GSO-1 — Stop will terminate the process on port ${s.port}.</p>` : ''}
-          ${!s.server_bin ? `<p class="mt-3 text-xs text-red-400">llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ''}
-        </div>
 
-        <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
-          <h3 class="text-sm font-semibold text-slate-300 mb-3">System load</h3>
-          <div id="sysmon" class="text-sm text-slate-400">Sampling…</div>
-        </div>
+      const gridEl = $("#grid");
+      gridEl.className = ""; gridEl.style.display = "block";
+      $("#view-title").textContent = "Local LLM";
+      $("#subtitle").textContent =
+        `llama.cpp server ${s.state === "running" ? `on :${s.port}` : s.state || "stopped"} · ` +
+        `${MODELS.length} model${MODELS.length === 1 ? "" : "s"} on disk`;
 
-        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5 ${busy?'opacity-50 pointer-events-none':''}">
-          <h3 class="text-sm font-semibold text-slate-300 mb-1">Start a server</h3>
+      // ---- live server card
+      const resident = (SYS && SYS.ram && SYS.ram.llm_bytes)
+        ? (SYS.ram.llm_bytes / 1e9).toFixed(1) + " GB" : "—";
+      const bars = (USAGE && USAGE.bars) || [];
+      const totals = (USAGE && USAGE.totals) || { requests: 0, tokens: 0, errors: 0 };
+      const perMin = totals.tokens ? Math.round(totals.tokens / 60) : 0;
+      const stats = [
+        ["Context", s.ctx ? s.ctx.toLocaleString() : "—"],
+        ["Port", s.port || "—"],
+        ["Tokens/min", perMin ? perMin.toLocaleString() : "0"],
+        ["Resident", resident],
+      ];
+      const serverCard = `<div class="llm-server" data-state="${busy ? "running" : "stopped"}">
+        <div class="llm-server-head">
+          <span class="gso-dot${busy ? " gso-pulse" : ""}" data-state="${busy ? "live" : ""}" aria-hidden="true"></span>
+          <span class="llm-name">llama-server</span>
+          <span class="llm-port">${busy ? `:${s.port}` : "stopped"}</span>
+          ${busy ? `<button id="llm-stop" class="lib-act" data-tone="stop" style="margin-left:auto">Stop server</button>` : ""}
+        </div>
+        <div class="llm-model">${escapeHtml(s.model || "No model loaded")}${
+          s.pid ? ` · pid ${s.pid}` : ""}${s.managed ? " · managed" : busy ? " · external" : ""}</div>
+        <div class="llm-stats">${stats.map(([l, v]) =>
+          `<div><div class="llm-stat-l">${l}</div><div class="llm-stat-v">${v}</div></div>`).join("")}</div>
+        ${busy && !s.managed ? `<p style="margin-top:11px;font-size:11.5px;color:var(--warn-text)">
+          Started outside GSO-1 — Stop terminates whatever holds :${s.port}.</p>` : ""}
+        ${!s.server_bin ? `<p style="margin-top:11px;font-size:11.5px;color:var(--err-text)">
+          llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ""}
+      </div>`;
+
+      // ---- last hour: real proxy traffic, not decoration
+      const peak = Math.max(1, ...bars.map(b => b.tokens));
+      const hourCard = `<div class="llm-hour">
+        <div class="llm-stat-l">Last hour</div>
+        <div class="llm-bars">${(bars.length ? bars : Array(8).fill({ tokens: 0 })).map(b =>
+          `<div class="llm-bar" style="height:${Math.max(2, Math.round((b.tokens / peak) * 52))}px;
+             opacity:${b.tokens ? 0.45 + 0.55 * (b.tokens / peak) : 0.18}"></div>`).join("")}</div>
+        <div class="llm-hour-foot">${totals.requests} request${totals.requests === 1 ? "" : "s"} ·
+          ${totals.tokens >= 1e6 ? (totals.tokens / 1e6).toFixed(2) + "M" :
+            totals.tokens >= 1e3 ? (totals.tokens / 1e3).toFixed(1) + "k" : totals.tokens} tokens ·
+          ${totals.errors} error${totals.errors === 1 ? "" : "s"}</div>
+        <div class="llm-hour-foot" style="margin-top:6px;opacity:.7">via the /v1/messages proxy</div>
+      </div>`;
+
+      // ---- models on disk
+      const loadedPath = (s.model_path || "").trim();
+      const totalGb = MODELS.reduce((n, m) => n + (m.size_gb || 0), 0);
+      const modelRows = MODELS.map(m => {
+        const isLoaded = busy && (m.path === loadedPath || m.name === s.model);
+        return `<div class="llm-row">
+          <span class="llm-row-name"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(shortPath(m.path))}</span></span>
+          <span class="llm-mono">${m.size_gb} GB</span>
+          <span class="llm-mono">${escapeHtml(quantOf(m.name))}</span>
+          <span class="llm-pill" data-s="${isLoaded ? "loaded" : "disk"}">${isLoaded ? "loaded" : "on disk"}</span>
+          ${isLoaded
+            ? `<button class="lib-act" data-tone="stop" id="llm-stop-2">Unload</button>`
+            : `<button class="lib-act" data-tone="start" data-load="${escapeHtml(m.path)}"
+                 ${busy ? "disabled" : ""}>Load</button>`}
+        </div>`;
+      }).join("") || `<div class="llm-row"><span class="lib-muted">No GGUF models found in your model directories.</span></div>`;
+
+      gridEl.innerHTML = `
+      <div class="llm-wrap">
+        <div class="llm-toprow">${serverCard}${hourCard}</div>
+
+        <section>
+          <div class="sec-rule">Models on disk<span class="sec-note">${MODELS.length} · ${totalGb.toFixed(1)} GB</span></div>
+          <div class="llm-rows">${modelRows}</div>
+        </section>
+
+        <section>
+          <div class="sec-rule">System load<span class="sec-note">sampled every 3s</span></div>
+          <div id="sysmon" style="background:var(--card);border:1px solid var(--line);
+               border-radius:13px;padding:15px;font-size:12.5px;color:var(--text-2)">Sampling…</div>
+        </section>
+
+        <section>
+          <div class="sec-rule">Start a server<span class="sec-note">llama-server flags</span></div>
+      <div class="max-w-3xl w-full space-y-4">
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px"
+             class="${busy?'opacity-50 pointer-events-none':''}">
           <p class="text-xs text-slate-500 mb-4">Each option maps to a <span class="mono">llama-server</span> flag. Leave a field blank to use llama.cpp's own default.</p>
           <div class="space-y-4 text-sm">
 
             <label class="block"><span class="text-slate-300 text-xs font-medium">Model <span class="mono text-slate-500">-m</span></span>
-              <select id="llm-model" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">${opts || '<option>No models found</option>'}</select>
+              <select id="llm-model" class="f-in">${opts || '<option>No models found</option>'}</select>
               <span class="block text-[11px] text-slate-500 mt-1">GGUF model to load, discovered in your model directories.</span>
             </label>
 
@@ -1230,24 +1435,24 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Resources</div>
               <div class="grid grid-cols-3 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Context <span class="mono text-slate-500">-c</span></span>
-                  <input id="llm-ctx" type="number" value="131072" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-ctx" type="number" value="131072" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Context window in tokens. Larger holds more history but uses more memory (≈42 KB/token at q8_0).</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">GPU layers <span class="mono text-slate-500">-ngl</span></span>
-                  <input id="llm-ngl" type="number" value="99" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-ngl" type="number" value="99" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Layers offloaded to the GPU. 99 puts the whole model on GPU.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Port <span class="mono text-slate-500">--port</span></span>
-                  <input id="llm-port" type="number" value="${s.port||8080}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-port" type="number" value="${s.port||8080}" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">TCP port the server listens on.</span></label>
               </div>
               <div class="grid grid-cols-3 gap-3 mt-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Threads <span class="mono text-slate-500">-t</span></span>
-                  <input id="llm-threads" type="number" placeholder="auto" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-threads" type="number" placeholder="auto" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">CPU threads for generation. Blank = auto-detect.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Batch size <span class="mono text-slate-500">-b</span></span>
-                  <input id="llm-batch" type="number" placeholder="2048" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-batch" type="number" placeholder="2048" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Prompt-processing batch size. Higher speeds long prompts, costs memory.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Parallel slots <span class="mono text-slate-500">-np</span></span>
-                  <input id="llm-parallel" type="number" placeholder="1" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-parallel" type="number" placeholder="1" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Concurrent request slots. Blank = 1, so a single Claude Code client gets the whole context window.</span></label>
               </div>
             </div>
@@ -1256,13 +1461,13 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Generation defaults</div>
               <div class="grid grid-cols-3 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Temperature <span class="mono text-slate-500">--temp</span></span>
-                  <input id="llm-temp" type="number" step="0.05" placeholder="model default" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-temp" type="number" step="0.05" placeholder="model default" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Sampling randomness. Lower (≈0.2) gives steadier output & tool calls.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">top-p <span class="mono text-slate-500">--top-p</span></span>
-                  <input id="llm-topp" type="number" step="0.05" placeholder="0.8" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-topp" type="number" step="0.05" placeholder="0.8" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Nucleus sampling: keep tokens within this cumulative probability.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">top-k <span class="mono text-slate-500">--top-k</span></span>
-                  <input id="llm-topk" type="number" placeholder="20" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 mono"/>
+                  <input id="llm-topk" type="number" placeholder="20" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Sample only from the K most-likely tokens.</span></label>
               </div>
               <span class="block text-[11px] text-slate-500 mt-2">These set the server's defaults; a client request (e.g. Claude Code) can still override them per call.</span>
@@ -1272,7 +1477,7 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Behavior</div>
               <div class="grid grid-cols-2 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Reasoning format <span class="mono text-slate-500">--reasoning-format</span></span>
-                  <select id="llm-reasoning" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">
+                  <select id="llm-reasoning" class="f-in">
                     <option value="">Server default</option>
                     <option value="auto">auto</option>
                     <option value="deepseek">deepseek (separate think field)</option>
@@ -1280,12 +1485,12 @@
                   </select>
                   <span class="block text-[11px] text-slate-500 mt-1">For thinking models: where &lt;think&gt; tokens go. "deepseek" keeps them out of the reply & tool calls.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Alias <span class="mono text-slate-500">--alias</span></span>
-                  <input id="llm-alias" type="text" placeholder="optional" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/>
+                  <input id="llm-alias" type="text" placeholder="optional" class="f-in"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Model name reported to API clients.</span></label>
               </div>
               <div class="grid grid-cols-2 gap-3 mt-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">KV cache type <span class="mono text-slate-500">-ctk/-ctv</span></span>
-                  <select id="llm-cachetype" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">
+                  <select id="llm-cachetype" class="f-in">
                     <option value="q8_0" selected>q8_0 (half memory, recommended)</option>
                     <option value="f16">f16 (full precision)</option>
                     <option value="">Server default</option>
@@ -1302,17 +1507,22 @@
                   <span class="block text-[11px] text-slate-500">Applies the model's own template — required for function/tool calling. Leave on unless debugging.</span></span></label>
             </div>
 
-            <button id="llm-start" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">▶ Start server</button>
+            <button id="llm-start" class="lib-act" style="height:34px">Start server</button>
           </div>
         </div>
 
-        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-5">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-semibold text-slate-300">Server log</h3>
-            <button id="llm-logbtn" class="text-xs text-indigo-400 hover:underline">Load log</button>
+      </div>
+        </section>
+
+        <section>
+          <div class="sec-rule">Server log
+            <span class="sec-note"><button id="llm-logbtn" style="all:unset;cursor:pointer;color:var(--primary-text)">Load log</button></span>
           </div>
-          <pre id="llm-log" class="hidden bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>
-        </div>
+          <pre id="llm-log" class="hidden mono"
+            style="background:var(--card);border:1px solid var(--line);border-radius:11px;
+                   padding:12px 14px;font-size:11.5px;color:var(--text-2);
+                   overflow:auto;max-height:288px;white-space:pre-wrap"></pre>
+        </section>
       </div>`;
 
       const stopBtn = $("#llm-stop");
@@ -1350,23 +1560,39 @@
           body: JSON.stringify(body)});
         flash(r.message, r.ok);
         if (r.ok) { showLlmLog(); watchLlm(); }
-        else { startBtn.textContent = "▶ Start server"; startBtn.disabled = false; }
+        else { startBtn.textContent = "Start server"; startBtn.disabled = false; }
       };
       const logBtn = $("#llm-logbtn");
       if (logBtn) logBtn.onclick = showLlmLog;
+
+      const stop2 = $("#llm-stop-2");
+      if (stop2) stop2.onclick = () => { const b = $("#llm-stop"); if (b) b.click(); };
+
+      // "Load" from a model row starts the server on that file with the form's
+      // current settings, so the row is a shortcut, not a second code path.
+      $$("[data-load]").forEach(b => b.onclick = () => {
+        const sel = $("#llm-model");
+        if (sel) sel.value = b.dataset.load;
+        const start = $("#llm-start");
+        if (start) { start.scrollIntoView({ block: "center", behavior: "smooth" }); start.click(); }
+      });
+
       startMetrics();
     }
 
     // ---- system load (CPU / GPU / RAM) ----
     function startMetrics() {
-      if (metricsPoll) clearInterval(metricsPoll);
+      if (metricsPoll) return;   // one sampler for the whole session
       pollMetrics();
       metricsPoll = setInterval(pollMetrics, 3000);
     }
 
     async function pollMetrics() {
-      if (activeView !== "llm") return;
       const snap = await api("/api/llm/metrics").catch(() => null);
+      if (snap && !snap.warming) {
+        SYS = snap;               // the Ops Room dock's Machine card reads this too
+        paintMachine();
+      }
       const el = $("#sysmon");
       if (!el) return;
       if (!snap || snap.warming) { el.textContent = "Sampling… (first reading takes ~3s)"; return; }
@@ -1469,9 +1695,10 @@
 
     // -------- "Planner" view (kanban) --------
     const COLS = [
-      {id:"todo", label:"To Do"},
-      {id:"doing", label:"In Progress"},
-      {id:"done", label:"Done"},
+      {id:"backlog", label:"Backlog",     tone:"var(--idle)"},
+      {id:"todo",    label:"Today",       tone:"var(--primary)"},
+      {id:"doing",   label:"In progress", tone:"var(--live)"},
+      {id:"done",    label:"Done",        tone:"var(--text-3)"},
     ];
     const PRI_COLORS = {high:"bg-red-500", med:"bg-amber-500", low:"bg-slate-500"};
 
@@ -1513,64 +1740,77 @@
     }
 
     function renderPlanner() {
+      const gridEl = $("#grid");
+      gridEl.className = ""; gridEl.style.display = "block";
       const boards = PLANNER.boards;
+
       if (!boards.length) {
-        $("#grid").innerHTML = `<div class="col-span-full">
-          <button id="new-board" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm mb-4">+ New board</button>
-          <div class="text-center py-16 text-slate-500">
-            <p class="text-lg mb-1">No boards yet</p>
-            <p class="text-sm">Create a board to start planning a project.</p>
-          </div></div>`;
+        $("#subtitle").textContent = "No boards yet";
+        gridEl.innerHTML = `<div style="text-align:center;padding:56px 20px">
+          <div style="font:600 14px 'Readex Pro',sans-serif;color:var(--text)">No boards yet</div>
+          <div style="font-size:12px;color:var(--text-3);margin:6px 0 14px">A board holds the tasks for one project.</div>
+          <button class="lib-act" data-tone="start" id="new-board">+ New board</button></div>`;
         $("#new-board").onclick = newBoard;
         return;
       }
+
       const board = activeBoard();
-      const tabs = boards.map(b => `<button data-board="${b.id}"
-          class="px-3 py-1.5 rounded-lg text-sm ${b.id===board.id?'bg-slate-700 text-white':'text-slate-300 hover:bg-slate-800'}">
-          ${escapeHtml(b.name)} <span class="opacity-50">${b.tasks.length}</span></button>`).join("");
-      const appChip = board.app
-        ? `<span class="text-xs text-slate-400">↳ <button id="board-app" class="text-indigo-400 hover:underline">${escapeHtml(board.app)}</button></span>` : "";
+      const total = boards.reduce((n, b) => n + b.tasks.length, 0);
+      $("#view-title").textContent = "Planner";
+      $("#subtitle").textContent =
+        `${total} task${total === 1 ? "" : "s"} across ${boards.length} board${boards.length === 1 ? "" : "s"} · stored in data/planner.json`;
+
+      const chips = boards.map(b => `<button class="lib-chip" data-board="${b.id}"
+          aria-pressed="${b.id === board.id ? "true" : "false"}">${escapeHtml(b.name)} ${b.tasks.length}</button>`).join("");
 
       const columns = COLS.map(c => {
-        const tasks = board.tasks.filter(t => t.status===c.id).sort((a,b)=>a.order-b.order);
-        const cards = tasks.map(taskCard).join("") ||
-          `<p class="text-xs text-slate-600 text-center py-6 pointer-events-none">drop here</p>`;
-        return `<div class="flex-1 min-w-[240px]">
-          <h3 class="text-sm font-semibold text-slate-300 mb-2 px-1">${c.label} <span class="opacity-50">${tasks.length}</span></h3>
-          <div class="kcol bg-slate-900/40 border border-slate-800 rounded-xl p-2 min-h-[120px] space-y-2" data-col="${c.id}">${cards}</div>
-          <input data-add="${c.id}" placeholder="+ Add task, press Enter"
-            class="mt-2 w-full bg-slate-800/60 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-500"/>
+        const tasks = board.tasks.filter(t => t.status === c.id).sort((a, b) => a.order - b.order);
+        return `<div>
+          <div class="pl-colhead">
+            <span class="pl-dot" style="background:${c.tone}"></span>
+            <span class="pl-colname">${c.label}</span>
+            <span class="pl-colcount">${tasks.length}</span>
+          </div>
+          <div class="pl-stack kcol" data-col="${c.id}">${tasks.map(taskCard).join("")}</div>
+          <button class="pl-add" data-add="${c.id}">+ Add task</button>
         </div>`;
       }).join("");
 
-      $("#grid").innerHTML = `<div class="col-span-full">
-        <div class="flex items-center gap-2 mb-4 flex-wrap">
-          ${tabs}
-          <button id="new-board" class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm">+ Board</button>
+      gridEl.innerHTML = `
+        <div class="pl-chiprow">
+          ${chips}
+          <button class="lib-chip" id="new-board">+ Board</button>
+          <span class="pl-note">${escapeHtml(board.name)}${board.app ? ` · ${escapeHtml(board.app)}` : ""}</span>
         </div>
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-3"><h2 class="text-lg font-bold text-white">${escapeHtml(board.name)}</h2>${appChip}</div>
-          <div class="flex gap-3">
-            <button id="rename-board" class="text-xs text-slate-400 hover:text-white">✎ Rename</button>
-            <button id="link-board" class="text-xs text-slate-400 hover:text-white">🔗 Link app</button>
-            <button id="del-board" class="text-xs text-red-400 hover:text-red-300">🗑 Delete board</button>
-          </div>
-        </div>
-        <div class="flex gap-3 overflow-x-auto pb-2">${columns}</div>
-      </div>`;
+        <div class="pl-cols">${columns}</div>
+        <div class="pl-chiprow" style="margin:16px 0 0">
+          <button class="lib-chip" id="rename-board">Rename</button>
+          <button class="lib-chip" id="link-board">Link app</button>
+          <button class="lib-chip" id="del-board" style="color:var(--err-text)">Delete board</button>
+        </div>`;
 
       $$("[data-board]").forEach(b => b.onclick = () => { activeBoardId = b.dataset.board; renderPlanner(); });
       $("#new-board").onclick = newBoard;
       $("#rename-board").onclick = () => renameBoard(board);
       $("#link-board").onclick = () => linkBoard(board);
       $("#del-board").onclick = () => deleteBoard(board);
-      const bapp = $("#board-app"); if (bapp) bapp.onclick = () => openDrawer(board.app);
 
-      $$("[data-add]").forEach(inp => inp.onkeydown = async (e) => {
-        if (e.key === "Enter" && inp.value.trim()) {
-          const v = inp.value.trim(); inp.value = "";
-          await addTask(board.id, v, inp.dataset.add);
-        }
+      // "+ Add task" swaps itself for an input so the column keeps its height.
+      $$("[data-add]").forEach(btn => btn.onclick = () => {
+        const status = btn.dataset.add;
+        const inp = document.createElement("input");
+        inp.className = "pl-addinput";
+        inp.placeholder = "Task title, Enter to save";
+        btn.replaceWith(inp);
+        inp.focus();
+        inp.onkeydown = async (e) => {
+          if (e.key === "Escape") return renderPlanner();
+          if (e.key !== "Enter" || !inp.value.trim()) return;
+          const v = inp.value.trim(); inp.disabled = true;
+          await addTask(board.id, v, status);
+          toast(`New task in ${COLS.find(c => c.id === status).label}`, "success");
+        };
+        inp.onblur = () => { if (!inp.value.trim()) renderPlanner(); };
       });
 
       board.tasks.forEach(t => {
@@ -1581,30 +1821,31 @@
           el._dragging = true; dragTaskId = t.id;
           e.dataTransfer.setData("text/plain", t.id);
           e.dataTransfer.effectAllowed = "move";
-          setTimeout(() => el.classList.add("opacity-40"), 0);
+          setTimeout(() => el.dataset.dragging = "1", 0);
         };
         el.ondragend = () => {
           setTimeout(() => el._dragging = false, 60);
-          el.classList.remove("opacity-40");
+          el.dataset.dragging = "0";
           dragTaskId = null; _removeMarker();
         };
       });
+
       $$(".kcol").forEach(col => {
         col.ondragover = (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
-          col.classList.add("ring-1","ring-indigo-500/60");
+          col.dataset.over = "1";
           _placeMarker(col, e.clientY);
         };
         col.ondragleave = (e) => {
           if (!col.contains(e.relatedTarget)) {
-            col.classList.remove("ring-1","ring-indigo-500/60");
+            col.dataset.over = "0";
             if (dragMarker && dragMarker.parentNode === col) _removeMarker();
           }
         };
         col.ondrop = async (e) => {
           e.preventDefault();
-          col.classList.remove("ring-1","ring-indigo-500/60");
+          col.dataset.over = "0";
           const taskId = e.dataTransfer.getData("text/plain") || dragTaskId;
           const idx = _dropIndex(col, e.clientY);
           _removeMarker();
@@ -1619,17 +1860,50 @@
       await reloadPlanner(); renderPlanner();
     }
 
+    /** "12m ago" / "2 days ago" from a unix timestamp. */
+    function ago(ts) {
+      const secs = Math.max(0, Date.now() / 1000 - ts);
+      const mins = Math.round(secs / 60);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.round(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.round(hrs / 24);
+      if (days === 1) return "yesterday";
+      if (days < 30) return `${days} days ago`;
+      const months = Math.round(days / 30);
+      return months < 12 ? `${months}mo ago` : `${Math.round(months / 12)}y ago`;
+    }
+
+    /** `~/a/b/c/file.gguf` with the middle elided — the ends carry the meaning. */
+    function shortPath(p, keep = 2) {
+      const home = "/Users/user";
+      let t = String(p).startsWith(home) ? "~" + String(p).slice(home.length) : String(p);
+      const parts = t.split("/");
+      if (parts.length <= keep + 2) return t;
+      return [parts[0], "…", ...parts.slice(-keep)].join("/");
+    }
+
+    /** The quantisation is in the filename by convention — Q4_K_M, F16, BF16. */
+    function quantOf(name) {
+      const m = String(name).match(/\b(IQ\d[\w_]*|Q\d[\w_]*|BF16|F16|F32)\b/i);
+      return m ? m[1].toUpperCase() : "—";
+    }
+
     function taskCard(t) {
-      const due = t.due ? `<span class="text-[11px] text-slate-400">📅 ${t.due}</span>` : "";
-      const appc = t.app ? `<span class="text-[11px] text-indigo-300">↳ ${escapeHtml(t.app)}</span>` : "";
-      const notes = t.notes ? `<span class="text-[11px] text-slate-500">📝</span>` : "";
-      return `<div id="task-${t.id}" draggable="true"
-        class="bg-slate-800 border border-slate-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-slate-500">
-        <div class="flex items-start gap-2">
-          <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 ${PRI_COLORS[t.priority]||'bg-slate-500'}"></span>
-          <span class="text-sm text-slate-100 ${t.status==='done'?'line-through opacity-60':''}">${escapeHtml(t.title)}</span>
-        </div>
-        ${(due||appc||notes)?`<div class="mt-2 flex items-center gap-2 flex-wrap pl-4">${due}${appc}${notes}</div>`:""}
+      // The tag is the most specific thing we know: an explicit due date beats a
+      // priority, and "blocked" gets the error tone the spec calls for.
+      const tag = t.due ? t.due
+        : t.priority && t.priority !== "med" ? t.priority
+        : t.notes ? "notes" : "";
+      const tone = /block/i.test(tag) || /block/i.test(t.title) ? "blocked" : "";
+      return `<div id="task-${t.id}" class="pl-card" draggable="true" tabindex="0"
+          data-done="${t.status === "done" ? "1" : "0"}" data-dragging="0">
+        <div class="pl-card-t">${escapeHtml(t.title)}</div>
+        ${(t.app || tag) ? `<div class="pl-card-meta">
+          <span class="pl-card-repo">${escapeHtml(t.app || "")}</span>
+          ${tag ? `<span class="pl-tag" data-tone="${tone}">${escapeHtml(tag)}</span>` : ""}
+        </div>` : ""}
       </div>`;
     }
 
@@ -1691,27 +1965,27 @@
       const statOpts = COLS.map(c=>`<option value="${c.id}" ${t.status===c.id?'selected':''}>${c.label}</option>`).join("");
       $("#task-modal-content").innerHTML = `
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-bold text-white">Edit task</h3>
-          <button id="tm-close" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+          <h3 style="font:600 15px 'Readex Pro',system-ui,sans-serif;color:var(--text)">Edit task</h3>
+          <button id="tm-close" class="gso-icon-btn" aria-label="Close">&times;</button>
         </div>
         <div class="space-y-3 text-sm">
-          <input id="tm-title" value="${escapeHtml(t.title).replace(/"/g,'&quot;')}" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2"/>
-          <textarea id="tm-notes" rows="4" placeholder="Notes…" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2">${escapeHtml(t.notes||"")}</textarea>
+          <input id="tm-title" value="${escapeHtml(t.title).replace(/"/g,'&quot;')}" class="f-in"/>
+          <textarea id="tm-notes" rows="4" placeholder="Notes…" class="f-in">${escapeHtml(t.notes||"")}</textarea>
           <div class="grid grid-cols-3 gap-3">
-            <label class="block"><span class="text-xs text-slate-400">Status</span>
-              <select id="tm-status" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${statOpts}</select></label>
-            <label class="block"><span class="text-xs text-slate-400">Priority</span>
-              <select id="tm-pri" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${priOpts}</select></label>
-            <label class="block"><span class="text-xs text-slate-400">Due</span>
-              <input id="tm-due" type="date" value="${t.due||''}" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/></label>
+            <label class="block"><span class="dk-label">Status</span>
+              <select id="tm-status" class="f-in">${statOpts}</select></label>
+            <label class="block"><span class="dk-label">Priority</span>
+              <select id="tm-pri" class="f-in">${priOpts}</select></label>
+            <label class="block"><span class="dk-label">Due</span>
+              <input id="tm-due" type="date" value="${t.due||''}" class="f-in"/></label>
           </div>
-          <label class="block"><span class="text-xs text-slate-400">Linked app</span>
-            <select id="tm-app" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5">${appOpts}</select></label>
+          <label class="block"><span class="dk-label">Linked app</span>
+            <select id="tm-app" class="f-in">${appOpts}</select></label>
           <div class="flex items-center justify-between pt-2">
-            <button id="tm-del" class="text-xs text-red-400 hover:text-red-300">🗑 Delete task</button>
+            <button id="tm-del" class="dk-link" style="color:var(--err-text)">Delete task</button>
             <div class="flex gap-2">
-              <button id="tm-cancel" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
-              <button id="tm-save" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Save</button>
+              <button id="tm-cancel" class="lib-act" data-tone="neutral">Cancel</button>
+              <button id="tm-save" class="lib-act">Save</button>
             </div>
           </div>
         </div>`;
@@ -1751,6 +2025,7 @@
       const app = ALL.find(a => a.name === name);
       if (app) app.favourite = r.favourite;
       renderViews(); renderFilters(); render();
+      return r.favourite;
     }
 
     const cssId = s => s.replace(/[^a-zA-Z0-9]/g, "_");
@@ -1758,6 +2033,15 @@
     function dirtyFor(name) {
       if (!OVERVIEW) return null;
       return (OVERVIEW.dirty || []).find(r => r.name === name) || null;
+    }
+
+    /** Git state for any repo, clean ones included — null if it is not a repo. */
+    function gitFor(name) {
+      if (!OVERVIEW) return null;
+      const idx = OVERVIEW.repo_index;
+      if (idx) return idx[name] || null;
+      const d = dirtyFor(name);
+      return d ? { branch: d.branch, dirty: true, changed: d.changed_count } : null;
     }
 
     function card(a) {
@@ -1805,7 +2089,13 @@
       const action = running ? "stop" : "start";
       try {
         const r = await api(`/api/apps/${encodeURIComponent(name)}/${action}`, {method:"POST"});
-        flash(r.message || (r.ok ? "OK" : "Failed"), r.ok);
+        if (r.ok) {
+          // Undo is the inverse action, which is exactly what this function does.
+          toast(`${name} — ${action === "start" ? "started" : "stopped"}`, "success",
+                () => toggleRun(name, action === "start"));
+        } else {
+          toast(r.message || `Could not ${action} ${name}`, "error");
+        }
         announce(`${name} ${r.ok ? (action === "start" ? "started" : "stopped") : "failed to " + action}`);
       } catch (e) {
         // api() now throws on non-2xx and on network failure; without this the
@@ -1816,13 +2106,9 @@
       if ($("#drawer").dataset.open === "1") openDrawer(name);
     }
 
-    function flash(msg, ok=true) {
-      const el = document.createElement("div");
-      el.className = `fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg text-sm shadow-lg ${ok?'bg-green-700':'bg-red-700'} text-white`;
-      el.textContent = msg;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 3000);
-    }
+    // One notification surface. flash() predates toast() and was a second,
+    // differently-styled pill; it now just forwards.
+    function flash(msg, ok = true) { toast(msg, ok ? "success" : "error"); }
 
     // -------- Drawer --------
     let lastDrawerApp = null;
@@ -1830,6 +2116,9 @@
     async function openDrawer(name) {
       lastDrawerApp = name;
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
+      // The two docks are mutually exclusive; opening Details closes Ops Room
+      // so the content column never drops below ~740px.
+      if (window.opsRoom && window.opsRoom.isOpen()) window.opsRoom.open(false);
       $("#drawer").setAttribute("data-open", "1");
       $("#dock-details").setAttribute("aria-pressed", "true");
       $("#drawer-content").innerHTML = `<p class="text-slate-400">Loading ${name}…</p>`;
@@ -1844,6 +2133,30 @@
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
       $("#drawer").setAttribute("data-open", "0");
       $("#dock-details").setAttribute("aria-pressed", "false");
+    }
+    window.closeDrawer = closeDrawer;   // the Ops Room dock closes this one
+
+    /** The Machine card in the Ops Room dock: CPU and RAM from sysmon. */
+    function paintMachine() {
+      const el = document.getElementById("dock-machine");
+      if (!el || !SYS) return;
+      const c = SYS.cpu, r = SYS.ram;
+      const gb = b => (b / 1e9).toFixed(1);
+      const cpuTone = c.busy > 85 ? "err" : c.busy > 60 ? "warn" : "";
+      const ramTone = r.percent > 90 ? "err" : r.percent > 75 ? "warn" : "";
+      const pct = b => Math.max(0, Math.min(100, (b / r.total_bytes) * 100));
+      el.innerHTML = `
+        <div class="ops-m-label">Machine</div>
+        <div class="ops-m-row">CPU<b data-tone="${cpuTone}">${Math.round(c.busy)}%</b></div>
+        <div class="ops-m-track">
+          <i style="width:${Math.max(0, c.llm)}%;background:var(--primary)"></i>
+          <i style="width:${Math.max(0, c.other)}%;background:var(--warn)"></i>
+        </div>
+        <div class="ops-m-row">RAM<b data-tone="${ramTone}">${gb(r.used_bytes)} / ${gb(r.total_bytes)} GB</b></div>
+        <div class="ops-m-track">
+          <i style="width:${pct(r.llm_bytes)}%;background:var(--primary)"></i>
+          <i style="width:${pct(r.other_bytes)}%;background:var(--live)"></i>
+        </div>`;
     }
 
     // Poll setup logs + status until the job finishes.
@@ -1865,7 +2178,7 @@
         if (s && !s.running) {
           clearInterval(setupPoll); setupPoll = null;
           const ok = s.exit_code === 0;
-          if (btn) { btn.disabled = false; btn.textContent = "⚙ Run setup / install"; }
+          if (btn) { btn.disabled = false; btn.textContent = "Run setup / install"; }
           flash(ok ? `Setup finished (exit 0)` : `Setup failed (exit ${s.exit_code})`, ok);
         }
       };
@@ -1883,65 +2196,102 @@
 
     function drawerHtml(d) {
       const c = d.config, g = d.git, h = d.health, p = d.process;
-      const gitBox = g.is_repo ? `
-        <div class="grid grid-cols-2 gap-y-1 text-sm">
-          <span class="text-slate-400">Branch</span><span class="mono">${g.branch||"?"}</span>
-          <span class="text-slate-400">Status</span><span>${g.dirty?`<span class="text-amber-400">${g.changed_count} changed</span>`:'<span class="text-green-400">clean</span>'}</span>
-          <span class="text-slate-400">Ahead / Behind</span><span class="mono">${g.ahead} / ${g.behind}</span>
-          <span class="text-slate-400">Last commit</span><span class="mono text-xs">${(g.last_commit||"").slice(0,80)}</span>
-        </div>` : `<p class="text-slate-500 text-sm">Not a git repository.</p>`;
+      const running = !!(p && p.running);
+      const state = running ? "running" : h.state === "crashed" ? "crashed" : "idle";
+      const failed = (p && !p.running && p.exit_code) || h.state === "crashed";
 
-      return `
-
-      <p class="text-xs text-slate-500 mono mb-4 break-all">${d.path}</p>
-
-      <div class="flex gap-2 mb-5">
-        <button id="d-run" class="px-4 py-2 rounded-lg font-medium ${p&&p.running?'bg-red-600 hover:bg-red-500':'bg-indigo-600 hover:bg-indigo-500'} text-white ${c.start_command?'':'opacity-40 cursor-not-allowed'}">
-          ${p&&p.running?'■ Stop':'▶ Start'}</button>
-        <button id="d-update" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">⟳ Update (git pull)</button>
-        <button id="d-refresh" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">↻</button>
-      </div>
-
-      ${section("Description", `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(d.description)}</p>`)}
-
-      ${section("Run config", `
-        <div class="grid grid-cols-[120px_1fr] gap-y-1 text-sm items-center">
-          <span class="text-slate-400">Start cmd</span>
-          <span class="mono text-xs ${c.start_command?'text-slate-200':'text-slate-500'}">${c.start_command||"— none detected —"}</span>
-          <span class="text-slate-400">Port</span><span class="mono">${c.port||"—"}</span>
-          <span class="text-slate-400">Setup</span><span class="mono text-xs text-slate-400">${c.setup_command||"—"}</span>
-          ${p?`<span class="text-slate-400">PID</span><span class="mono">${p.pid} ${p.running?`· up ${p.uptime_seconds}s`:`· exit ${p.exit_code}`}</span>`:""}
+      // 1 — identity and the two actions that matter most.
+      const identity = `<div class="dk-card">
+        <div class="dk-name"><b>${escapeHtml(d.name)}</b>
+          <span class="dk-statepill" data-s="${state}">${state}${running && c.port ? ` :${c.port}` : ""}</span></div>
+        <div class="dk-path" title="${escapeHtml(d.path)}">${escapeHtml(shortPath(d.path, 3))}</div>
+        <div class="dk-row">Git<b data-tone="${g.is_repo && g.dirty ? "warn" : g.is_repo ? "live" : ""}">${
+          g.is_repo ? `${g.dirty ? `${g.changed_count} changed` : "clean"} · ${escapeHtml(g.branch || "")}` : "not a repo"}</b></div>
+        <div class="dk-div"></div>
+        <div class="dk-actions">
+          <button id="d-run" class="dk-btn" data-tone="${running ? "stop" : ""}"
+            ${c.start_command ? "" : "disabled"}>${running ? "Stop" : "Start"}</button>
+          <button id="d-vscode" class="dk-btn" data-tone="outline">VSCode</button>
+          <button id="d-refresh" class="dk-btn" data-tone="outline" title="Refresh" aria-label="Refresh">&#8635;</button>
         </div>
-        <button id="edit-cfg" class="mt-2 text-xs text-indigo-400 hover:underline">✎ Edit start command / port</button>
-        <div id="cfg-edit" class="hidden mt-2 space-y-2">
-          <input id="cfg-start" value="${(c.start_command||'').replace(/"/g,'&quot;')}" placeholder="start command"
-            class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono"/>
-          <input id="cfg-port" value="${c.port||''}" placeholder="port"
-            class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono"/>
-          <button id="cfg-save" class="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded">Save</button>
+      </div>`;
+
+      // 2 — git.
+      const git = `<div class="dk-card">
+        <div class="dk-label">Git</div>
+        ${g.is_repo ? `
+          <div class="dk-row">Branch<b>${escapeHtml(g.branch || "?")}</b></div>
+          <div class="dk-row">Status<b data-tone="${g.dirty ? "warn" : "live"}">${
+            g.dirty ? `${g.changed_count} changed` : "clean"}</b></div>
+          <div class="dk-row">Ahead / behind<b>${g.ahead} / ${g.behind}</b></div>
+          <div class="dk-div"></div>
+          <div class="dk-commit">${escapeHtml((g.last_commit || "").slice(0, 120))}</div>
+          <div class="dk-actions" style="margin-top:9px">
+            <button id="d-update" class="dk-btn" data-tone="outline" style="flex:1">Pull</button>
+          </div>
+          <div id="git-out"></div>`
+        : `<div class="dk-row">Not a git repository.</div>`}
+      </div>`;
+
+      // 3 — run config, with the favourite switch.
+      const runcfg = `<div class="dk-card">
+        <div class="dk-label">Run config</div>
+        <div class="dk-row">Start<b>${escapeHtml(c.start_command || "not set")}</b></div>
+        <div class="dk-row">Port<b>${c.port || "not set"}</b></div>
+        ${c.setup_command ? `<div class="dk-row">Setup<b>${escapeHtml(c.setup_command)}</b></div>` : ""}
+        ${p ? `<div class="dk-row">Process<b>${p.pid} · ${p.running
+          ? `up ${Math.round(p.uptime_seconds)}s` : `exit ${p.exit_code}`}</b></div>` : ""}
+        <div class="dk-row" style="align-items:center">Favourite
+          <button id="d-fav" class="dk-switch" role="switch"
+            aria-checked="${c.favourite ? "true" : "false"}" aria-label="Favourite"></button></div>
+        <div class="dk-div"></div>
+        <button id="edit-cfg" class="dk-link">Edit start command / port</button>
+        <div id="cfg-edit" class="hidden">
+          <input id="cfg-start" class="dk-input" value="${(c.start_command || "").replace(/"/g, "&quot;")}"
+            placeholder="start command"/>
+          <input id="cfg-port" class="dk-input" value="${c.port || ""}" placeholder="port"/>
+          <div class="dk-actions" style="margin-top:8px">
+            <button id="cfg-save" class="dk-btn">Save</button></div>
         </div>
         ${c.setup_command ? `
-        <div class="mt-3 pt-3 border-t border-slate-700">
-          <button id="run-setup" class="text-xs px-3 py-1.5 rounded-md bg-amber-700 hover:bg-amber-600 text-white font-medium">
-            ⚙ Run setup / install</button>
-          <span class="ml-2 text-[11px] text-slate-500 mono">${c.setup_command}</span>
-          <pre id="setup-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>
-        </div>` : ""}`)}
+          <div class="dk-div"></div>
+          <div class="dk-actions"><button id="run-setup" class="dk-btn" data-tone="outline">Run setup / install</button></div>
+          <pre id="setup-out" class="dk-log hidden"></pre>` : ""}
+      </div>`;
 
-      ${section("Git", gitBox + (g.is_repo?'<div id="git-out" class="mt-2"></div>':''))}
+      // 4 — the failed run, when there is one. This is the card that turns a
+      // dead app into a next action.
+      const fail = failed ? `<div class="dk-card" data-tone="err">
+        <div class="dk-fail-head">
+          <span class="dk-fail-badge">!</span>
+          <span class="dk-fail-t">Last run failed</span>
+          <span class="dk-fail-when">${p && p.exit_code != null ? `exit code ${p.exit_code}` : h.state}</span>
+        </div>
+        <pre class="dk-log" id="fail-log">Loading the last lines of the log…</pre>
+        <button id="d-askops" class="dk-btn" data-tone="wide">Ask Ops Room to fix</button>
+      </div>` : "";
 
-      ${section("Health", `
-        <div class="text-sm grid grid-cols-2 gap-y-1">
-          <span class="text-slate-400">State</span><span>${healthBadge(h)}</span>
-          <span class="text-slate-400">Port</span><span class="mono">${h.port?`${h.port} (${h.port_status})`:'—'}</span>
-          <span class="text-slate-400">Uptime</span><span class="mono">${h.uptime_seconds}s</span>
-        </div>`)}
+      // Health and logs are GSO-1's own, kept in the same card language.
+      const health = `<div class="dk-card">
+        <div class="dk-label">Health</div>
+        <div class="dk-row">State<b data-tone="${h.state === "running" ? "live" : h.state === "crashed" ? "warn" : ""}">${h.state}</b></div>
+        <div class="dk-row">Port<b>${h.port ? `${h.port} · ${h.port_status}` : "—"}</b></div>
+        <div class="dk-row">Uptime<b>${h.uptime_seconds}s</b></div>
+        ${h.port_note ? `<div class="dk-commit">${escapeHtml(h.port_note)}</div>` : ""}
+      </div>`;
 
-      ${section("Logs", `<button id="d-logs" class="text-xs text-indigo-400 hover:underline">Load latest logs</button>
-        <pre id="logs-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>`)}
+      const logs = `<div class="dk-card">
+        <div class="dk-label">Logs</div>
+        <button id="d-logs" class="dk-link">Load latest logs</button>
+        <pre id="logs-out" class="dk-log hidden"></pre>
+      </div>`;
 
-      ${section("Chat", `<p class="text-xs text-slate-500">AI chat about this app is a planned next pass (reads README + git + code, answers via Claude API).</p>`)}
-      `;
+      const about = d.description ? `<div class="dk-card">
+        <div class="dk-label">About</div>
+        <div style="font-size:12px;line-height:1.55;color:var(--text-2)">${escapeHtml(d.description)}</div>
+      </div>` : "";
+
+      return identity + fail + git + runcfg + health + logs + about;
     }
 
     function section(title, body) {
@@ -1959,8 +2309,35 @@
       if (d.config.start_command) runBtn.onclick = async () => {
         await toggleRun(name, d.process && d.process.running);
       };
-      $("#d-update").onclick = async () => {
-        $("#d-update").textContent = "⟳ Pulling…";
+      const vs = $("#d-vscode");
+      if (vs) vs.onclick = () => openVscode(name);
+
+      const favBtn = $("#d-fav");
+      if (favBtn) favBtn.onclick = async () => {
+        const on = favBtn.getAttribute("aria-checked") === "true";
+        favBtn.setAttribute("aria-checked", on ? "false" : "true");
+        await toggleFav(name);
+      };
+
+      // The failed-run card hands the whole problem to the agent.
+      const askOps = $("#d-askops");
+      if (askOps) askOps.onclick = () => {
+        if (!window.opsRoom) return;
+        window.opsRoom.ask(
+          `The app "${name}" at ${d.path} failed its last run` +
+          `${d.process && d.process.exit_code != null ? ` with exit code ${d.process.exit_code}` : ""}. ` +
+          `Read its logs, find the cause and tell me the fix.`);
+        toast("Asked Ops Room to fix the failed run", "info");
+      };
+      const failLog = $("#fail-log");
+      if (failLog) fetch(`/api/apps/${enc}/logs`).then(r => r.text()).then(t => {
+        const lines = (t || "").trim().split("\n").slice(-8).join("\n");
+        failLog.textContent = lines || "No log output was captured.";
+      }).catch(() => { failLog.textContent = "Could not read the log."; });
+
+      const upd = $("#d-update");
+      if (upd) upd.onclick = async () => {
+        $("#d-update").textContent = "Pulling…";
         const r = await api(`/api/apps/${enc}/update`, {method:"POST"});
         flash(r.output ? r.output.split("\n")[0] : (r.ok?"Updated":"Failed"), r.ok);
         openDrawer(name);
@@ -1979,7 +2356,8 @@
         flash("Saved config");
         openDrawer(name);
       };
-      $("#d-logs").onclick = async () => {
+      const logsBtn = $("#d-logs");
+      if (logsBtn) logsBtn.onclick = async () => {
         const t = await fetch(`/api/apps/${enc}/logs`).then(r=>r.text());
         const out = $("#logs-out");
         out.textContent = t; out.classList.remove("hidden");
@@ -1988,12 +2366,12 @@
       if (setupBtn) {
         setupBtn.onclick = async () => {
           setupBtn.disabled = true;
-          setupBtn.textContent = "⚙ Running…";
+          setupBtn.textContent = "Running…";
           const r = await api(`/api/apps/${enc}/setup`, {method:"POST"});
           if (!r.ok) {
             flash(r.message || "Failed to start setup", false);
             setupBtn.disabled = false;
-            setupBtn.textContent = "⚙ Run setup / install";
+            setupBtn.textContent = "Run setup / install";
             return;
           }
           watchSetup(name);
@@ -2002,7 +2380,7 @@
         api(`/api/apps/${enc}/setup/status`).then(st => {
           if (st.setup && st.setup.running) {
             setupBtn.disabled = true;
-            setupBtn.textContent = "⚙ Running…";
+            setupBtn.textContent = "Running…";
             watchSetup(name);
           }
         });
@@ -2025,6 +2403,9 @@
     });
 
     load();
+    // The Ops Room dock's Machine card is visible on every view, so sampling
+    // runs for the whole session rather than only while Local LLM is open.
+    startMetrics();
     setInterval(() => {
       // Don't auto-reload while a drawer/modal is open or on the LLM/Planner/
       // Chat views (it would reset inputs / drag state); those self-refresh.
@@ -2039,78 +2420,103 @@
 
 <script>
 (function () {
-  var panel=document.getElementById('ops-panel'),
-      log=document.getElementById('ops-log'),
-      input=document.getElementById('ops-input'), send=document.getElementById('ops-send'),
-      cancel=document.getElementById('ops-cancel'), clear=document.getElementById('ops-clear'),
-      statusEl=document.getElementById('ops-status'), hint=document.getElementById('ops-hint');
-  var WIDTH=420, es=null, open=false;
+  var panel = document.getElementById('ops-panel'),
+      log = document.getElementById('ops-log'),
+      input = document.getElementById('ops-input'), send = document.getElementById('ops-send'),
+      cancel = document.getElementById('ops-cancel'), clear = document.getElementById('ops-clear'),
+      closeBtn = document.getElementById('ops-close'),
+      statusEl = document.getElementById('ops-status'), hint = document.getElementById('ops-hint');
+  var es = null, open = false;
 
-  function setOpen(v){
-    open=v;
+  function setOpen(v) {
+    open = v;
     // A dock is a shell column, not an overlay: the content simply narrows.
+    // The two docks are mutually exclusive, so opening this one closes Details.
     panel.setAttribute('data-open', v ? '1' : '0');
+    if (v && window.closeDrawer) window.closeDrawer();
     var hb = document.getElementById('ops-open');
-    if (hb) { hb.setAttribute('aria-expanded', v ? 'true' : 'false');
-              hb.setAttribute('aria-pressed', v ? 'true' : 'false'); }
-    try { localStorage.setItem('opsPanelOpen', v?'1':'0'); } catch(e){}
-    if (v) setTimeout(function(){ input.focus(); }, 120);
+    if (hb) {
+      hb.setAttribute('aria-expanded', v ? 'true' : 'false');
+      hb.setAttribute('aria-pressed', v ? 'true' : 'false');
+    }
+    try { localStorage.setItem('opsPanelOpen', v ? '1' : '0'); } catch (e) {}
+    if (v) setTimeout(function () { input.focus(); }, 120);
   }
+  window.opsRoom = { open: setOpen, isOpen: function () { return open; } };
 
   var headerBtn = document.getElementById('ops-open');
-  if (headerBtn) headerBtn.addEventListener('click', function(){ setOpen(!open); });
-  document.addEventListener('keydown', function(e){
-    if ((e.metaKey||e.ctrlKey) && String(e.key).toLowerCase()==='j'){ e.preventDefault(); setOpen(!open); }
+  if (headerBtn) headerBtn.addEventListener('click', function () { setOpen(!open); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'j') { e.preventDefault(); setOpen(!open); }
   });
 
-  function add(cls, text){
-    var d=document.createElement('div'); d.className=cls; d.textContent=text;
-    log.appendChild(d); log.scrollTop=log.scrollHeight; return d;
+  /** One chat row. `who` is user | agent | tool | err. */
+  function add(who, text) {
+    var d = document.createElement('div');
+    d.className = who === 'tool' ? 'ops-tool' : who === 'err' ? 'ops-err' : 'ops-bubble';
+    if (who === 'user' || who === 'agent') d.setAttribute('data-who', who);
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    return d;
   }
 
-  function refreshStatus(){
-    fetch('/api/opsroom/status').then(function(r){return r.json();}).then(function(d){
-      statusEl.textContent = !d.available ? 'launcher not found' : (d.busy ? 'running…' : 'ready');
-      statusEl.className = 'text-[11px] ' + (d.available ? 'text-emerald-500' : 'text-rose-500');
-    }).catch(function(){ statusEl.textContent='offline'; });
+  function refreshStatus() {
+    fetch('/api/opsroom/status').then(function (r) { return r.json(); }).then(function (d) {
+      statusEl.textContent = !d.available ? 'launcher not found' : (d.busy ? 'working…' : 'GLM-4.7 · local');
+      statusEl.style.color = d.available ? '' : 'var(--err-text)';
+    }).catch(function () { statusEl.textContent = 'offline'; statusEl.style.color = 'var(--err-text)'; });
   }
 
-  function finish(){
-    if (es){ es.close(); es=null; }
-    send.disabled=false; cancel.classList.add('hidden'); hint.textContent='';
+  function finish() {
+    if (es) { es.close(); es = null; }
+    send.disabled = false;
+    cancel.classList.add('hidden');
+    hint.textContent = '';
     refreshStatus();
   }
 
-  function ask(){
-    var prompt=input.value.trim();
+  function ask(prompt) {
+    prompt = (prompt || input.value).trim();
     if (!prompt || es) return;
-    input.value='';
-    add('text-indigo-300 whitespace-pre-wrap border-l-2 border-indigo-600 pl-2', prompt);
-    var out=add('text-slate-300 whitespace-pre-wrap font-mono text-[12px]','');
-    send.disabled=true; cancel.classList.remove('hidden'); hint.textContent='thinking…';
-    es=new EventSource('/api/opsroom/ask?prompt='+encodeURIComponent(prompt));
-    es.addEventListener('output', function(e){
+    input.value = '';
+    input.style.height = '';
+    var placeholder = log.querySelector('.ops-hint');
+    if (placeholder) placeholder.remove();
+    add('user', prompt);
+    var out = add('agent', '');
+    send.disabled = true;
+    cancel.classList.remove('hidden');
+    hint.textContent = 'thinking…';
+    es = new EventSource('/api/opsroom/ask?prompt=' + encodeURIComponent(prompt));
+    es.addEventListener('output', function (e) {
       out.textContent += (out.textContent ? '\n' : '') + e.data;
-      log.scrollTop=log.scrollHeight;
+      log.scrollTop = log.scrollHeight;
     });
-    es.addEventListener('ping', function(){ hint.textContent='thinking…'; });
-    es.addEventListener('error', function(e){ if (e.data) add('text-rose-400 text-xs', e.data); finish(); });
-    es.addEventListener('done', function(){ finish(); });
-    es.onerror=function(){ finish(); };
+    es.addEventListener('ping', function () { hint.textContent = 'thinking…'; });
+    es.addEventListener('error', function (e) { if (e.data) add('err', e.data); finish(); });
+    es.addEventListener('done', function () { finish(); });
+    es.onerror = function () { finish(); };
   }
+  window.opsRoom.ask = function (p) { setOpen(true); ask(p); };
 
-  send.addEventListener('click', ask);
-  input.addEventListener('keydown', function(e){
-    if ((e.metaKey||e.ctrlKey) && e.key==='Enter'){ e.preventDefault(); ask(); }
+  send.addEventListener('click', function () { ask(); });
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(120, input.scrollHeight) + 'px';
   });
-  cancel.addEventListener('click', function(){
-    fetch('/api/opsroom/cancel',{method:'POST'}).then(function(){
-      add('text-rose-400 text-xs','cancelled'); finish();
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
+  });
+  cancel.addEventListener('click', function () {
+    fetch('/api/opsroom/cancel', { method: 'POST' }).then(function () {
+      add('err', 'cancelled'); finish();
     });
   });
-  clear.addEventListener('click', function(){ log.innerHTML=''; });
+  clear.addEventListener('click', function () { log.innerHTML = ''; });
 
-  try { setOpen(localStorage.getItem('opsPanelOpen')==='1'); } catch(e){ setOpen(false); }
+  try { setOpen(localStorage.getItem('opsPanelOpen') === '1'); } catch (e) { setOpen(false); }
   refreshStatus();
   setInterval(refreshStatus, 15000);
 })();

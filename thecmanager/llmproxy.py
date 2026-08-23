@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from typing import Iterator
 
-from . import llm
+from . import llm, llmusage
 
 _STOP_MAP = {"stop": "end_turn", "length": "max_tokens", "tool_calls": "tool_use"}
 
@@ -134,6 +134,7 @@ def complete(body: dict) -> dict:
         with _post("/v1/chat/completions", payload, stream=False) as r:
             oai = json.loads(r.read().decode())
     except Exception as e:  # noqa: BLE001
+        llmusage.record(error=True)
         return {
             "id": "msg_error", "type": "message", "role": "assistant",
             "model": body.get("model", "local"),
@@ -156,6 +157,7 @@ def complete(body: dict) -> dict:
     if not content:
         content = [{"type": "text", "text": ""}]
     usage = oai.get("usage", {}) or {}
+    llmusage.record(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
     return {
         "id": "msg_" + (oai.get("id", "local").replace("chatcmpl-", "")),
         "type": "message", "role": "assistant", "model": body.get("model", "local"),
@@ -238,12 +240,15 @@ def stream(body: dict) -> Iterator[str]:
             if choice.get("finish_reason"):
                 finish = _STOP_MAP.get(choice["finish_reason"], "end_turn")
     except Exception as e:  # noqa: BLE001
+        llmusage.record(error=True)
         if not text_open and not tool_blocks:
             yield _sse("content_block_start", {"type": "content_block_start", "index": 0,
                 "content_block": {"type": "text", "text": ""}})
             text_open, text_idx = True, 0
         yield _sse("content_block_delta", {"type": "content_block_delta", "index": text_idx,
             "delta": {"type": "text_delta", "text": f"[local LLM proxy error: {_describe_error(e)}]"}})
+
+    llmusage.record(_estimate_input(body), out_tokens)
 
     if text_open:
         yield _sse("content_block_stop", {"type": "content_block_stop", "index": text_idx})

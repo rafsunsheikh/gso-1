@@ -50,6 +50,7 @@
   --warn: #f0a92c;
   --warn-text: #f0c88a;
   --warn-soft: rgba(240, 169, 44, 0.14);
+  --warn-line: rgba(240, 169, 44, 0.3);
 
   /* error */
   --err: #f0555f;
@@ -122,6 +123,7 @@
   --on-live: #04231d;
 
   --warn: #d98b06;
+  --warn-line: rgba(217, 139, 6, 0.32);
   --warn-text: #8a5a03;
   --warn-soft: rgba(240, 169, 44, 0.16);
 
@@ -260,7 +262,8 @@
    "Global shell" section; sizes are the shipping sizes.
    ================================================================== */
 
-.gso-shell { display: flex; min-height: 100vh; }
+/* A desktop app frame: the window never scrolls, only .gso-body inside it. */
+.gso-shell { display: flex; height: 100vh; overflow: hidden; }
 
 /* ---- sidebar ---- */
 .gso-side {
@@ -564,3 +567,589 @@
 @media (max-width: 1180px) {
   .gso-dock { position: absolute; right: 0; top: 0; height: 100%; z-index: 65; box-shadow: var(--shadow); }
 }
+
+/* ==================================================================
+   Library table — the handoff specifies a table, not a card grid:
+   grid-template-columns: 34px 1fr 92px 112px 148px 100px
+   ================================================================== */
+.lib-chiprow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 20px; border-bottom: 1px solid var(--line-2);
+  margin: -20px -20px 0;      /* bleed to the content column edges */
+  flex-wrap: wrap;
+}
+.lib-chip {
+  height: 27px; padding: 0 11px; border-radius: 999px; font-size: 11.5px;
+  background: var(--chip); border: 1px solid var(--line); color: var(--text-2);
+  cursor: pointer; white-space: nowrap;
+}
+.lib-chip:hover { color: var(--text); }
+.lib-chip[aria-pressed="true"] {
+  font-weight: 600; background: var(--primary-soft);
+  border-color: var(--primary-line); color: var(--primary-text);
+}
+.lib-sort { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+
+.lib-bulk {
+  display: none; align-items: center; gap: 11px;
+  margin: 11px 0 0; height: 36px; padding: 0 13px; border-radius: 9px;
+  background: var(--primary-soft); border: 1px solid var(--primary-line);
+}
+.lib-bulk[data-on="1"] { display: flex; }
+.lib-bulk-n { font: 600 12px "Readex Pro", system-ui, sans-serif; color: var(--primary-text); }
+.lib-bulk-div { width: 1px; height: 16px; background: var(--primary-line); }
+.lib-bulk button {
+  background: none; border: 0; cursor: pointer; font-size: 12px; color: var(--primary-text);
+}
+.lib-bulk button:hover { text-decoration: underline; }
+.lib-bulk .lib-bulk-clear { margin-left: auto; color: var(--text-3); }
+
+.lib-table { margin: 0 -20px; }
+.lib-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 92px 112px 148px 100px;
+  gap: 10px; align-items: center;
+  padding: 11px 20px; border-bottom: 1px solid var(--line-2);
+}
+.lib-head {
+  padding: 10px 20px;
+  font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--label);
+  border-bottom: 1px solid var(--line-2);
+}
+.lib-body-row { cursor: pointer; }
+.lib-body-row:hover { background: var(--hover); }
+.lib-body-row[data-selected="1"] { background: var(--sel); }
+.lib-body-row:focus-visible {
+  background: var(--hover); box-shadow: inset 2px 0 0 var(--primary); outline: none;
+}
+.lib-check {
+  width: 15px; height: 15px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--chip);
+  display: grid; place-items: center; padding: 0;
+}
+.lib-check[aria-checked="true"] { background: var(--primary); border-color: var(--primary); }
+.lib-check[aria-checked="true"]::after {
+  content: "✓"; color: #fff; font-size: 9px; line-height: 1;
+}
+.lib-cell-name { min-width: 0; }
+.lib-cell-name b {
+  display: block; font: 600 12.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-cell-name span {
+  display: block; font: 400 10.5px ui-monospace, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-kind {
+  font: 600 10.5px ui-monospace, Menlo, monospace; padding: 3px 7px; border-radius: 5px;
+  background: var(--chip); color: var(--text-2); justify-self: start;
+}
+.lib-kind[data-k="node"] { color: var(--kind-node); }
+.lib-kind[data-k="python"] { color: var(--kind-python); }
+.lib-kind[data-k="make"] { color: var(--kind-make); }
+.lib-state { display: flex; align-items: center; gap: 6px; font: 500 11.5px "Readex Pro", sans-serif; color: var(--text-2); }
+.lib-git { font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-git[data-dirty="1"] { color: var(--warn-text); }
+.lib-act {
+  justify-self: end; height: 28px; padding: 0 13px; border-radius: 999px;
+  font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary);
+}
+.lib-act[data-tone="stop"] { background: transparent; border-color: var(--err-line); color: var(--err-text); }
+.lib-act[data-tone="neutral"] { background: transparent; border-color: var(--line); color: var(--text-2); }
+/* Publishing is the teal action in the design language, not the purple one. */
+.lib-act[data-tone="publish"] { background: var(--live); border-color: var(--live); color: var(--on-live); }
+.lib-act:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.lib-act:hover { filter: brightness(1.1); }
+
+/* inline-block: a width on a bare inline span is ignored, so the bar vanished. */
+.lib-skel-bar { display: inline-block; height: 9px; border-radius: 5px; background: var(--skeleton); }
+.lib-skel-bar[data-lead="1"] {
+  background: linear-gradient(90deg, var(--skeleton) 0%, var(--skeleton-hi) 50%, var(--skeleton) 100%);
+  background-size: 260px 100%; animation: gsoShimmer 1.4s linear infinite;
+}
+.lib-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px; border-top: 1px solid var(--line-2);
+  font-size: 11.5px; color: var(--text-3); margin: 0 -20px -20px;
+}
+.lib-page { margin-left: auto; display: flex; gap: 6px; }
+.lib-page button {
+  min-width: 26px; height: 26px; border-radius: 999px; padding: 0 8px;
+  background: transparent; border: 1px solid var(--line); color: var(--text-2);
+  font-size: 11.5px; cursor: pointer;
+}
+.lib-page button[aria-current="page"] {
+  background: var(--primary-soft); border-color: var(--primary-line); color: var(--primary-text);
+}
+
+/* A cell with nothing to say still needs to sit on the baseline. */
+.lib-muted { color: var(--text-3); }
+
+/* ---- search field (was raw Tailwind slate; now token-driven) ---- */
+.gso-search {
+  height: 36px; width: 256px; max-width: 100%;
+  border-radius: 9px; padding: 0 12px;
+  background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text); font-size: 12.5px;
+}
+.gso-search::placeholder { color: var(--text-3); }
+.gso-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+
+/* The filter chips and the column header stay put while rows scroll past. */
+.lib-chiprow { position: sticky; top: -20px; z-index: 3; background: var(--bg); padding-top: 4px; }
+.lib-head { position: sticky; top: 26px; z-index: 2; background: var(--bg); }
+
+/* ==================================================================
+   Planner — README "3. Planner". Four tone-dotted columns of drag-able
+   cards, each column ending in a dashed add-task button.
+   ================================================================== */
+.pl-chiprow { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; }
+.pl-note {
+  margin-left: auto; max-width: 40%;
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.pl-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .pl-cols { grid-template-columns: repeat(2, 1fr); } }
+
+.pl-colhead {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 2px 8px;
+}
+.pl-dot { width: 7px; height: 7px; border-radius: 999px; flex: none; background: var(--idle); }
+.pl-colname {
+  font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2);
+}
+.pl-colcount { margin-left: auto; font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3); }
+
+.pl-stack { display: flex; flex-direction: column; gap: 9px; min-height: 46px; }
+.pl-stack[data-over="1"] { outline: 1px dashed var(--primary-line); outline-offset: 4px; border-radius: 12px; }
+
+.pl-card {
+  padding: 12px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+  cursor: grab; text-align: left; width: 100%;
+}
+.pl-card:active { cursor: grabbing; }
+.pl-card:hover { border-color: var(--primary-line); }
+.pl-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pl-card[data-dragging="1"] { opacity: 0.4; }
+.pl-card-t {
+  font: 500 12.5px/1.45 "Readex Pro", system-ui, sans-serif;
+  color: var(--text); text-wrap: pretty;
+}
+.pl-card[data-done="1"] .pl-card-t { color: var(--text-3); text-decoration: line-through; }
+.pl-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.pl-card-repo {
+  font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.pl-tag {
+  flex: none; padding: 2px 7px; border-radius: 999px;
+  background: var(--chip); color: var(--text-2);
+  font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.pl-tag[data-tone="blocked"] { color: var(--err-text); }
+
+.pl-add {
+  margin-top: 9px; width: 100%; height: 32px;
+  border-radius: 9px; border: 1px dashed var(--line);
+  background: transparent; color: var(--text-3);
+  font: 500 11.5px "Readex Pro", system-ui, sans-serif; cursor: pointer;
+}
+.pl-add:hover { border-color: var(--primary-line); color: var(--text-2); }
+.pl-addinput {
+  margin-top: 9px; width: 100%; height: 32px;
+  border-radius: 9px; border: 1px solid var(--primary-line);
+  background: var(--card); color: var(--text); padding: 0 10px; font-size: 12px;
+}
+.pl-addinput:focus { outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
+
+/* ==================================================================
+   Local LLM — README "4. Local LLM": a live server card beside an hour
+   of traffic, then the models on disk as rows.
+   ================================================================== */
+.llm-wrap { display: flex; flex-direction: column; gap: 17px; }
+.llm-toprow { display: flex; gap: 12px; align-items: stretch; }
+@media (max-width: 1000px) { .llm-toprow { flex-direction: column; } }
+
+.llm-server {
+  flex: 1; min-width: 0;
+  border-radius: 13px; padding: 15px;
+  background: var(--live-soft); border: 1px solid var(--live-line);
+}
+.llm-server[data-state="stopped"] { background: var(--card); border-color: var(--line); }
+.llm-server-head { display: flex; align-items: center; gap: 9px; }
+.llm-name { font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.llm-port { font: 600 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--live-text); }
+.llm-server[data-state="stopped"] .llm-port { color: var(--text-3); }
+.llm-model {
+  margin-top: 9px;
+  font: 400 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.llm-stats {
+  margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line-2);
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+}
+.llm-stat-l {
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--label);
+}
+.llm-stat-v { margin-top: 3px; font: 600 15px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+
+.llm-hour {
+  width: 220px; flex: none;
+  border-radius: 13px; padding: 15px;
+  background: var(--card); border: 1px solid var(--line);
+  display: flex; flex-direction: column;
+}
+@media (max-width: 1000px) { .llm-hour { width: auto; } }
+.llm-bars { display: flex; align-items: flex-end; gap: 6px; height: 52px; margin: 12px 0 10px; }
+.llm-bar { flex: 1; background: var(--primary); border-radius: 3px 3px 0 0; min-height: 2px; }
+.llm-hour-foot { font-size: 11.5px; color: var(--text-3); }
+
+/* ---- section rule shared by Local LLM and Site ---- */
+.sec-rule {
+  display: flex; align-items: center; gap: 10px;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--label);
+  margin-bottom: 10px;
+}
+.sec-rule::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+.sec-note {
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); text-transform: none; letter-spacing: 0;
+}
+.sec-rule .sec-note { order: 3; }
+
+/* ---- models on disk ---- */
+.llm-rows { display: flex; flex-direction: column; gap: 8px; }
+.llm-row {
+  display: grid; grid-template-columns: 1fr 96px 110px 130px 104px;
+  gap: 12px; align-items: center;
+  padding: 12px 14px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+}
+@media (max-width: 900px) { .llm-row { grid-template-columns: 1fr 104px; row-gap: 8px; } }
+.llm-row-name { min-width: 0; }
+.llm-row-name b {
+  display: block; font: 600 12.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.llm-row-name span {
+  display: block; margin-top: 2px;
+  font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.llm-mono { font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
+.llm-pill {
+  justify-self: start; padding: 3px 9px; border-radius: 999px;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--chip); color: var(--text-3);
+}
+.llm-pill[data-s="loaded"] { background: var(--live-soft); color: var(--live-text); }
+.llm-pill[data-s="blocked"] { background: var(--err-soft); color: var(--err-text); }
+
+/* ---- download in progress ---- */
+.llm-dl {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  padding: 12px 14px; border-radius: 11px;
+  border: 1px dashed var(--line); background: transparent;
+}
+.llm-dl-name { font: 600 12.5px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.llm-dl-track { height: 5px; border-radius: 999px; background: var(--hover); margin-top: 7px; }
+.llm-dl-fill { height: 100%; border-radius: 999px; background: var(--primary); }
+
+/* ==================================================================
+   Ops Room dock — README "Ops Room dock (assistant)".
+   ================================================================== */
+.gso-dock-meta {
+  font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); flex: none;
+}
+
+.ops-chat { display: flex; flex-direction: column; gap: 10px; }
+.ops-hint { font-size: 12px; line-height: 1.55; color: var(--text-3); }
+
+.ops-bubble {
+  padding: 9px 12px; font: 400 12.5px/1.5 "Readex Pro", system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.ops-bubble[data-who="user"] {
+  align-self: flex-end; max-width: 88%;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--primary); color: #fff;
+}
+.ops-bubble[data-who="agent"] {
+  align-self: flex-start; max-width: 92%;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--card-2); border: 1px solid var(--line); color: var(--text-2);
+}
+.ops-bubble[data-who="agent"] code {
+  font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+}
+.ops-tool {
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); padding-left: 2px;
+}
+.ops-err { font-size: 12px; color: var(--err-text); }
+
+/* ---- machine card ---- */
+.ops-machine {
+  margin: 0 15px 11px; padding: 11px 12px;
+  border-radius: 11px; background: var(--card-2); border: 1px solid var(--line);
+}
+.ops-machine:empty { display: none; }
+.ops-m-label {
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--label);
+  margin-bottom: 8px;
+}
+.ops-m-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--text-2); }
+.ops-m-row b { margin-left: auto; font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.ops-m-row b[data-tone="warn"] { color: var(--warn-text); }
+.ops-m-row b[data-tone="err"]  { color: var(--err-text); }
+.ops-m-track {
+  height: 5px; border-radius: 999px; background: var(--hover);
+  margin: 5px 0 9px; display: flex; overflow: hidden;
+}
+.ops-m-track > i { display: block; height: 100%; }
+.ops-m-track > i:last-child { border-radius: 0 999px 999px 0; }
+
+/* ---- footer ---- */
+.ops-foot { display: flex; align-items: flex-end; gap: 8px; }
+.ops-input {
+  flex: 1; min-height: 36px; max-height: 120px;
+  border-radius: 999px; padding: 9px 14px;
+  background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text); font-size: 12.5px; resize: none;
+}
+.ops-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.ops-send {
+  width: 25px; height: 25px; margin-bottom: 6px; flex: none;
+  border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--live); color: var(--on-live);
+  font-size: 13px; line-height: 1;
+}
+.ops-send:hover { filter: brightness(1.08); }
+.ops-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.ops-foot-hint { padding: 0 15px 10px; font-size: 10.5px; color: var(--text-3); min-height: 0; }
+.ops-foot-hint:empty { display: none; }
+
+/* ==================================================================
+   Site — README "5. Site": a deploy header over the content table.
+   ================================================================== */
+.site-wrap { display: flex; flex-direction: column; gap: 16px; }
+.site-deploy {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 16px; border-radius: 13px;
+  background: var(--card); border: 1px solid var(--line);
+}
+.site-host { display: flex; align-items: center; gap: 9px; }
+.site-host b { font: 600 14px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.site-pill {
+  padding: 2px 9px; border-radius: 999px;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--live-soft); color: var(--live-text);
+}
+.site-sub {
+  width: 100%; margin-top: -6px;
+  font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+}
+.site-stat { margin-left: auto; text-align: right; }
+.site-stat span {
+  display: block;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--label);
+}
+.site-stat b { font: 600 15px "Readex Pro", system-ui, sans-serif; color: var(--warn-text); }
+.site-stat b[data-clean="1"] { color: var(--text-3); }
+
+.site-rows { display: flex; flex-direction: column; gap: 8px; }
+.site-row {
+  display: grid; grid-template-columns: 1fr 120px 130px 108px;
+  gap: 12px; align-items: center;
+  padding: 12px 14px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+  cursor: pointer; text-align: left; width: 100%;
+}
+.site-row:hover { border-color: var(--primary-line); }
+.site-row[data-selected="1"] { border-color: var(--primary); background: var(--primary-soft); }
+@media (max-width: 900px) { .site-row { grid-template-columns: 1fr 108px; row-gap: 8px; } }
+.site-row-t { min-width: 0; }
+.site-row-t b {
+  display: block; font: 600 12.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.site-row-t span {
+  display: block; margin-top: 2px;
+  font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.site-state {
+  justify-self: start; padding: 3px 9px; border-radius: 999px;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--live-soft); color: var(--live-text);
+}
+.site-state[data-s="edited"] { background: var(--warn-soft); color: var(--warn-text); }
+.site-when { font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3); }
+
+/* ==================================================================
+   Details dock — README "Details dock (repo details)".
+   ================================================================== */
+.dk-card {
+  padding: 11px 12px; border-radius: 11px;
+  background: var(--card-2); border: 1px solid var(--line);
+}
+.dk-card + .dk-card { margin-top: 11px; }
+.dk-card[data-tone="err"] { background: var(--err-soft); border-color: var(--err-line); }
+.dk-label {
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--label);
+  margin-bottom: 8px;
+}
+.dk-name { display: flex; align-items: center; gap: 8px; }
+.dk-name b {
+  font: 600 13.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dk-statepill {
+  margin-left: auto; flex: none; padding: 2px 9px; border-radius: 999px;
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--chip); color: var(--text-3);
+}
+.dk-statepill[data-s="running"] { background: var(--live-soft); color: var(--live-text); }
+.dk-statepill[data-s="crashed"] { background: var(--err-soft); color: var(--err-text); }
+.dk-path {
+  margin-top: 5px; font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); overflow-wrap: anywhere;
+}
+.dk-row {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 11.5px; color: var(--text-3); padding: 3px 0;
+}
+.dk-row > b {
+  margin-left: auto; text-align: right; min-width: 0;
+  font: 500 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dk-row > b[data-tone="warn"] { color: var(--warn-text); font-weight: 600; }
+.dk-row > b[data-tone="live"] { color: var(--live-text); font-weight: 600; }
+.dk-div { height: 1px; background: var(--line-2); margin: 9px 0; }
+.dk-actions { display: flex; gap: 8px; }
+.dk-btn {
+  flex: 1; height: 31px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  font: 500 11.5px "Readex Pro", system-ui, sans-serif;
+  background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary);
+}
+.dk-btn[data-tone="stop"]    { background: transparent; border-color: var(--err-line); color: var(--err-text); }
+.dk-btn[data-tone="outline"] { flex: none; padding: 0 13px; background: transparent; border-color: var(--line); color: var(--text-2); }
+.dk-btn[data-tone="wide"]    { width: 100%; background: transparent; border-color: var(--err-line); color: var(--err-text); }
+.dk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.dk-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.dk-commit {
+  margin-top: 8px; font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3); overflow-wrap: anywhere;
+}
+.dk-fail-head { display: flex; align-items: center; gap: 8px; }
+.dk-fail-badge {
+  width: 15px; height: 15px; border-radius: 999px; flex: none;
+  background: var(--err-text); color: var(--on-primary);
+  font: 700 10px/15px "Readex Pro", system-ui, sans-serif; text-align: center;
+}
+.dk-fail-t { font: 600 12px "Readex Pro", system-ui, sans-serif; color: var(--err-text); }
+.dk-fail-when { margin-left: auto; font: 400 10.5px ui-monospace, Menlo, monospace; color: var(--text-3); }
+.dk-log {
+  margin: 8px 0; padding: 8px 9px; border-radius: 8px;
+  background: var(--card); font: 400 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-2); white-space: pre-wrap; max-height: 132px; overflow: auto;
+}
+.dk-input {
+  width: 100%; height: 28px; margin-top: 6px; padding: 0 9px;
+  border-radius: 8px; background: var(--card); border: 1px solid var(--line);
+  color: var(--text); font: 400 11.5px ui-monospace, Menlo, monospace;
+}
+.dk-input:focus { outline: none; border-color: var(--primary); }
+.dk-link { all: unset; cursor: pointer; color: var(--primary-text); font-size: 11px; }
+
+/* 34×20 switch with a 16px knob. */
+.dk-switch {
+  margin-left: auto; width: 34px; height: 20px; flex: none;
+  border-radius: 999px; border: 0; cursor: pointer; padding: 2px;
+  background: var(--hover); position: relative;
+}
+.dk-switch[aria-checked="true"] { background: var(--primary); }
+.dk-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 999px; background: #fff;
+  transition: transform 0.15s ease;
+}
+.dk-switch[aria-checked="true"]::after { transform: translateX(14px); }
+
+/* ==================================================================
+   Chat view — the Ops Room's bubble language at page width.
+   ================================================================== */
+/* The composer belongs at the bottom of the view, not under the last line. */
+.chat-col {
+  max-width: 780px; margin: 0 auto; min-height: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.chat-log { flex: 1; }
+.chat-log { display: flex; flex-direction: column; gap: 10px; }
+.chat-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border-radius: 11px;
+  background: var(--warn-soft); border: 1px solid var(--warn-line);
+  font-size: 12px; color: var(--text-2);
+}
+.chat-approve {
+  padding: 11px 12px; border-radius: 11px;
+  background: var(--warn-soft); border: 1px solid var(--warn-line);
+}
+.chat-approve-t { font: 600 12px "Readex Pro", system-ui, sans-serif; color: var(--warn-text); margin-bottom: 7px; }
+.chat-cmd {
+  padding: 8px 9px; border-radius: 8px; background: var(--card);
+  font: 400 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text); white-space: pre-wrap; margin-bottom: 9px;
+}
+.chat-foot { display: flex; align-items: flex-end; gap: 8px; position: sticky; bottom: 0;
+  padding-top: 6px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
+.chat-input {
+  flex: 1; min-height: 40px; max-height: 160px; padding: 10px 14px;
+  border-radius: 14px; background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text); font-size: 12.5px; resize: none;
+}
+.chat-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.chat-details { font-size: 11px; color: var(--text-3); }
+.chat-details pre {
+  margin-top: 6px; padding: 8px 9px; border-radius: 8px; background: var(--card);
+  font: 400 11px/1.5 ui-monospace, Menlo, monospace; color: var(--text-2);
+  white-space: pre-wrap; max-height: 200px; overflow: auto;
+}
+
+/* ==================================================================
+   Form controls. The start-a-server form, the site editor and the task
+   modal are real functionality with no artboard of their own; they use
+   the design system's field so they read as part of the same app.
+   ================================================================== */
+.f-in {
+  width: 100%; padding: 7px 10px; margin-top: 4px;
+  border-radius: 9px; background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text); font: 400 12.5px "Readex Pro", system-ui, sans-serif;
+}
+.f-in.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.f-in::placeholder { color: var(--text-3); }
+.f-in:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.f-in:disabled { opacity: 0.5; }
+select.f-in { appearance: none; padding-right: 26px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%),
+                    linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+textarea.f-in { resize: vertical; line-height: 1.55; }

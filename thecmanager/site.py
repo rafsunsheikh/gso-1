@@ -99,10 +99,21 @@ def collections() -> list[dict]:
 
 
 def list_items(coll: str) -> list[dict]:
+    """Every item in a collection, newest edit first.
+
+    The content table shows a permalink and an edited time next to each row,
+    so both come back with the listing rather than costing a request per row.
+    """
     out = []
     for f in _md_files(_coll_dir(coll)):
         fm, _ = _parse(f.read_text(errors="ignore"))
-        out.append({"file": f.name, "title": fm.get("title") or f.stem})
+        out.append({
+            "file": f.name,
+            "title": fm.get("title") or f.stem,
+            "permalink": fm.get("permalink") or "",
+            "modified": f.stat().st_mtime,
+        })
+    out.sort(key=lambda i: -i["modified"])
     return out
 
 

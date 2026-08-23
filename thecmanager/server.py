@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (
-    claudebridge, config, git_ops, health, llm, llmproxy, planner, runner, scanner,
-    sysmon, telegrambot, vscode,
+    claudebridge, config, git_ops, health, llm, llmproxy, llmusage, planner, runner,
+    scanner, sysmon, telegrambot, vscode,
 )
 from . import chat as chat_agent
 from . import scheduler
@@ -480,6 +480,12 @@ async def anthropic_messages(request: Request):
 @app.post("/v1/messages/count_tokens")
 async def anthropic_count_tokens(request: Request) -> JSONResponse:
     return JSONResponse(llmproxy.count_tokens(await request.json()))
+
+
+@app.get("/api/llm/usage")
+def llm_usage() -> JSONResponse:
+    """The LAST HOUR histogram: proxy traffic bucketed into eight slices."""
+    return JSONResponse(llmusage.summary())
 
 
 @app.get("/api/llm/metrics")

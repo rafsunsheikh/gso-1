@@ -951,3 +951,59 @@ makes the supervisor's child fail `rc=1` on every restart, forever, while the
 stale process keeps serving old code. Both times it looked like broken code.
 `supervisor status` should learn to distinguish "my child crashed" from
 "someone else owns my port".
+### 13b. Second pass — the views the first pass only recoloured (2026-08-23)
+
+The first pass got the shell, the Ops Room view and the Library cards. Reviewing
+it against the handoff showed the rest of the app was **the old layout wearing
+new colours** — which is exactly what the review said. This pass rebuilt each
+remaining screen against the handoff text, one at a time, screenshotting after
+every step.
+
+| Screen | Was | Now |
+|---|---|---|
+| Library | card grid | table: `34px 1fr 92px 112px 148px 100px`, filter chips, checkbox multi-select, bulk bar, skeleton rows, footer with pagination |
+| Planner | 3 columns of slate cards | 4 tone-dotted columns (Backlog/Today/In progress/Done), spec cards, dashed `+ Add task` that becomes an input |
+| Local LLM | one status box + a long form | live server card with a four-up stat grid, LAST HOUR histogram, models-on-disk rows with state pills and Load/Unload |
+| Site | 230px list + editor pane | deploy header card (live pill, unpublished count, Preview/Publish) over a content table with state pills and edited times |
+| In VSCode | cards | the Library's row language, one column narrower |
+| Chat | slate bubbles | the Ops Room's bubble language at page width |
+| Details dock | six stacked `slate-800/40` sections | four spec cards — identity+actions, git, run config with a 34×20 switch, and a failed-run card that hands the problem to Ops Room |
+| Ops Room dock | plain text log | user/assistant bubbles, a live Machine card (CPU/RAM from sysmon), pill composer with a teal send button |
+| Toasts | stack, bottom-right, two competing implementations | one pill, bottom-centre, 3200ms, with Undo |
+
+**Backend work the design forced.** A design is a specification of what data the
+app must have:
+
+- `overview.py` now returns `repo_index` — branch/dirty/ahead/behind for **every**
+  repo, not just the dirty fifty, because the table shows a git cell on every row.
+- `llmusage.py` is new: the LAST HOUR histogram needs traffic history that
+  llama.cpp does not keep, so the `/v1/messages` proxy records per-minute buckets
+  and `/api/llm/usage` aggregates them into eight slices. The card shows real
+  requests/tokens/errors or honest zeroes — it is never decoration.
+- `site.list_items()` returns `permalink` and `modified`, so the content table
+  can show a slug and an edited time without a request per row.
+- `planner.STATUSES` gained `backlog` for the four-column board.
+- Metrics sampling moved out of the Local LLM view: the dock's Machine card is
+  visible everywhere, so one sampler runs for the whole session.
+
+**Where the design was adapted rather than copied.** The handoff's Auto-start
+toggle has no backend, so that switch drives `favourite`, which does. The
+histogram, throughput and resident figures are wired to real sources; a stat
+with no source was cut rather than faked. The `Start a server` form has no
+artboard — it keeps every llama.cpp flag and adopts the design's field styling.
+
+**Two bugs worth remembering:**
+
+- `.lib-skel-bar` was a bare inline `<span>` with an inline `width` — which does
+  nothing. Every loading bar in the git column was invisible, and it read as
+  "no data" rather than "loading". `display: inline-block` fixed it.
+- Distinguishing *unknown* from *empty* matters: before the overview loads,
+  `gitFor()` returns null, and the first cut rendered that as "not a repo" for
+  all 270 rows. Loading state and absent state must not share a rendering.
+
+**Screenshots as the verification loop.** Chrome headless hangs on this page —
+the polling timers keep virtual time from advancing — so an offscreen Electron
+window (`BrowserWindow({show:false, webPreferences:{offscreen:true}})`) loads the
+real app, runs a snippet to select the view, and captures with
+`capturePage()`. Every table in this section was checked against the artboard
+that way before moving on.

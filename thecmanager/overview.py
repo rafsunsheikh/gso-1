@@ -117,8 +117,23 @@ def build() -> dict:
     )
     unsynced = [r for r in repos if r["ahead"] or r["behind"]]
 
+    # The Library table shows a git cell on every row, so it needs state for
+    # every repo — not just the dirty ones. Keyed by name and trimmed to the
+    # four fields the cell renders; the full list is ~250 entries.
+    index = {
+        r["name"]: {
+            "branch": r["branch"],
+            "dirty": r["dirty"],
+            "changed": r["changed_count"],
+            "ahead": r["ahead"],
+            "behind": r["behind"],
+        }
+        for r in repos
+    }
+
     return {
         "generated_at": time.time(),
+        "repo_index": index,
         "counts": {
             "apps": len(names),
             "repos": len(repos),

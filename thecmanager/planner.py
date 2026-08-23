@@ -1,7 +1,7 @@
 """Kanban-style project planner (boards -> tasks), persisted to planner.json.
 
 A board is a project (optionally linked to a registry app). Each task lives in
-one of three columns (todo / doing / done), carries notes, priority and a due
+one of four columns (backlog / todo / doing / done), carries notes, priority and a due
 date, and may itself link to an app.
 """
 from __future__ import annotations
@@ -15,7 +15,9 @@ from . import config
 
 _lock = threading.Lock()
 
-STATUSES = ("todo", "doing", "done")
+# "backlog" arrived with the redesign's four-column board; tasks written
+# before it default to "todo", which is now the "Today" column.
+STATUSES = ("backlog", "todo", "doing", "done")
 PRIORITIES = ("low", "med", "high")
 
 _PLANNER_FILE = config.DATA_DIR / "planner.json"
