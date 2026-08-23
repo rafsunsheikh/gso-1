@@ -16,6 +16,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
+import socket
+from collections import defaultdict
+
 from . import git_ops, health, runner, scanner
 
 # A sweep shells out to git once per repo. Cache hard; the UI polls often.
@@ -48,6 +51,39 @@ def _sweep(names: list[str]) -> list[dict]:
         return [r for r in pool.map(_repo_state, names) if r]
 
 
+def _port_owner(port: int) -> bool:
+    """True if something already holds this port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sk:
+        sk.settimeout(0.25)
+        return sk.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _conflicts(names: list[str], live: list[dict]) -> list[dict]:
+    """Apps configured on a port that another app is already serving.
+
+    The redesign surfaces this as a "port busy · :3000 held by <app>" row;
+    without it, starting the second app just fails with an opaque bind error.
+    """
+    by_port: dict[int, list[str]] = defaultdict(list)
+    for name in names:
+        port = scanner.effective_config(name).get("port")
+        if port:
+            by_port[int(port)].append(name)
+
+    holder = {int(a["port"]): a["name"] for a in live if a.get("port")}
+    out = []
+    for port, apps in by_port.items():
+        if len(apps) < 2:
+            continue
+        owner = holder.get(port)
+        if owner is None and not _port_owner(port):
+            continue  # nobody is actually using it; a latent clash, not a live one
+        for other in apps:
+            if other != owner:
+                out.append({"name": other, "port": port, "held_by": owner or "another process"})
+    return out
+
+
 def build() -> dict:
     names = scanner.list_app_names()
 
@@ -73,6 +109,7 @@ def build() -> dict:
             if (probe.get("state") or probe.get("status")) == "crashed":
                 failed.append({"name": name, "state": "crashed"})
 
+    conflicts = _conflicts(names, live)
     repos = _sweep(names)
     dirty = sorted(
         (r for r in repos if r["dirty"]),
@@ -89,11 +126,13 @@ def build() -> dict:
             "dirty": len(dirty),
             "failed": len(failed),
             "unsynced": len(unsynced),
+            "conflicts": len(conflicts),
         },
         "live": live,
         "dirty": dirty[:50],
         "failed": failed,
         "unsynced": unsynced[:50],
+        "conflicts": conflicts,
     }
 
 

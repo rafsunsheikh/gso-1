@@ -564,6 +564,10 @@
           metric: r.behind ? `behind ${r.behind}` : `ahead ${r.ahead}`,
           ctx: `branch ${r.branch || "?"}`, primary: "Open", kind: "warn",
         })),
+        ...(OVERVIEW.conflicts || []).slice(0, 3).map(k => ({
+          name: k.name, metric: "port busy",
+          ctx: `:${k.port} held by ${k.held_by}`, primary: "Open", kind: "err",
+        })),
         ...(OVERVIEW.failed || []).slice(0, 3).map(f => ({
           name: f.name, metric: f.state || `exit ${f.exit_code}`,
           ctx: "last run did not stay up", primary: "Logs", kind: "err",
