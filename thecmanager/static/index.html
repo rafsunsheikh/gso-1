@@ -6,43 +6,73 @@
   <title>GSO-1</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="apple-touch-icon" href="/static/favicon.svg" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/fonts.css" />
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/vendor/marked.min.js"></script>
+  <!-- Theme lives in tools/tailwind.config.js and is compiled into
+       /static/app.css. Regenerate with: cd tools && npm run css -->
   <style>
-    body { background: #0b0f17; }
+    body { background: #0c0a17; }
     ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-thumb { background: #2a3346; border-radius: 6px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    ::-webkit-scrollbar-thumb { background: #2e2a4d; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a345e; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+    /* card soft depth on bordered cards/panels */
+    [class~="rounded-xl"][class~="border"] { box-shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 26px rgba(0,0,0,.30); }
+    [class~="rounded-2xl"][class~="border"] { box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+    /* Markdown preview (no Tailwind typography plugin on the CDN build) */
+    #site-preview h1 { font-size: 1.45em; font-weight: 700; margin: .5em 0; }
+    #site-preview h2 { font-size: 1.2em; font-weight: 700; margin: .5em 0; }
+    #site-preview h3 { font-size: 1.05em; font-weight: 600; margin: .4em 0; }
+    #site-preview p, #site-preview ul, #site-preview ol { margin: .5em 0; }
+    #site-preview ul { list-style: disc; padding-left: 1.2em; }
+    #site-preview ol { list-style: decimal; padding-left: 1.2em; }
+    #site-preview a { color: #9b82f5; text-decoration: underline; }
+    #site-preview code { background: rgba(255,255,255,.08); padding: 1px 4px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: .9em; }
+    #site-preview pre { background: rgba(0,0,0,.4); padding: .6em; border-radius: 8px; overflow:auto; }
+    #site-preview img { max-width: 100%; border-radius: 8px; }
+    #site-preview blockquote { border-left: 3px solid #2e2a4d; padding-left: .8em; color: #9a96b3; }
   </style>
 </head>
 <body class="text-slate-200">
+    <a href="#grid" class="skip-link">Skip to app list</a>
+    <!-- Screen readers announce changes here: app started/stopped, errors. -->
+    <div id="a11y-live" class="sr-only-live" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="conn-banner" class="conn-banner" data-state="up" role="alert" aria-live="assertive"></div>
+    <div id="toasts" aria-live="polite" aria-atomic="false"></div>
   <div class="max-w-7xl mx-auto p-5">
     <!-- Header -->
     <header class="flex items-center justify-between mb-5">
       <div>
-        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
-          <span>🗂️</span> GSO-1
+        <h1 class="text-2xl font-bold text-white">
+          GSO-1
         </h1>
         <p class="text-sm text-slate-400" id="subtitle">Loading…</p>
       </div>
       <div class="flex items-center gap-3">
-        <input id="search" type="text" placeholder="Search apps…"
+        <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
           class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-indigo-500" />
-        <button id="refresh" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-sm">↻ Refresh</button>
+        <button id="ops-open" aria-label="Toggle Ops Room panel" aria-controls="ops-panel" class="bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded-lg px-3 py-2 text-sm font-medium">◉ Ops Room</button>
+        <button id="refresh" aria-label="Refresh app list" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 text-sm">↻ Refresh</button>
       </div>
     </header>
 
     <!-- View tabs -->
-    <div id="views" class="flex items-center gap-2 mb-3 border-b border-slate-800 pb-2"></div>
+    <nav id="views" aria-label="Views" role="tablist"
+           class="flex items-center gap-2 mb-3 border-b border-slate-800 pb-2"></nav>
 
     <!-- Filter pills -->
-    <div id="filters" class="flex flex-wrap gap-2 mb-4 text-xs"></div>
+    <div id="filters" role="group" aria-label="Filter by type"
+           class="flex flex-wrap gap-2 mb-4 text-xs"></div>
 
     <!-- App grid -->
-    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    <main id="grid" tabindex="-1" aria-label="Applications"
+           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+           style="display:grid"></main>
   </div>
 
   <!-- Task editor modal -->
-  <div id="task-modal" class="fixed inset-0 z-[55] hidden">
+  <div id="task-modal" class="fixed inset-0 z-[55] hidden" role="dialog" aria-modal="true" aria-label="Edit task">
     <div id="task-modal-bg" class="absolute inset-0 bg-black/60"></div>
     <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6">
       <div id="task-modal-content"></div>
@@ -50,7 +80,7 @@
   </div>
 
   <!-- Detail drawer -->
-  <div id="drawer" class="fixed inset-0 z-50 hidden">
+  <div id="drawer" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="App details">
     <div id="drawer-bg" class="absolute inset-0 bg-black/60"></div>
     <div class="absolute right-0 top-0 h-full w-full max-w-2xl bg-slate-900 border-l border-slate-700 shadow-2xl overflow-y-auto">
       <div id="drawer-content" class="p-6"></div>
@@ -58,10 +88,167 @@
   </div>
 
   <script>
+
+    // ---- accessibility helpers -------------------------------------------
+    let _announceTimer = null;
+    function announce(msg) {
+      const el = document.getElementById("a11y-live");
+      if (!el) return;
+      // Clearing first makes screen readers re-read an identical message.
+      el.textContent = "";
+      clearTimeout(_announceTimer);
+      _announceTimer = setTimeout(() => { el.textContent = msg; }, 60);
+    }
+
+    // Focus management for dialogs: remember what was focused, move focus in,
+    // trap Tab inside, and restore on close. Without this a keyboard user tabs
+    // straight out of an open dialog into the page behind it.
+    let _lastFocus = null;
+    function trapFocus(container) {
+      _lastFocus = document.activeElement;
+      const sel = 'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])';
+      const focusables = () => Array.from(container.querySelectorAll(sel)).filter(e => e.offsetParent !== null);
+      const first = focusables()[0];
+      if (first) {
+        first.focus();
+      } else {
+        // Content is still loading. Park focus on the dialog itself so the
+        // user is inside it, and let focusFirstIn() refine that later.
+        container.setAttribute("tabindex", "-1");
+        container.focus();
+      }
+      container._trap = (e) => {
+        if (e.key !== "Tab") return;
+        const f = focusables();
+        if (!f.length) return;
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && (i <= 0)) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      };
+      container.addEventListener("keydown", container._trap);
+    }
+    /** Move focus to the first focusable child once async content has landed. */
+    function focusFirstIn(container) {
+      if (!container || container.classList.contains("hidden")) return;
+      const sel = 'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])';
+      const first = Array.from(container.querySelectorAll(sel)).find(e => e.offsetParent !== null);
+      if (first && !container.contains(document.activeElement)) first.focus();
+      else if (first && document.activeElement === container) first.focus();
+    }
+
+    function releaseFocus(container) {
+      if (container && container._trap) container.removeEventListener("keydown", container._trap);
+      if (_lastFocus && document.contains(_lastFocus)) _lastFocus.focus();
+      _lastFocus = null;
+    }
+
     const $ = (s, r=document) => r.querySelector(s);
     const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
-    const api = (p, opt) => fetch(p, opt).then(r => r.json());
+    /**
+     * Hardened fetch wrapper.
+     *
+     * The previous one-liner did `fetch(p).then(r => r.json())` — no status
+     * check, no timeout. A 500 returning an HTML error page threw an opaque
+     * JSON parse error, and a 404 returning {"detail": ...} was handed to
+     * callers as if it were success data.
+     */
+    class ApiError extends Error {
+      constructor(message, status, path) {
+        super(message);
+        this.name = "ApiError";
+        this.status = status;
+        this.path = path;
+      }
+    }
+
+    async function api(p, opt) {
+      const o = Object.assign({}, opt);
+      // Without a timeout a hung backend leaves the UI waiting forever.
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), o.timeoutMs || 120000);
+      o.signal = ctl.signal;
+      let r;
+      try {
+        r = await fetch(p, o);
+      } catch (e) {
+        clearTimeout(timer);
+        setConnection(false);
+        throw new ApiError(
+          e.name === "AbortError" ? "Request timed out" : "Cannot reach GSO-1",
+          0, p);
+      }
+      clearTimeout(timer);
+      setConnection(true);
+
+      const body = await r.text();
+      let data = null;
+      try { data = body ? JSON.parse(body) : null; } catch { /* not JSON */ }
+
+      if (!r.ok) {
+        const detail = (data && (data.detail || data.error || data.message))
+          || (body ? body.slice(0, 160) : `HTTP ${r.status}`);
+        throw new ApiError(String(detail), r.status, p);
+      }
+      return data;
+    }
+
+    // ---- connection state -------------------------------------------------
+    let _connOk = true;
+    function setConnection(ok) {
+      if (ok === _connOk) return;
+      _connOk = ok;
+      const b = document.getElementById("conn-banner");
+      if (!b) return;
+      if (!ok) {
+        b.textContent = "⚠ Lost connection to GSO-1 — retrying…";
+        b.dataset.state = "down";
+        announce("Lost connection to GSO-1");
+      } else {
+        b.textContent = "✓ Reconnected";
+        b.dataset.state = "recovered";
+        announce("Reconnected to GSO-1");
+        setTimeout(() => { if (_connOk) b.dataset.state = "up"; }, 2500);
+      }
+    }
+
+    // ---- toasts -----------------------------------------------------------
+    function toast(message, kind) {
+      const host = document.getElementById("toasts");
+      if (!host) return;
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.dataset.kind = kind || "info";
+      el.setAttribute("role", kind === "error" ? "alert" : "status");
+      el.innerHTML = `<span aria-hidden="true">${kind === "error" ? "⚠" : kind === "success" ? "✓" : "ℹ"}</span>
+        <span class="flex-1"></span>
+        <button aria-label="Dismiss" class="text-slate-400 hover:text-slate-200">✕</button>`;
+      el.querySelector(".flex-1").textContent = message;
+      el.querySelector("button").onclick = () => el.remove();
+      host.appendChild(el);
+      if (kind !== "error") setTimeout(() => el.remove(), 5000);
+      else setTimeout(() => el.remove(), 12000);
+      announce(message);
+    }
+
+    /** Wrap an action so a failure is visible instead of swallowed. */
+    async function guard(label, fn) {
+      try { return await fn(); }
+      catch (e) {
+        toast(`${label}: ${e.message || e}`, "error");
+        return null;
+      }
+    }
     let ALL = [];
+    let ROOTS = [];                 // project root labels (one tab each)
+    let CHAT = null;                // chat state (Claude Code on local LLM)
+    let chatBusy = false;           // (legacy) immediate-send flag
+    let chatPolling = false;        // polling while a turn streams
+    let SITE = null;                // site CMS overview (collections + status)
+    let siteColl = null;            // selected collection id
+    let siteItems = [];             // items in the selected collection
+    let siteFile = null;            // selected item filename
+    let siteItem = null;            // loaded item {frontmatter, body}
+    let siteBusy = false;
     let VSCODE = [];                // folders open in VS Code
     let LLM = {};                   // llama.cpp server status
     let MODELS = [];                // available GGUF models
@@ -90,7 +277,50 @@
     };
     const typeClass = t => TYPE_COLORS[t] || TYPE_COLORS.unknown;
 
+    /** Placeholder cards so the first load shows shape, not a blank page. */
+    function renderSkeleton(n) {
+      const grid = $("#grid");
+      if (!grid || grid.children.length) return;   // never clobber real content
+      grid.innerHTML = Array.from({ length: n || 6 }, () => `
+        <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-4" aria-hidden="true">
+          <div class="skeleton h-4 w-2/3 mb-3"></div>
+          <div class="skeleton h-3 w-1/3 mb-4"></div>
+          <div class="skeleton h-8 w-full"></div>
+        </div>`).join("");
+      grid.setAttribute("aria-busy", "true");
+    }
+
+    let _loadedOnce = false;
+
     async function load() {
+      try {
+        await _loadInner();
+        _loadedOnce = true;
+        const grid = $("#grid");
+        if (grid) grid.removeAttribute("aria-busy");
+      } catch (e) {
+        const grid = $("#grid");
+        if (grid) grid.removeAttribute("aria-busy");
+        // Keep whatever is on screen if we have loaded before — stale data
+        // beats a blank page — but say clearly that it is stale.
+        if (_loadedOnce) {
+          toast(`Could not refresh: ${e.message || e}`, "error");
+        } else if (grid) {
+          grid.innerHTML = `
+            <div class="col-span-full bg-slate-800/60 border border-red-800 rounded-xl p-6 text-center">
+              <p class="text-red-300 font-medium mb-1">Could not load your apps</p>
+              <p class="text-slate-400 text-sm mb-4">${escapeHtml(String(e.message || e))}</p>
+              <button id="retry-load"
+                class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm">Retry</button>
+            </div>`;
+          const rb = $("#retry-load");
+          if (rb) rb.onclick = () => load();
+        }
+      }
+    }
+
+    async function _loadInner() {
+      if (!_loadedOnce) renderSkeleton(6);
       const [data, vsc, llm, plan] = await Promise.all([
         api("/api/apps"),
         api("/api/vscode/folders").catch(() => ({folders:[]})),
@@ -98,14 +328,18 @@
         api("/api/planner").catch(() => ({boards:[]})),
       ]);
       ALL = data.apps;
+      ROOTS = data.roots || [];
+      // If the remembered view points at a root that no longer exists, reset.
+      if (activeView.startsWith("root:") && !ROOTS.includes(activeView.slice(5)))
+        activeView = "favourites";
       VSCODE = vsc.folders || [];
       LLM = llm || {};
       PLANNER = plan && plan.boards ? plan : {boards: []};
       if (!activeBoardId && PLANNER.boards.length) activeBoardId = PLANNER.boards[0].id;
-      let sub = `${data.count} apps in ${escapeHtml(data.projects_dir)}`;
+      let sub = `${data.count} apps · ${ROOTS.map(escapeHtml).join(' · ')}`;
       const cs = ALL.filter(a => a.claude_session);
       if (cs.length) {
-        sub += ` · <span class="text-indigo-300">🤖 ${cs.length} Claude session`
+        sub += ` · <span class="text-indigo-300">${cs.length} Claude session`
           + `${cs.length > 1 ? 's' : ''}: ${cs.map(a => escapeHtml(a.name)).join(', ')}</span>`;
       }
       $("#subtitle").innerHTML = sub;
@@ -116,34 +350,63 @@
 
     function favCount() { return ALL.filter(a => a.favourite).length; }
 
-    // Apps in the current view (favourites vs all), before type/search filters.
+    // Apps in the current view (favourites / a specific root), before
+    // type/search filters.
     function viewApps() {
-      return activeView === "favourites" ? ALL.filter(a => a.favourite) : ALL;
+      if (activeView === "favourites") return ALL.filter(a => a.favourite);
+      if (activeView.startsWith("root:")) {
+        const label = activeView.slice(5);
+        return ALL.filter(a => a.root_label === label);
+      }
+      return ALL;
     }
+    function firstRootView() { return ROOTS.length ? `root:${ROOTS[0]}` : "favourites"; }
 
     function renderViews() {
-      const llmDot = LLM.state === "running" ? "🟢" : LLM.state === "loading" ? "🟡" : "⚪";
+      const rootTabs = ROOTS.map(label => ({
+        id: `root:${label}`,
+        label: label,
+        n: ALL.filter(a => a.root_label === label).length,
+      }));
       const tabs = [
-        { id: "favourites", label: `⭐ Favourites`, n: favCount() },
-        { id: "all", label: `🗂️ All Apps`, n: ALL.length },
-        { id: "vscode", label: `🖥️ Opened in VSCode`, n: VSCODE.length },
-        { id: "llm", label: `🧠 Local LLM ${llmDot}`, n: null },
-        { id: "planner", label: `📋 Planner`, n: PLANNER.boards ? PLANNER.boards.length : null },
+        { id: "favourites", label: `Favourites`, n: favCount() },
+        ...rootTabs,
+        { id: "vscode", label: `Opened in VSCode`, n: VSCODE.length },
+        { id: "llm", label: `Local LLM`, n: null },
+        { id: "chat", label: `Chat`, n: null },
+        { id: "site", label: `Site`, n: null },
+        { id: "planner", label: `Planner`, n: PLANNER.boards ? PLANNER.boards.length : null },
       ];
       $("#views").innerHTML = tabs.map(t => {
         const active = t.id === activeView;
-        return `<button data-view="${t.id}"
+        return `<button data-view="${t.id}" role="tab"
+          aria-selected="${active}" tabindex="${active ? 0 : -1}"
           class="px-4 py-1.5 rounded-lg text-sm font-medium ${active
             ? 'bg-indigo-600 text-white'
             : 'text-slate-300 hover:bg-slate-800'}">
           ${t.label}${t.n!==null?` <span class="opacity-60">${t.n}</span>`:''}</button>`;
       }).join("");
-      $("#views").querySelectorAll("button").forEach(b =>
+      const tabBtns = Array.from($("#views").querySelectorAll("button"));
+      tabBtns.forEach((b, i) => {
         b.onclick = () => {
           activeView = b.dataset.view;
           activeType = "all";
           renderViews(); renderFilters(); render();
-        });
+          announce(b.textContent.trim() + " view");
+        };
+        // WAI-ARIA tabs pattern: arrows move between tabs, Tab leaves the strip.
+        b.onkeydown = (e) => {
+          let next = null;
+          if (e.key === "ArrowRight") next = (i + 1) % tabBtns.length;
+          else if (e.key === "ArrowLeft") next = (i - 1 + tabBtns.length) % tabBtns.length;
+          else if (e.key === "Home") next = 0;
+          else if (e.key === "End") next = tabBtns.length - 1;
+          if (next === null) return;
+          e.preventDefault();
+          tabBtns[next].focus();
+          tabBtns[next].click();
+        };
+      });
     }
 
     function renderFilters() {
@@ -163,37 +426,74 @@
     }
 
     function render() {
-      const isGrid = (activeView === "favourites" || activeView === "all");
+      const isGrid = (activeView === "favourites" || activeView.startsWith("root:"));
       $("#filters").style.display = isGrid ? "flex" : "none";
       if (metricsPoll && activeView !== "llm") { clearInterval(metricsPoll); metricsPoll = null; }
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
+      if (activeView === "chat") return renderChat();
+      if (activeView === "site") return renderSite();
 
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
         (activeType === "all" || a.type === activeType) &&
         a.name.toLowerCase().includes(q));
-      let empty = `<p class="text-slate-500 col-span-full">No matching apps.</p>`;
+      // Say why nothing matched, and offer the way out — a bare "No matching
+      // apps." leaves the user to work out which of search/filter is hiding them.
+      const reasons = [];
+      if (q) reasons.push(`search &ldquo;${escapeHtml($("#search").value)}&rdquo;`);
+      if (activeType !== "all") reasons.push(`type <strong>${escapeHtml(activeType)}</strong>`);
+      let empty = `<div class="col-span-full text-center py-16 text-slate-500">
+          <p class="text-lg mb-1">No apps match</p>
+          <p class="text-sm mb-4">${reasons.length
+            ? `Filtered by ${reasons.join(" and ")}.`
+            : "This view has nothing in it yet."}</p>
+          ${reasons.length
+            ? `<button id="clear-filters"
+                 class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-2 text-sm">
+                 Clear filters</button>`
+            : ""}
+        </div>`;
       if (activeView === "favourites" && favCount() === 0) {
         empty = `<div class="col-span-full text-center py-16 text-slate-500">
-          <p class="text-lg mb-1">⭐ No favourites yet</p>
+          <p class="text-lg mb-1">No favourites yet</p>
           <p class="text-sm">Click the ☆ on any app card, or switch to
-          <button id="goto-all" class="text-indigo-400 hover:underline">All Apps</button> to browse.</p>
+          <button id="goto-all" class="text-indigo-400 hover:underline">your projects</button> to browse.</p>
         </div>`;
       }
       $("#grid").innerHTML = apps.map(card).join("") || empty;
+      const clearBtn = $("#clear-filters");
+      if (clearBtn) clearBtn.onclick = () => {
+        $("#search").value = "";
+        activeType = "all";
+        renderFilters(); render();
+        announce("Filters cleared");
+      };
       const gotoAll = $("#goto-all");
       if (gotoAll) gotoAll.onclick = () => {
-        activeView = "all"; renderViews(); renderFilters(); render();
+        activeView = firstRootView(); renderViews(); renderFilters(); render();
       };
       apps.forEach(a => {
-        $(`#card-${cssId(a.name)}`).onclick = (e) => {
+        const cardEl = $(`#card-${cssId(a.name)}`);
+        cardEl.onclick = (e) => {
           if (e.target.closest("button")) return;
           openDrawer(a.name);
         };
+        // role="button" carries an expectation of Enter/Space; a div does not
+        // provide it, so wire it explicitly.
+        cardEl.onkeydown = (e) => {
+          if (e.target.closest("button")) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openDrawer(a.name);
+          }
+        };
         const sb = $(`#start-${cssId(a.name)}`);
-        if (sb) sb.onclick = () => toggleRun(a.name, a.running);
+        if (sb) sb.onclick = () => {
+          announce(`${a.running ? "Stopping" : "Starting"} ${a.name}`);
+          toggleRun(a.name, a.running);
+        };
         const fb = $(`#fav-${cssId(a.name)}`);
         if (fb) fb.onclick = () => toggleFav(a.name);
         const vb = $(`#vsc-${cssId(a.name)}`);
@@ -201,8 +501,283 @@
       });
     }
 
+    // ---- Chat: Claude Code on the local LLM, streamed into this UI ----
+    function chatBubble(m) {
+      if (m.role === "user")
+        return `<div class="flex justify-end"><div class="bg-indigo-600 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap">${escapeHtml(m.text)}</div></div>`;
+      if (m.role === "assistant")
+        return `<div class="flex justify-start"><div class="bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-sm px-3 py-2 text-sm max-w-[80%] whitespace-pre-wrap">${escapeHtml(m.text)}</div></div>`;
+      if (m.role === "action")
+        return `<div class="text-xs text-slate-500 mono pl-1">🔧 ${escapeHtml(m.text)}</div>`;
+      if (m.role === "meta")
+        return `<div class="text-[11px] text-slate-600 pl-1">${escapeHtml(m.text)}</div>`;
+      if (m.role === "error")
+        return `<div class="text-red-400 text-sm pl-1">${escapeHtml(m.text)}</div>`;
+      if (m.role === "result")
+        return `<details class="text-xs text-slate-500 pl-1"><summary class="cursor-pointer">tool output</summary><pre class="mono whitespace-pre-wrap bg-black/40 rounded p-2 mt-1 text-slate-400 max-h-48 overflow-auto">${escapeHtml(m.text)}</pre></details>`;
+      return "";
+    }
+
+    function chatTick() {
+      api("/api/chat").then(d => {
+        CHAT = d;
+        if (activeView === "chat") render();
+        if (activeView === "chat" && d && d.busy) setTimeout(chatTick, 1200);
+        else chatPolling = false;
+      }).catch(() => { chatPolling = false; });
+    }
+    function startChatPoll() { if (!chatPolling) { chatPolling = true; setTimeout(chatTick, 800); } }
+
+    async function renderChat() {
+      if (!CHAT) {
+        try { CHAT = await api("/api/chat"); }
+        catch { CHAT = {messages:[], status:"done", llm:{state:"stopped"}}; }
+      }
+      const st = CHAT.llm || {};
+      const llmDown = st.state !== "running";
+      const busy = !!CHAT.busy;
+      const items = CHAT.messages || [];
+      const bubbles = items.map(chatBubble).join("") ||
+        `<p class="text-slate-500 text-sm">Powered by Claude Code on your local LLM, working in <span class="mono">${escapeHtml(CHAT.dir||'~')}</span>.
+         Ask anything about your computer — e.g. "what's using my disk?", "summarise this folder", "create a scratch script". Read-only tools run automatically; commands ask first.</p>`;
+      const banner = llmDown ? `<div class="border border-slate-700 bg-slate-800/60 rounded-xl p-3 mb-3 text-sm text-slate-300">
+          The local LLM isn't running. <button id="chat-goto-llm" class="text-indigo-400 hover:underline">Start it in Local LLM</button> to chat.</div>` : "";
+      const errBox = CHAT.error ? `<div class="text-red-400 text-sm my-2">${escapeHtml(CHAT.error)}</div>` : "";
+      let approval = "";
+      if (CHAT.action) {
+        approval = `<div class="border border-amber-700 bg-amber-900/30 rounded-xl p-3 my-2">
+          <div class="text-xs text-amber-300 mb-1">Allow Claude to run <span class="font-semibold">${escapeHtml(CHAT.action.tool||'this tool')}</span>?</div>
+          <pre class="mono text-xs text-slate-200 whitespace-pre-wrap mb-2">${escapeHtml(CHAT.action.command)}</pre>
+          <div class="flex gap-2">
+            <button id="chat-allow" class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm">Allow</button>
+            <button id="chat-deny" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm">Deny</button>
+          </div></div>`;
+      }
+      const disabled = busy || llmDown;
+      $("#grid").innerHTML = `
+        <div class="col-span-full max-w-3xl mx-auto w-full">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-white">Chat <span class="text-xs text-slate-500">Claude Code · local LLM</span></h2>
+            <button id="chat-clear" class="text-xs text-slate-400 hover:text-white">Clear</button>
+          </div>
+          ${banner}
+          <div id="chat-log" class="space-y-3 mb-3">${bubbles}${errBox}${approval}
+            ${busy && !CHAT.action ? `<div class="text-xs text-slate-500 pl-1">working…</div>` : ""}</div>
+          <div class="flex items-end gap-2">
+            <textarea id="chat-input" rows="2" ${disabled?'disabled':''} placeholder="Ask Claude about your computer…"
+              class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:border-indigo-500"></textarea>
+            <button id="chat-send" ${disabled?'disabled':''}
+              class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium">${busy?'…':'Send'}</button>
+          </div>
+        </div>`;
+      const goto = $("#chat-goto-llm"); if (goto) goto.onclick = () => { activeView="llm"; renderViews(); render(); };
+      const clr = $("#chat-clear"); if (clr) clr.onclick = async () => { CHAT = await api("/api/chat/reset",{method:"POST"}); render(); };
+      const allow = $("#chat-allow"); if (allow) allow.onclick = () => chatApprove(true);
+      const deny = $("#chat-deny"); if (deny) deny.onclick = () => chatApprove(false);
+      const send = $("#chat-send"); if (send) send.onclick = () => chatSend();
+      const input = $("#chat-input");
+      if (input && !disabled) {
+        input.focus();
+        input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend(); } };
+      }
+      const log = $("#chat-log"); if (log) log.scrollTop = log.scrollHeight;
+    }
+
+    async function chatSend() {
+      const input = $("#chat-input"); if (!input) return;
+      const text = input.value.trim(); if (!text || (CHAT && CHAT.busy)) return;
+      try { CHAT = await api("/api/chat/send", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({message:text})}); }
+      catch (e) { CHAT = {...(CHAT||{messages:[]}), error:String(e)}; }
+      render(); startChatPoll();
+    }
+
+    async function chatApprove(ok) {
+      if (!CHAT || !CHAT.action) return;
+      try { CHAT = await api("/api/chat/approve", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id: CHAT.action.id, approve: ok})}); }
+      catch (e) { CHAT = {...(CHAT||{messages:[]}), error:String(e)}; }
+      render(); startChatPoll();
+    }
+
+    // ---- Site CMS (edit the Jekyll website) ----
+    function siteFieldHtml(key, val) {
+      const k = escapeHtml(key);
+      const label = `<label class="block text-[12px] text-slate-400 mb-0.5">${k}</label>`;
+      if (typeof val === "boolean")
+        return `<label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" data-key="${k}" data-type="bool" ${val?'checked':''}/> ${k}</label>`;
+      if (typeof val === "number")
+        return `<div>${label}<input data-key="${k}" data-type="number" value="${escapeHtml(String(val))}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm mono"/></div>`;
+      if (Array.isArray(val))
+        return `<div>${label}<textarea data-key="${k}" data-type="list" rows="${Math.max(2,val.length)}" placeholder="one per line" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm mono">${escapeHtml(val.join("\n"))}</textarea></div>`;
+      if (val && typeof val === "object")
+        return `<div>${label}<textarea data-key="${k}" data-type="json" rows="3" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs mono">${escapeHtml(JSON.stringify(val,null,2))}</textarea></div>`;
+      const s = val==null ? "" : String(val);
+      return `<div>${label}${s.length>60
+        ? `<textarea data-key="${k}" data-type="str" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">${escapeHtml(s)}</textarea>`
+        : `<input data-key="${k}" data-type="str" value="${escapeHtml(s)}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"/>`}</div>`;
+    }
+
+    function siteCollectFm() {
+      const fm = {};
+      $$("#site-editor [data-key]").forEach(el => {
+        const k = el.dataset.key, t = el.dataset.type;
+        if (t === "bool") fm[k] = el.checked;
+        else if (t === "number") { const n = parseFloat(el.value); fm[k] = isNaN(n) ? el.value : n; }
+        else if (t === "list") fm[k] = el.value.split("\n").map(s=>s.trim()).filter(Boolean);
+        else if (t === "json") { try { fm[k] = JSON.parse(el.value); } catch { fm[k] = el.value; } }
+        else fm[k] = el.value;
+      });
+      return fm;
+    }
+
+    function siteEditorHtml() {
+      if (!siteFile) return `<div class="text-slate-500 text-sm">Select an item to edit, or click <span class="text-indigo-400">+ New</span>.</div>`;
+      if (!siteItem) return `<div class="text-slate-500 text-sm">Loading…</div>`;
+      const fm = siteItem.frontmatter || {};
+      const fields = Object.keys(fm).map(key => siteFieldHtml(key, fm[key])).join("");
+      return `
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="mono text-xs text-slate-500">${escapeHtml(siteColl)}/${escapeHtml(siteFile)}</span>
+            <button id="site-save" ${siteBusy?'disabled':''} class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm">Save</button>
+          </div>
+          <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 space-y-2">
+            <div class="text-[11px] uppercase tracking-wide text-slate-500">Fields</div>
+            ${fields || '<p class="text-xs text-slate-500">No front-matter fields.</p>'}
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Body (Markdown)</div>
+              <textarea id="site-body" class="w-full h-[52vh] bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mono resize-none focus:outline-none focus:border-indigo-500">${escapeHtml(siteItem.body||'')}</textarea>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Preview</div>
+              <div id="site-preview" class="h-[52vh] overflow-auto bg-slate-900/40 border border-slate-800 rounded-xl p-3 text-sm text-slate-200"></div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function siteWireEditor() {
+      const body = $("#site-body"), prev = $("#site-preview");
+      if (body && prev) {
+        const upd = () => { prev.innerHTML = (window.marked ? marked.parse(body.value||"") : escapeHtml(body.value||"")); };
+        body.oninput = upd; upd();
+      }
+      const save = $("#site-save"); if (save) save.onclick = siteSave;
+    }
+
+    async function renderSite() {
+      if (!SITE) {
+        $("#grid").innerHTML = `<div class="col-span-full text-slate-500 text-sm">Loading site…</div>`;
+        try { SITE = await api("/api/site"); } catch { SITE = {configured:false}; }
+        if (SITE.configured && (SITE.collections||[]).length && !siteColl) {
+          siteColl = SITE.collections[0].id;
+          try { siteItems = (await api("/api/site/"+encodeURIComponent(siteColl))).items || []; } catch {}
+        }
+      }
+      if (!SITE.configured) {
+        $("#grid").innerHTML = `<div class="col-span-full text-slate-400 text-sm">
+          Site repo not found at <span class="mono">${escapeHtml(SITE.dir||'')}</span>.
+          Clone it there, or set <span class="mono">MANAGER_SITE_DIR</span> and restart GSO-1.</div>`;
+        return;
+      }
+      const cols = SITE.collections || [];
+      const colBtns = cols.map(c =>
+        `<button data-coll="${c.id}" class="w-full text-left px-3 py-2 rounded-lg text-sm ${c.id===siteColl?'bg-indigo-600 text-white':'text-slate-300 hover:bg-slate-800'}">
+           ${escapeHtml(c.label)} <span class="opacity-60">${c.count}</span></button>`).join("");
+      const itemBtns = siteItems.map(it =>
+        `<button data-file="${escapeHtml(it.file)}" title="${escapeHtml(it.title)}" class="w-full text-left px-3 py-1.5 rounded text-[13px] truncate ${it.file===siteFile?'bg-slate-700 text-white':'text-slate-400 hover:bg-slate-800'}">
+           ${escapeHtml(it.title)}</button>`).join("") || `<p class="text-xs text-slate-500 px-2">No items.</p>`;
+      const st = SITE.status || {};
+      const changed = st.changed_count || 0;
+      $("#grid").innerHTML = `
+        <div class="col-span-full">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-white">Site — your-site.github.io
+              <span class="text-xs text-slate-500">(${escapeHtml(st.branch||'')})</span></h2>
+            <div class="flex items-center gap-3">
+              <span class="text-xs ${changed?'text-amber-300':'text-slate-500'}">${changed?changed+' file'+(changed>1?'s':'')+' changed':'no changes'}</span>
+              <button id="site-publish" ${siteBusy?'disabled':''} class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-medium">Publish to GitHub</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-[230px_1fr] gap-4 items-start">
+            <div class="space-y-3">
+              <div class="space-y-1">${colBtns}</div>
+              <div class="border-t border-slate-800 pt-2">
+                <div class="flex items-center justify-between px-1 mb-1">
+                  <span class="text-[11px] uppercase tracking-wide text-slate-500">Items</span>
+                  <button id="site-new" class="text-xs text-indigo-400 hover:underline">+ New</button>
+                </div>
+                <div class="space-y-0.5 max-h-[64vh] overflow-auto">${itemBtns}</div>
+              </div>
+            </div>
+            <div id="site-editor" class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">${siteEditorHtml()}</div>
+          </div>
+        </div>`;
+      $$("#grid [data-coll]").forEach(b => b.onclick = () => siteSelectCollection(b.dataset.coll));
+      $$("#grid [data-file]").forEach(b => b.onclick = () => siteSelectItem(b.dataset.file));
+      const pub = $("#site-publish"); if (pub) pub.onclick = sitePublish;
+      const nw = $("#site-new"); if (nw) nw.onclick = siteNew;
+      siteWireEditor();
+    }
+
+    async function siteSelectCollection(coll) {
+      siteColl = coll; siteFile = null; siteItem = null; siteItems = []; renderSite();
+      try { siteItems = (await api("/api/site/"+encodeURIComponent(coll))).items || []; } catch {}
+      renderSite();
+    }
+
+    async function siteSelectItem(file) {
+      siteFile = file; siteItem = null; renderSite();
+      try { siteItem = await api(`/api/site/${encodeURIComponent(siteColl)}/${encodeURIComponent(file)}`); } catch {}
+      renderSite();
+    }
+
+    async function siteSave() {
+      if (!siteFile || siteBusy) return;
+      siteItem = { frontmatter: siteCollectFm(), body: ($("#site-body")||{}).value || "" };
+      siteBusy = true; renderSite();
+      try {
+        await api(`/api/site/${encodeURIComponent(siteColl)}/${encodeURIComponent(siteFile)}`,
+          {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(siteItem)});
+        SITE = await api("/api/site");
+        flash("Saved "+siteFile, true);
+      } catch (e) { flash("Save failed", false); }
+      siteBusy = false; renderSite();
+    }
+
+    async function siteNew() {
+      const file = prompt("New file name (e.g. 2025-06-20-my-post.md):");
+      if (!file) return;
+      const title = prompt("Title:") || "Untitled";
+      siteBusy = true; renderSite();
+      try {
+        const r = await api("/api/site/"+encodeURIComponent(siteColl),
+          {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({file, frontmatter:{title}, body:"Write your content here.\n"})});
+        if (r.ok) { siteItems = (await api("/api/site/"+encodeURIComponent(siteColl))).items || []; siteBusy=false; await siteSelectItem(r.file); SITE = await api("/api/site"); flash("Created "+r.file, true); return; }
+        flash(r.output || "Create failed", false);
+      } catch (e) { flash("Create failed", false); }
+      siteBusy = false; renderSite();
+    }
+
+    async function sitePublish() {
+      if (siteBusy) return;
+      const msg = prompt("Commit message:", "Update site content");
+      if (msg === null) return;
+      siteBusy = true; renderSite();
+      try {
+        const r = await api("/api/site/publish", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({message: msg})});
+        if (r.ok) flash(r.nochange ? "Nothing to publish." : "Published — GitHub Pages will rebuild shortly.", true);
+        else flash("Publish failed: "+(r.output||r.pushed||""), false);
+        SITE = await api("/api/site");
+      } catch (e) { flash("Publish failed", false); }
+      siteBusy = false; renderSite();
+    }
+
     async function openVscode(name) {
-      const r = await api(`/api/apps/${encodeURIComponent(name)}/vscode/open`, {method:"POST"});
+      let r;
+      try { r = await api(`/api/apps/${encodeURIComponent(name)}/vscode/open`, {method:"POST"}); }
+      catch (e) { toast(`Open in VS Code failed: ${e.message || e}`, "error"); return; }
       flash(r.message || (r.ok?"Opening…":"Failed"), r.ok);
       // Window state takes a moment to update; refresh shortly after.
       setTimeout(load, 1500);
@@ -215,7 +790,7 @@
         f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
       if (!folders.length) {
         $("#grid").innerHTML = `<div class="col-span-full text-center py-16 text-slate-500">
-          <p class="text-lg mb-1">🖥️ No VS Code windows detected</p>
+          <p class="text-lg mb-1">No VS Code windows detected</p>
           <p class="text-sm">Open a project with “⧉ Edit with VSCode” from All Apps.</p></div>`;
         return;
       }
@@ -583,7 +1158,7 @@
         $("#grid").innerHTML = `<div class="col-span-full">
           <button id="new-board" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm mb-4">+ New board</button>
           <div class="text-center py-16 text-slate-500">
-            <p class="text-lg mb-1">📋 No boards yet</p>
+            <p class="text-lg mb-1">No boards yet</p>
             <p class="text-sm">Create a board to start planning a project.</p>
           </div></div>`;
         $("#new-board").onclick = newBoard;
@@ -781,7 +1356,11 @@
           </div>
         </div>`;
       $("#task-modal").classList.remove("hidden");
-      const close = () => $("#task-modal").classList.add("hidden");
+      trapFocus($("#task-modal"));
+      const close = () => {
+        $("#task-modal").classList.add("hidden");
+        releaseFocus($("#task-modal"));
+      };
       $("#tm-close").onclick = close;
       $("#tm-cancel").onclick = close;
       $("#task-modal-bg").onclick = close;
@@ -806,7 +1385,9 @@
     }
 
     async function toggleFav(name) {
-      const r = await api(`/api/apps/${encodeURIComponent(name)}/favourite`, {method:"POST"});
+      let r;
+      try { r = await api(`/api/apps/${encodeURIComponent(name)}/favourite`, {method:"POST"}); }
+      catch (e) { toast(`Update favourite failed: ${e.message || e}`, "error"); return; }
       const app = ALL.find(a => a.name === name);
       if (app) app.favourite = r.favourite;
       renderViews(); renderFilters(); render();
@@ -816,20 +1397,24 @@
 
     function card(a) {
       const dot = a.running
-        ? '<span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>'
-        : '<span class="w-2 h-2 rounded-full bg-slate-600"></span>';
+        ? '<span class="w-2 h-2 rounded-full bg-green-400 animate-pulse" role="img" aria-label="Running"></span>'
+        : '<span class="w-2 h-2 rounded-full bg-slate-600" role="img" aria-label="Stopped"></span>';
       const btn = a.has_start_command
         ? `<button id="start-${cssId(a.name)}"
+             aria-label="${a.running ? 'Stop' : 'Start'} ${escapeHtml(a.name)}"
              class="text-xs px-3 py-1.5 rounded-md font-medium ${a.running
                ? 'bg-red-600 hover:bg-red-500 text-white'
                : 'bg-indigo-600 hover:bg-indigo-500 text-white'}">
              ${a.running ? '■ Stop' : '▶ Start'}</button>`
         : `<span class="text-xs text-slate-500">no run cmd</span>`;
       const star = `<button id="fav-${cssId(a.name)}" title="${a.favourite?'Unfavourite':'Favourite'}"
+          aria-label="${a.favourite ? 'Remove' : 'Add'} ${escapeHtml(a.name)} ${a.favourite ? 'from' : 'to'} favourites"
+          aria-pressed="${a.favourite ? 'true' : 'false'}"
           class="text-lg leading-none ${a.favourite?'text-amber-400':'text-slate-600 hover:text-amber-300'}">
           ${a.favourite?'★':'☆'}</button>`;
       return `
-      <div id="card-${cssId(a.name)}"
+      <div id="card-${cssId(a.name)}" role="button" tabindex="0"
+        aria-label="${escapeHtml(a.name)} details"
         class="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer transition">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0">
@@ -856,8 +1441,15 @@
 
     async function toggleRun(name, running) {
       const action = running ? "stop" : "start";
-      const r = await api(`/api/apps/${encodeURIComponent(name)}/${action}`, {method:"POST"});
-      flash(r.message || (r.ok ? "OK" : "Failed"), r.ok);
+      try {
+        const r = await api(`/api/apps/${encodeURIComponent(name)}/${action}`, {method:"POST"});
+        flash(r.message || (r.ok ? "OK" : "Failed"), r.ok);
+        announce(`${name} ${r.ok ? (action === "start" ? "started" : "stopped") : "failed to " + action}`);
+      } catch (e) {
+        // api() now throws on non-2xx and on network failure; without this the
+        // click produced an unhandled rejection and no visible feedback.
+        toast(`Could not ${action} ${name}: ${e.message || e}`, "error");
+      }
       await load();
       if (!$("#drawer").classList.contains("hidden")) openDrawer(name);
     }
@@ -874,15 +1466,19 @@
     async function openDrawer(name) {
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
       $("#drawer").classList.remove("hidden");
+      trapFocus($("#drawer"));
       $("#drawer-content").innerHTML = `<p class="text-slate-400">Loading ${name}…</p>`;
       const d = await api(`/api/apps/${encodeURIComponent(name)}`);
       $("#drawer-content").innerHTML = drawerHtml(d);
       wireDrawer(d);
+      focusFirstIn($("#drawer"));
+      announce(`${name} details opened`);
     }
 
     function closeDrawer() {
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
       $("#drawer").classList.add("hidden");
+      releaseFocus($("#drawer"));
     }
 
     // Poll setup logs + status until the job finishes.
@@ -952,9 +1548,9 @@
         <button id="d-refresh" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">↻</button>
       </div>
 
-      ${section("📝 Description", `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(d.description)}</p>`)}
+      ${section("Description", `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(d.description)}</p>`)}
 
-      ${section("🚀 Run config", `
+      ${section("Run config", `
         <div class="grid grid-cols-[120px_1fr] gap-y-1 text-sm items-center">
           <span class="text-slate-400">Start cmd</span>
           <span class="mono text-xs ${c.start_command?'text-slate-200':'text-slate-500'}">${c.start_command||"— none detected —"}</span>
@@ -978,19 +1574,19 @@
           <pre id="setup-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>
         </div>` : ""}`)}
 
-      ${section("🌿 Git", gitBox + (g.is_repo?'<div id="git-out" class="mt-2"></div>':''))}
+      ${section("Git", gitBox + (g.is_repo?'<div id="git-out" class="mt-2"></div>':''))}
 
-      ${section("❤️ Health", `
+      ${section("Health", `
         <div class="text-sm grid grid-cols-2 gap-y-1">
           <span class="text-slate-400">State</span><span>${healthBadge(h)}</span>
           <span class="text-slate-400">Port</span><span class="mono">${h.port?`${h.port} (${h.port_status})`:'—'}</span>
           <span class="text-slate-400">Uptime</span><span class="mono">${h.uptime_seconds}s</span>
         </div>`)}
 
-      ${section("📜 Logs", `<button id="d-logs" class="text-xs text-indigo-400 hover:underline">Load latest logs</button>
+      ${section("Logs", `<button id="d-logs" class="text-xs text-indigo-400 hover:underline">Load latest logs</button>
         <pre id="logs-out" class="hidden mt-2 bg-black/50 rounded p-3 text-xs mono text-slate-300 overflow-x-auto max-h-72"></pre>`)}
 
-      ${section("💬 Chat", `<p class="text-xs text-slate-500">AI chat about this app is a planned next pass (reads README + git + code, answers via Claude API).</p>`)}
+      ${section("Chat", `<p class="text-xs text-slate-500">AI chat about this app is a planned next pass (reads README + git + code, answers via Claude API).</p>`)}
       `;
     }
 
@@ -1062,17 +1658,148 @@
     $("#refresh").onclick = load;
     $("#search").oninput = render;
     $("#drawer-bg").onclick = closeDrawer;
-    document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Escape") return;
+      const modal = $("#task-modal");
+      if (modal && !modal.classList.contains("hidden")) {
+        modal.classList.add("hidden");
+        releaseFocus(modal);
+        return;                       // close the topmost dialog only
+      }
+      closeDrawer();
+    });
 
     load();
     setInterval(() => {
-      // Don't auto-reload while a drawer/modal is open or on the LLM/Planner
-      // views (it would reset inputs / drag state); those self-refresh.
+      // Don't auto-reload while a drawer/modal is open or on the LLM/Planner/
+      // Chat views (it would reset inputs / drag state); those self-refresh.
       const busy = !$("#drawer").classList.contains("hidden")
         || !$("#task-modal").classList.contains("hidden")
-        || activeView === "llm" || activeView === "planner";
+        || activeView === "llm" || activeView === "planner" || activeView === "chat"
+        || activeView === "site";
       if (!busy) load();
     }, 8000);
   </script>
+<!-- ============ Ops Room docked sidebar ============ -->
+<button id="ops-toggle" title="Ops Room (Cmd+J)" aria-label="Toggle Ops Room panel" aria-controls="ops-panel" aria-expanded="false"
+  class="fixed top-1/2 -translate-y-1/2 right-0 z-[60] bg-indigo-600 hover:bg-indigo-500 text-white
+         rounded-l-xl w-12 h-44 flex flex-col items-center justify-center gap-2 shadow-2xl
+         ring-2 ring-indigo-400/40 transition-all">
+  <span id="ops-toggle-icon" class="text-xl leading-none">&#9664;</span>
+  <span class="text-[11px] font-semibold tracking-wide"
+        style="writing-mode:vertical-rl; text-orientation:mixed;">OPS ROOM</span>
+</button>
+
+<aside id="ops-panel" aria-label="Ops Room" role="complementary"
+  class="fixed top-0 right-0 h-full z-[59] bg-slate-900 border-l border-slate-700 shadow-2xl
+         flex flex-col transition-transform duration-200"
+  style="width:420px; transform:translateX(100%);">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+    <div>
+      <div class="font-semibold text-white text-sm">Ops Room</div>
+      <div id="ops-status" class="text-[11px] text-slate-500">checking&hellip;</div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="ops-cancel" class="hidden text-[11px] bg-rose-700 hover:bg-rose-600 rounded px-2 py-1">Stop</button>
+      <button id="ops-clear" class="text-[11px] bg-slate-800 hover:bg-slate-700 rounded px-2 py-1">Clear</button>
+    </div>
+  </div>
+  <div id="ops-log" class="flex-1 overflow-auto p-3 space-y-2 text-[13px] leading-relaxed">
+    <div class="text-slate-500 text-xs">
+      Ask about your projects &mdash; git state, apps, logs &mdash; or have it change its own code.
+      Runs on the local model; a reply takes ~30s.
+    </div>
+  </div>
+  <div class="p-3 border-t border-slate-800 shrink-0">
+    <textarea id="ops-input" rows="3" placeholder="Ask Ops Room&hellip;   (Cmd+Enter to send)"
+      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm resize-none
+             focus:outline-none focus:border-indigo-500"></textarea>
+    <div class="flex justify-between items-center mt-2">
+      <span id="ops-hint" class="text-[11px] text-slate-600"></span>
+      <button id="ops-send" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-1.5 text-sm">Send</button>
+    </div>
+  </div>
+</aside>
+
+<script>
+(function () {
+  var panel=document.getElementById('ops-panel'), toggle=document.getElementById('ops-toggle'),
+      icon=document.getElementById('ops-toggle-icon'), log=document.getElementById('ops-log'),
+      input=document.getElementById('ops-input'), send=document.getElementById('ops-send'),
+      cancel=document.getElementById('ops-cancel'), clear=document.getElementById('ops-clear'),
+      statusEl=document.getElementById('ops-status'), hint=document.getElementById('ops-hint');
+  var WIDTH=420, es=null, open=false;
+
+  function setOpen(v){
+    open=v;
+    panel.style.transform = v ? 'translateX(0)' : 'translateX(100%)';
+    toggle.style.right = v ? WIDTH+'px' : '0px';
+    icon.innerHTML = v ? '&#9654;' : '&#9664;';
+    toggle.setAttribute('aria-expanded', v ? 'true' : 'false');
+    var hb = document.getElementById('ops-open');
+    if (hb) hb.setAttribute('aria-expanded', v ? 'true' : 'false');
+    document.body.style.paddingRight = v ? WIDTH+'px' : '0px';
+    try { localStorage.setItem('opsPanelOpen', v?'1':'0'); } catch(e){}
+    if (v) setTimeout(function(){ input.focus(); }, 220);
+  }
+  toggle.addEventListener('click', function(){ setOpen(!open); });
+  var headerBtn = document.getElementById('ops-open');
+  if (headerBtn) headerBtn.addEventListener('click', function(){ setOpen(!open); });
+  document.addEventListener('keydown', function(e){
+    if ((e.metaKey||e.ctrlKey) && String(e.key).toLowerCase()==='j'){ e.preventDefault(); setOpen(!open); }
+  });
+
+  function add(cls, text){
+    var d=document.createElement('div'); d.className=cls; d.textContent=text;
+    log.appendChild(d); log.scrollTop=log.scrollHeight; return d;
+  }
+
+  function refreshStatus(){
+    fetch('/api/opsroom/status').then(function(r){return r.json();}).then(function(d){
+      statusEl.textContent = !d.available ? 'launcher not found' : (d.busy ? 'running…' : 'ready');
+      statusEl.className = 'text-[11px] ' + (d.available ? 'text-emerald-500' : 'text-rose-500');
+    }).catch(function(){ statusEl.textContent='offline'; });
+  }
+
+  function finish(){
+    if (es){ es.close(); es=null; }
+    send.disabled=false; cancel.classList.add('hidden'); hint.textContent='';
+    refreshStatus();
+  }
+
+  function ask(){
+    var prompt=input.value.trim();
+    if (!prompt || es) return;
+    input.value='';
+    add('text-indigo-300 whitespace-pre-wrap border-l-2 border-indigo-600 pl-2', prompt);
+    var out=add('text-slate-300 whitespace-pre-wrap font-mono text-[12px]','');
+    send.disabled=true; cancel.classList.remove('hidden'); hint.textContent='thinking…';
+    es=new EventSource('/api/opsroom/ask?prompt='+encodeURIComponent(prompt));
+    es.addEventListener('output', function(e){
+      out.textContent += (out.textContent ? '\n' : '') + e.data;
+      log.scrollTop=log.scrollHeight;
+    });
+    es.addEventListener('ping', function(){ hint.textContent='thinking…'; });
+    es.addEventListener('error', function(e){ if (e.data) add('text-rose-400 text-xs', e.data); finish(); });
+    es.addEventListener('done', function(){ finish(); });
+    es.onerror=function(){ finish(); };
+  }
+
+  send.addEventListener('click', ask);
+  input.addEventListener('keydown', function(e){
+    if ((e.metaKey||e.ctrlKey) && e.key==='Enter'){ e.preventDefault(); ask(); }
+  });
+  cancel.addEventListener('click', function(){
+    fetch('/api/opsroom/cancel',{method:'POST'}).then(function(){
+      add('text-rose-400 text-xs','cancelled'); finish();
+    });
+  });
+  clear.addEventListener('click', function(){ log.innerHTML=''; });
+
+  try { setOpen(localStorage.getItem('opsPanelOpen')==='1'); } catch(e){ setOpen(false); }
+  refreshStatus();
+  setInterval(refreshStatus, 15000);
+})();
+</script>
 </body>
 </html>

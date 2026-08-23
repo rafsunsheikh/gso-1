@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   Accessibility layer.
+   Tailwind's preflight removes the browser's default focus outline, and
+   nothing replaced it — so keyboard users had no idea where they were.
+   :focus-visible keeps rings off mouse clicks while showing them for
+   keyboard and assistive tech.
+   ------------------------------------------------------------------ */
+@layer base {
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid #9b82f5;          /* indigo-400, readable on the dark ground */
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Draggable kanban cards and other custom widgets opt in explicitly. */
+  [draggable="true"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid #9b82f5;
+    outline-offset: 2px;
+  }
+
+  /* Respect a user's reduced-motion preference. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Visible only when focused — the keyboard shortcut past 270 app cards. */
+  .skip-link {
+    position: absolute;
+    left: 0.5rem;
+    top: -3rem;
+    z-index: 100;
+    background: #502ce7;
+    color: #fff;
+    padding: 0.5rem 0.9rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: top 0.15s ease-in-out;
+  }
+  .skip-link:focus {
+    top: 0.5rem;
+  }
+
+  /* For text that must reach a screen reader but not the screen. */
+  .sr-only-live {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Loading / empty / error states.
+   ------------------------------------------------------------------ */
+@layer components {
+  /* Skeleton cards: show the shape of what is coming instead of a blank
+     screen. The scan of ~270 projects takes a moment on a cold cache. */
+  .skeleton {
+    background: linear-gradient(90deg, #211d3d 25%, #2e2a4d 50%, #211d3d 75%);
+    background-size: 200% 100%;
+    animation: gso-shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+  @keyframes gso-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton { animation: none; background: #211d3d; }
+  }
+
+  /* Connection banner — the backend can restart underneath an open window
+     (a promoted release does exactly that), and the page must say so. */
+  .conn-banner {
+    position: fixed; inset-inline: 0; top: 0; z-index: 80;
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    padding: 0.55rem 1rem;
+    font-size: 0.8125rem; font-weight: 500;
+    background: #7f1d1d; color: #fecaca;
+    box-shadow: 0 2px 12px rgba(0,0,0,.45);
+    transform: translateY(-100%);
+    transition: transform .18s ease-in-out;
+  }
+  .conn-banner[data-state="down"]       { transform: translateY(0); }
+  .conn-banner[data-state="recovered"]  { transform: translateY(0); background: #14532d; color: #bbf7d0; }
+
+  /* Toasts for action failures: start/stop/update errors were invisible. */
+  #toasts {
+    position: fixed; right: 1rem; bottom: 1rem; z-index: 90;
+    display: flex; flex-direction: column; gap: 0.5rem; max-width: 26rem;
+  }
+  .toast {
+    display: flex; align-items: flex-start; gap: 0.6rem;
+    padding: 0.7rem 0.9rem; border-radius: 0.6rem;
+    font-size: 0.8125rem; line-height: 1.35;
+    background: #211d3d; border: 1px solid #4a4668; color: #e7e6f0;
+    box-shadow: 0 8px 26px rgba(0,0,0,.45);
+    animation: gso-toast-in .16s ease-out;
+  }
+  .toast[data-kind="error"]   { border-color: #b91c1c; background: #2a1520; }
+  .toast[data-kind="success"] { border-color: #15803d; background: #12241a; }
+  @keyframes gso-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+}

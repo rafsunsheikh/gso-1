@@ -1,0 +1,9 @@
+{
+  "name": "gso1-build",
+  "private": true,
+  "description": "Build-time only: generates static/app.css so the app needs no CDN.",
+  "scripts": {
+    "css": "tailwindcss -c tailwind.config.js -i input.css -o ../thecmanager/static/app.css --minify"
+  },
+  "devDependencies": { "tailwindcss": "^3.4.17" }
+}
