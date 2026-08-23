@@ -1,0 +1,13 @@
+{
+  "name": "gso1-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GSO-1 desktop shell",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^43.4.1"
+  }
+}
