@@ -11,3 +11,4 @@ node_modules/
 data/*.json
 data/schedule_state.json
 !data/.gitkeep
+data/*.jsonl
