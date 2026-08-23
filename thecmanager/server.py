@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (
-    claudebridge, config, git_ops, health, llm, llmproxy, llmusage, planner, runner,
-    scanner, sysmon, telegrambot, vscode,
+    claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage, planner,
+    runner, scanner, sysmon, telegrambot, vscode,
 )
 from . import chat as chat_agent
 from . import scheduler
@@ -34,6 +34,7 @@ def _start_telegram() -> None:
     telegrambot.start()  # no-op unless MANAGER_TELEGRAM_TOKEN is set
     chat_agent.register_web_handlers()  # web Chat tab's bridge routing
     scheduler.start()  # recurring reports; jobs live in data/schedule.json
+    events.record("run", "gso-1", f"dashboard up on :{config.PORT}")
 
 
 atexit.register(scheduler.stop)
@@ -132,6 +133,11 @@ def start_app(name: str) -> JSONResponse:
     result = runner.start(
         name, cfg["start_command"], str(scanner.app_path(name)), cfg["port"]
     )
+    events.record(
+        "run" if result["ok"] else "fail", name,
+        f"started on :{cfg['port']}" if result["ok"] and cfg.get("port")
+        else "started" if result["ok"] else f"failed to start — {result.get('message', '')}".strip(),
+    )
     status = 200 if result["ok"] else 400
     return JSONResponse(result, status_code=status)
 
@@ -140,6 +146,8 @@ def start_app(name: str) -> JSONResponse:
 def stop_app(name: str) -> JSONResponse:
     _require(name)
     result = runner.stop(name)
+    if result["ok"]:
+        events.record("stop", name, "stopped")
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
@@ -210,6 +218,9 @@ def app_git(name: str) -> JSONResponse:
 def update_app(name: str) -> JSONResponse:
     _require(name)
     result = git_ops.update(scanner.app_path(name))
+    first = (result.get("output") or "").strip().splitlines()
+    events.record("git" if result["ok"] else "fail", name,
+                  first[0][:110] if first else ("pulled" if result["ok"] else "pull failed"))
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
@@ -354,18 +365,31 @@ def llm_start(body: LlmStartBody) -> JSONResponse:
         cache_type_k=body.cache_type_k,
         cache_type_v=body.cache_type_v,
     )
+    if result["ok"]:
+        events.record("llm", "llama-server",
+                      f"started on :{body.port or llm.DEFAULT_PORT} · ctx {body.ctx:,}")
+    else:
+        events.record("fail", "llama-server", result.get("message", "failed to start")[:110])
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
 @app.post("/api/llm/stop")
 def llm_stop() -> JSONResponse:
     result = llm.stop()
+    if result["ok"]:
+        events.record("llm", "llama-server", "stopped")
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
 @app.get("/api/llm/logs", response_class=PlainTextResponse)
 def llm_logs(lines: int = 200) -> PlainTextResponse:
     return PlainTextResponse(llm.tail_log(lines) or "(no logs yet)")
+
+
+@app.get("/api/events")
+def list_events(limit: int = 60, since: float | None = None) -> JSONResponse:
+    """The Ops Room timeline. `since` is a unix timestamp — the UI sends midnight."""
+    return JSONResponse({"events": events.recent(limit=limit, since=since)})
 
 
 @app.get("/api/overview")

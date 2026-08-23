@@ -1,14 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6366f1"/>
-      <stop offset="0.55" stop-color="#8b5cf6"/>
-      <stop offset="1" stop-color="#0ea5e9"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
-  <rect x="13" y="13" width="16" height="16" rx="4" fill="#ffffff" opacity="0.95"/>
-  <rect x="35" y="13" width="16" height="16" rx="4" fill="#ffffff" opacity="0.75"/>
-  <rect x="13" y="35" width="16" height="16" rx="4" fill="#ffffff" opacity="0.75"/>
-  <rect x="35" y="35" width="16" height="16" rx="4" fill="#34d399"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="GSO-1">
+  <!-- The handoff's identity mark: 270 repos, one live.
+       96x96 rounded square (r23) in #14121f with a 3px inner stroke, four
+       20x20 r5 cells at 24/52 — brand purple, two at 50%, one teal. -->
+  <rect width="96" height="96" rx="23" fill="#14121f"/>
+  <rect x="1.5" y="1.5" width="93" height="93" rx="21.5"
+        fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
+  <rect x="24" y="24" width="20" height="20" rx="5" fill="#502ce7"/>
+  <rect x="52" y="24" width="20" height="20" rx="5" fill="#502ce7" fill-opacity="0.5"/>
+  <rect x="24" y="52" width="20" height="20" rx="5" fill="#502ce7" fill-opacity="0.5"/>
+  <rect x="52" y="52" width="20" height="20" rx="5" fill="#00e0b7"/>
 </svg>

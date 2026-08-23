@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from . import config, git_ops, health, scanner
+from . import config, events, git_ops, health, scanner
 
 SCHEDULE_FILE = config.DATA_DIR / "schedule.json"
 STATE_FILE = config.DATA_DIR / "schedule_state.json"
@@ -110,6 +110,9 @@ def _mark_run(job_id: str, ok: bool, detail: str = "") -> None:
         "detail": detail[:400],
     }
     _write_json(STATE_FILE, s)
+    # The Ops Room timeline shows scheduled work alongside everything else.
+    events.record("job" if ok else "fail", job_id,
+                  (detail.strip().splitlines() or ["ran"])[0][:110])
 
 
 # ----------------------------------------------------------------- schedule

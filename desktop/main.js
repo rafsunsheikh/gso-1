@@ -140,9 +140,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "GSO-1",
-    backgroundColor: "#0b1020",
+    // Matches --bg so the window does not flash a different dark before paint.
+    backgroundColor: "#09080f",
     ...(icon ? { icon } : {}),
     titleBarStyle: "hiddenInset",
+    // The page draws its own 38px title bar; centre the lights in it.
+    trafficLightPosition: { x: 14, y: 12 },
     show: false,
     webPreferences: {
       // The renderer only shows a local dashboard; it needs no Node access.

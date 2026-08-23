@@ -48,10 +48,24 @@
   </script>
   <body class="text-slate-200">
     <a href="#grid" class="skip-link">Skip to app list</a>
+    <script>
+      // Only the Electron shell has traffic lights to leave room for.
+      if (!/Electron/.test(navigator.userAgent)) document.body.dataset.shell = "web";
+    </script>
     <!-- Screen readers announce changes here: app started/stopped, errors. -->
     <div id="a11y-live" class="sr-only-live" role="status" aria-live="polite" aria-atomic="true"></div>
     <div id="conn-banner" class="conn-banner" data-state="up" role="alert" aria-live="assertive"></div>
     <div id="toasts" aria-live="polite" aria-atomic="false"></div>
+  <!-- ============ Title bar ============ -->
+  <!-- 38px of draggable window chrome. Electron draws the traffic lights over
+       the left inset (titleBarStyle: hiddenInset), so that space is reserved. -->
+  <div class="gso-titlebar">
+    <span class="gso-tb-lights" aria-hidden="true"></span>
+    <span class="gso-tb-title" id="tb-title">GSO-1</span>
+    <button id="theme-toggle" class="gso-theme-toggle" aria-label="Switch colour theme"
+      title="Switch between dark and light">DARK</button>
+  </div>
+
   <div class="gso-shell">
     <!-- ============ Sidebar ============ -->
     <aside class="gso-side" aria-label="Main navigation">
@@ -92,14 +106,18 @@
         </div>
         <button id="cmdk" class="gso-cmdk" title="Jump to anything — Cmd+K"
           aria-label="Jump to anything">
-          <span aria-hidden="true">&#9906;</span><kbd>&#8984;K</kbd>
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none"
+               stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 14 14"/>
+          </svg><kbd>&#8984;K</kbd>
         </button>
         <div class="gso-head-right">
-          <button id="theme-toggle" class="gso-theme-toggle" aria-label="Switch colour theme"
-            title="Switch between dark and light">DARK</button>
-          <button id="refresh" class="gso-icon-btn" aria-label="Rescan projects" title="Rescan">&#10227;</button>
-          <button id="dock-details" class="gso-dock-btn" aria-pressed="false"
-            aria-controls="drawer" title="Show repo details">Details</button>
+          <button id="refresh" class="gso-icon-btn" aria-label="Rescan projects" title="Rescan projects">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2v3.2h-3.2"/>
+            </svg>
+          </button>
           <button id="ops-open" class="gso-dock-btn" aria-pressed="false" aria-controls="ops-panel"
             title="Toggle Ops Room (Cmd+J)">
             <span class="gso-dot" data-state="live" aria-hidden="true"></span>Ops Room</button>
@@ -344,6 +362,8 @@
     }
     let ALL = [];
     let ROOTS = [];                 // project root labels (one tab each)
+    let EVENTS = null;              // today's timeline for the Ops Room view
+    let _evLoading = false;
     let USAGE = null;               // last-hour proxy traffic for the LLM view
     let usageLoaded = false;
     let SYS = null;                 // latest sysmon snapshot (CPU/RAM)
@@ -390,7 +410,7 @@
     function renderSkeleton(n) {
       const grid = $("#grid");
       if (!grid || grid.children.length) return;   // never clobber real content
-      grid.className = ""; grid.style.display = "block";
+      resetGrid();
       grid.innerHTML = `<div class="lib-table" aria-hidden="true">` +
         Array.from({ length: n || 8 }, (_, i) => `
         <div class="lib-row">
@@ -420,7 +440,7 @@
         if (_loadedOnce) {
           toast(`Could not refresh: ${e.message || e}`, "error");
         } else if (grid) {
-          grid.className = ""; grid.style.display = "block";
+          resetGrid();
           grid.innerHTML = `
             <div class="dk-card" data-tone="err" style="text-align:center;padding:28px">
               <div class="dk-fail-t" style="font-size:13.5px">Could not load your apps</div>
@@ -490,6 +510,21 @@
     let _ovLoading = false;
     let _ovError = null;
 
+    /** Today's events, from local midnight — the Ops Room timeline. */
+    async function loadEvents() {
+      if (_evLoading) return;
+      _evLoading = true;
+      try {
+        const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+        const d = await api(`/api/events?limit=60&since=${Math.floor(midnight.getTime() / 1000)}`);
+        EVENTS = d.events || [];
+      } catch (e) {
+        EVENTS = [];             // a missing log is not an error worth a toast
+      } finally {
+        _evLoading = false;
+      }
+    }
+
     async function loadOverview(force) {
       if (_ovLoading) return;
       _ovLoading = true;
@@ -525,9 +560,7 @@
     }
 
     function renderOpsRoom() {
-      const grid = $("#grid");
-      grid.style.display = "block";
-      grid.className = "ops-view";
+      const grid = resetGrid("ops-view");
 
       if (_ovError) {
         grid.innerHTML = `<div class="ops-empty" style="border-color:var(--err-line)">
@@ -551,6 +584,8 @@
         return;
       }
 
+      if (EVENTS === null && !_evLoading) loadEvents().then(renderOpsRoom);
+
       const c = OVERVIEW.counts || {};
       const hour = new Date().getHours();
       const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -567,11 +602,15 @@
                 <span class="ops-live-name">${escapeHtml(a.name)}</span>
                 ${a.port ? `<span class="ops-live-port">:${a.port}</span>` : ""}
               </div>
-              <div class="ops-live-meta">${escapeHtml(a.type || "process")}${a.pid ? ` · pid ${a.pid}` : ""}</div>
+              <div class="ops-live-meta">${escapeHtml(a.detail || a.type || "process")}</div>
               <div class="ops-live-foot">
-                <span class="ops-live-up">up ${fmtUptime(a.uptime_seconds)}</span>
-                <button class="ops-stop" data-stop="${escapeHtml(a.name)}"
-                  aria-label="Stop ${escapeHtml(a.name)}">Stop</button>
+                <span class="ops-live-up">${a.uptime_seconds ? `up ${fmtUptime(a.uptime_seconds)}` : ""}${
+                  a.pid ? `${a.uptime_seconds ? " · " : ""}pid ${a.pid}` : ""}</span>
+                ${a.stoppable === false ? ""
+                  : a.stop === "llm"
+                    ? `<button class="ops-stop" data-stopllm="1" aria-label="Stop llama-server">Stop</button>`
+                    : `<button class="ops-stop" data-stop="${escapeHtml(a.name)}"
+                        aria-label="Stop ${escapeHtml(a.name)}">Stop</button>`}
               </div>
             </div>`).join("")}</div>`
         : `<div class="ops-empty">
@@ -622,6 +661,42 @@
         { label: "Browse Library", act: "library", hint: `${c.apps || 0} apps` },
       ];
 
+      // ---- TODAY (timeline) + PORTS
+      const evs = EVENTS || [];
+      const timeline = evs.length
+        ? `<div class="ops-tl">${evs.map(e => {
+            const t = new Date(e.at * 1000);
+            const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+            return `<div class="ops-tl-row">
+              <span class="ops-tl-time">${hhmm}</span>
+              <span class="gso-dot" data-state="${e.tone || ""}" aria-hidden="true"></span>
+              <span class="ops-tl-repo">${escapeHtml(e.repo || "")}</span>
+              <span class="ops-tl-text">${escapeHtml(e.text || "")}</span>
+              <span class="ops-tl-tag">${escapeHtml(e.kind || "")}</span>
+            </div>`;
+          }).join("")}</div>`
+        : `<div class="ops-empty" style="padding:20px">
+             <div class="ops-empty-t">Nothing logged yet today</div>
+             <div class="ops-empty-s">Starts, pulls, publishes and scheduled jobs land here.</div>
+           </div>`;
+
+      const ports = OVERVIEW.ports || [];
+      const clashes = ports.filter(pt => pt.tone === "err").length;
+      const portsCard = `<div class="ops-ports">
+        <div class="ops-ports-head">
+          <span class="ops-tl-label">Ports</span>
+          <span class="ops-ports-note" data-err="${clashes ? "1" : "0"}">${
+            clashes ? `${clashes} contested` : `${ports.length} in use`}</span>
+        </div>
+        ${ports.length ? ports.map(pt => `<div class="ops-port-row">
+            <span class="ops-port-n">:${pt.port}</span>
+            <span class="ops-port-owner">${escapeHtml(pt.owner)}</span>
+            <span class="gso-dot" data-state="${pt.tone === "err" ? "" : "live"}"
+              style="${pt.tone === "err" ? "background:var(--err)" : ""}" aria-hidden="true"></span>
+          </div>`).join("")
+          : `<div class="lib-muted" style="font-size:11.5px;padding:4px 0">No ports in use.</div>`}
+      </div>`;
+
       // ---- RECENT
       const recent = ALL.slice(0, 8);
 
@@ -633,6 +708,15 @@
         <section>${sectionRule("brand", "Routines", "")}
           <div style="margin-top:11px" class="ops-routines">${routines.map(r =>
             `<button class="ops-routine" data-routine="${r.act}" title="${escapeHtml(r.label)} · ${escapeHtml(r.hint)}">${escapeHtml(r.label)}</button>`).join("")}</div></section>
+        <section>
+          <div class="ops-band">
+            <div class="ops-band-main">
+              ${sectionRule("", "Today", evs.length ? `${evs.length} events` : "")}
+              <div style="margin-top:11px">${timeline}</div>
+            </div>
+            <div class="ops-band-side">${portsCard}</div>
+          </div>
+        </section>
         <section>${sectionRule("editor", "Recent", `${c.repos || 0} repos`)}
           <div style="margin-top:11px" class="ops-chips">${recent.map(a =>
             `<button class="ops-chip" data-open="${escapeHtml(a.name)}">
@@ -643,6 +727,13 @@
 
       grid.querySelectorAll("[data-stop]").forEach(b =>
         b.onclick = () => toggleRun(b.dataset.stop, true));
+      grid.querySelectorAll("[data-stopllm]").forEach(b => b.onclick = async () => {
+        b.disabled = true; b.textContent = "Stopping…";
+        const r = await api("/api/llm/stop", { method: "POST" });
+        toast(r.message || (r.ok ? "llama-server stopped" : "Could not stop it"), r.ok ? "success" : "error");
+        await Promise.all([loadOverview(true), loadEvents()]);
+        renderOpsRoom();
+      });
       grid.querySelectorAll("[data-open]").forEach(b =>
         b.onclick = () => openDrawer(b.dataset.open));
       grid.querySelectorAll("[data-goto]").forEach(b =>
@@ -652,7 +743,7 @@
         if (a === "library") return selectView("library");
         if (a === "ops") return $("#ops-open").click();
         b.disabled = true; b.textContent = "Working…";
-        await loadOverview(true);
+        await Promise.all([loadOverview(true), loadEvents()]);
         if (a === "rescan") await load();
         renderOpsRoom();
         toast("Refreshed", "success");
@@ -743,6 +834,8 @@
 
       const t = $("#view-title");
       if (t) t.textContent = viewTitle();
+      const tb = $("#tb-title");
+      if (tb) tb.textContent = `GSO-1 · ${viewTitle()}`;
       syncChrome();
     }
 
@@ -783,6 +876,16 @@
         b.onclick = () => { activeType = b.dataset.type; renderFilters(); render(); });
     }
 
+    /** Hand #grid to a view: drop whatever the last view set inline.
+        An inline display:block from a previous render was silently defeating
+        .ops-view's flex gap — every section sat flush against the next. */
+    function resetGrid(cls) {
+      const g = $("#grid");
+      g.className = cls || "";
+      g.removeAttribute("style");
+      return g;
+    }
+
     function render() {
       $("#filters").style.display = "none";  // the table has its own chip row
       if (activeView === "opsroom") return renderOpsRoom();
@@ -792,9 +895,7 @@
       if (activeView === "chat") return renderChat();
       if (activeView === "site") return renderSite();
 
-      const gridEl = $("#grid");
-      gridEl.className = "";
-      gridEl.style.display = "block";
+      const gridEl = resetGrid();
 
       const q = $("#search").value.toLowerCase();
       const apps = viewApps().filter(a =>
@@ -1010,8 +1111,7 @@
           </div></div>`;
       }
       const disabled = busy || llmDown;
-      const gridEl = $("#grid");
-      gridEl.className = ""; gridEl.style.display = "block";
+      const gridEl = resetGrid();
       $("#view-title").textContent = "Chat";
       $("#subtitle").textContent = `Claude Code on the local model · working in ${CHAT.dir || "~"}`;
 
@@ -1167,7 +1267,7 @@
         </button>`;
       }).join("") || `<div class="lib-muted" style="padding:12px 2px">No items in this collection.</div>`;
 
-      $("#grid").className = ""; $("#grid").style.display = "block";
+      resetGrid();
       $("#grid").innerHTML = `
       <div class="site-wrap">
         <div class="site-deploy">
@@ -1274,8 +1374,7 @@
 
     // -------- "Opened in VSCode" view --------
     function renderVscode() {
-      const gridEl = $("#grid");
-      gridEl.className = ""; gridEl.style.display = "block";
+      const gridEl = resetGrid();
       const q = $("#search").value.toLowerCase();
       const folders = VSCODE.filter(f =>
         f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
@@ -1336,8 +1435,7 @@
       const opts = MODELS.map(m =>
         `<option value="${m.path}">${m.name} · ${m.size_gb}GB</option>`).join("");
 
-      const gridEl = $("#grid");
-      gridEl.className = ""; gridEl.style.display = "block";
+      const gridEl = resetGrid();
       $("#view-title").textContent = "Local LLM";
       $("#subtitle").textContent =
         `llama.cpp server ${s.state === "running" ? `on :${s.port}` : s.state || "stopped"} · ` +
@@ -1740,8 +1838,7 @@
     }
 
     function renderPlanner() {
-      const gridEl = $("#grid");
-      gridEl.className = ""; gridEl.style.display = "block";
+      const gridEl = resetGrid();
       const boards = PLANNER.boards;
 
       if (!boards.length) {
@@ -2120,7 +2217,6 @@
       // so the content column never drops below ~740px.
       if (window.opsRoom && window.opsRoom.isOpen()) window.opsRoom.open(false);
       $("#drawer").setAttribute("data-open", "1");
-      $("#dock-details").setAttribute("aria-pressed", "true");
       $("#drawer-content").innerHTML = `<p class="text-slate-400">Loading ${name}…</p>`;
       const d = await api(`/api/apps/${encodeURIComponent(name)}`);
       $("#drawer-content").innerHTML = drawerHtml(d);
@@ -2132,7 +2228,6 @@
     function closeDrawer() {
       if (setupPoll) { clearInterval(setupPoll); setupPoll = null; }
       $("#drawer").setAttribute("data-open", "0");
-      $("#dock-details").setAttribute("aria-pressed", "false");
     }
     window.closeDrawer = closeDrawer;   // the Ops Room dock closes this one
 
@@ -2388,7 +2483,13 @@
     }
 
     // events
-    $("#refresh").onclick = load;
+    $("#refresh").onclick = async () => {
+      const b = $("#refresh");
+      b.dataset.busy = "1";
+      try { await load(); await loadOverview(true); renderViews(); render(); }
+      finally { b.dataset.busy = "0"; }
+      toast("Rescanned your projects", "success");
+    };
     $("#search").oninput = render;
     // (no #drawer-bg: the Details dock is a column, not an overlay)
     document.addEventListener("keydown", e => {
@@ -2567,16 +2668,8 @@
           e.preventDefault(); focusSearch();
         }
       });
-      // Details dock toggle mirrors the drawer's state.
-      var d = document.getElementById("dock-details");
-      if (d) d.addEventListener("click", function () {
-        var dr = document.getElementById("drawer");
-        if (!dr) return;
-        if (dr.dataset.open !== "1") {
-          if (typeof lastDrawerApp !== "undefined" && lastDrawerApp) openDrawer(lastDrawerApp);
-          else if (typeof toast === "function") toast("Select an app to see its details", "info");
-        } else { closeDrawer(); }
-      });
+      // The Details dock has no header toggle: a row opens it, its own
+      // close button (or Escape) closes it.
     })();
   </script>
 <script>

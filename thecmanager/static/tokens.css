@@ -262,8 +262,30 @@
    "Global shell" section; sizes are the shipping sizes.
    ================================================================== */
 
-/* A desktop app frame: the window never scrolls, only .gso-body inside it. */
-.gso-shell { display: flex; height: 100vh; overflow: hidden; }
+/* A desktop app frame: the window never scrolls, only .gso-body inside it.
+   The 38px title bar sits above it, so the shell is the remaining height. */
+.gso-shell { display: flex; height: calc(100vh - 38px); overflow: hidden; }
+
+/* ---- title bar ---- */
+.gso-titlebar {
+  height: 38px; flex: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px 0 0;
+  background: var(--surface); border-bottom: 1px solid var(--line-2);
+  -webkit-app-region: drag;            /* the whole row moves the window */
+  user-select: none;
+}
+/* Electron paints the traffic lights over this inset. */
+.gso-tb-lights { width: 78px; flex: none; }
+.gso-tb-title {
+  flex: 1; min-width: 0; text-align: center;
+  font: 600 11.5px "Readex Pro", system-ui, sans-serif;
+  letter-spacing: 0.04em; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gso-titlebar .gso-theme-toggle { -webkit-app-region: no-drag; }
+/* In a browser tab there are no traffic lights to make room for. */
+body[data-shell="web"] .gso-tb-lights { width: 12px; }
 
 /* ---- sidebar ---- */
 .gso-side {
@@ -353,7 +375,7 @@
   background-repeat: no-repeat;
 }
 .gso-head {
-  padding: 15px 20px 13px;
+  padding: 16px 24px 14px;
   border-bottom: 1px solid var(--line-2);
   display: flex; align-items: center; gap: 14px;
 }
@@ -375,7 +397,8 @@
   color: var(--text-2); cursor: pointer;
   display: flex; align-items: center; gap: 7px;
 }
-.gso-cmdk:hover { background: var(--hover); color: var(--text); }
+.gso-cmdk:hover { background: var(--hover); color: var(--text); border-color: var(--primary-line); }
+.gso-cmdk svg { flex: none; color: var(--text-3); }
 .gso-cmdk kbd {
   font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text-3); background: none;
@@ -385,8 +408,15 @@
   width: 32px; height: 32px; border-radius: 999px; flex: none;
   border: 1px solid var(--line); background: transparent;
   color: var(--text-2); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  line-height: 1;
 }
 .gso-icon-btn:hover { background: var(--hover); color: var(--text); }
+.gso-icon-btn:active { background: var(--primary-soft); border-color: var(--primary-line); }
+/* Rescan spins while a sweep is in flight. */
+.gso-icon-btn[data-busy="1"] svg { animation: gsoSpin 0.9s linear infinite; }
+@keyframes gsoSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .gso-icon-btn[data-busy="1"] svg { animation: none; } }
 .gso-dock-btn {
   height: 32px; padding: 0 13px; border-radius: 999px; flex: none;
   border: 1px solid var(--line); background: transparent;
@@ -397,7 +427,7 @@
 .gso-dock-btn[aria-pressed="true"] {
   background: var(--primary-soft); border-color: var(--primary-line); color: var(--primary-text);
 }
-.gso-body { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
+.gso-body { flex: 1; min-height: 0; overflow: auto; padding: 22px 24px 32px; }
 
 @media (max-width: 900px) {
   .gso-side { position: absolute; z-index: 70; height: 100%; box-shadow: var(--shadow); }
@@ -406,7 +436,7 @@
 /* ==================================================================
    Ops Room view — LIVE / NEEDS YOU / ROUTINES / RECENT
    ================================================================== */
-.ops-view { display: flex; flex-direction: column; gap: 19px; }
+.ops-view { display: flex; flex-direction: column; gap: 24px; }
 
 .ops-live-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
 @media (max-width: 1100px) { .ops-live-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -561,8 +591,8 @@
 }
 .gso-dock-title { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--text); }
 .gso-dock-sub { font-size: 10.5px; color: var(--text-3); }
-.gso-dock-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
-.gso-dock-foot { flex: none; padding: 12px 14px; border-top: 1px solid var(--line-2); }
+.gso-dock-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 15px; }
+.gso-dock-foot { flex: none; padding: 11px 15px; border-top: 1px solid var(--line-2); }
 
 @media (max-width: 1180px) {
   .gso-dock { position: absolute; right: 0; top: 0; height: 100%; z-index: 65; box-shadow: var(--shadow); }
@@ -574,8 +604,8 @@
    ================================================================== */
 .lib-chiprow {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 20px; border-bottom: 1px solid var(--line-2);
-  margin: -20px -20px 0;      /* bleed to the content column edges */
+  padding: 13px 24px; border-bottom: 1px solid var(--line-2);
+  margin: -22px -24px 0;      /* bleed to the content column edges */
   flex-wrap: wrap;
 }
 .lib-chip {
@@ -592,7 +622,7 @@
 
 .lib-bulk {
   display: none; align-items: center; gap: 11px;
-  margin: 11px 0 0; height: 36px; padding: 0 13px; border-radius: 9px;
+  margin: 16px 0 0; height: 36px; padding: 0 13px; border-radius: 9px;
   background: var(--primary-soft); border: 1px solid var(--primary-line);
 }
 .lib-bulk[data-on="1"] { display: flex; }
@@ -604,15 +634,15 @@
 .lib-bulk button:hover { text-decoration: underline; }
 .lib-bulk .lib-bulk-clear { margin-left: auto; color: var(--text-3); }
 
-.lib-table { margin: 0 -20px; }
+.lib-table { margin: 14px -24px 0; }
 .lib-row {
   display: grid;
   grid-template-columns: 34px 1fr 92px 112px 148px 100px;
-  gap: 10px; align-items: center;
-  padding: 11px 20px; border-bottom: 1px solid var(--line-2);
+  gap: 12px; align-items: center;
+  padding: 13px 24px; border-bottom: 1px solid var(--line-2);
 }
 .lib-head {
-  padding: 10px 20px;
+  padding: 11px 24px;
   font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.09em; text-transform: uppercase; color: var(--label);
   border-bottom: 1px solid var(--line-2);
@@ -699,8 +729,8 @@
 .gso-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 
 /* The filter chips and the column header stay put while rows scroll past. */
-.lib-chiprow { position: sticky; top: -20px; z-index: 3; background: var(--bg); padding-top: 4px; }
-.lib-head { position: sticky; top: 26px; z-index: 2; background: var(--bg); }
+.lib-chiprow { position: sticky; top: -22px; z-index: 3; background: var(--surface); }
+.lib-head { position: sticky; top: 31px; z-index: 2; background: var(--bg); }
 
 /* ==================================================================
    Planner — README "3. Planner". Four tone-dotted columns of drag-able
@@ -713,7 +743,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.pl-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+.pl-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .pl-cols { grid-template-columns: repeat(2, 1fr); } }
 
 .pl-colhead {
@@ -774,7 +804,7 @@
    Local LLM — README "4. Local LLM": a live server card beside an hour
    of traffic, then the models on disk as rows.
    ================================================================== */
-.llm-wrap { display: flex; flex-direction: column; gap: 17px; }
+.llm-wrap { display: flex; flex-direction: column; gap: 24px; }
 .llm-toprow { display: flex; gap: 12px; align-items: stretch; }
 @media (max-width: 1000px) { .llm-toprow { flex-direction: column; } }
 
@@ -817,9 +847,10 @@
 /* ---- section rule shared by Local LLM and Site ---- */
 .sec-rule {
   display: flex; align-items: center; gap: 10px;
+  margin-top: 2px;
   font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.09em; text-transform: uppercase; color: var(--label);
-  margin-bottom: 10px;
+  margin-bottom: 13px;
 }
 .sec-rule::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
 .sec-note {
@@ -829,7 +860,7 @@
 .sec-rule .sec-note { order: 3; }
 
 /* ---- models on disk ---- */
-.llm-rows { display: flex; flex-direction: column; gap: 8px; }
+.llm-rows { display: flex; flex-direction: column; gap: 10px; }
 .llm-row {
   display: grid; grid-template-columns: 1fr 96px 110px 130px 104px;
   gap: 12px; align-items: center;
@@ -945,7 +976,7 @@
 /* ==================================================================
    Site — README "5. Site": a deploy header over the content table.
    ================================================================== */
-.site-wrap { display: flex; flex-direction: column; gap: 16px; }
+.site-wrap { display: flex; flex-direction: column; gap: 22px; }
 .site-deploy {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 14px 16px; border-radius: 13px;
@@ -971,7 +1002,7 @@
 .site-stat b { font: 600 15px "Readex Pro", system-ui, sans-serif; color: var(--warn-text); }
 .site-stat b[data-clean="1"] { color: var(--text-3); }
 
-.site-rows { display: flex; flex-direction: column; gap: 8px; }
+.site-rows { display: flex; flex-direction: column; gap: 10px; }
 .site-row {
   display: grid; grid-template-columns: 1fr 120px 130px 108px;
   gap: 12px; align-items: center;
@@ -1007,7 +1038,7 @@
   padding: 11px 12px; border-radius: 11px;
   background: var(--card-2); border: 1px solid var(--line);
 }
-.dk-card + .dk-card { margin-top: 11px; }
+.dk-card + .dk-card { margin-top: 13px; }
 .dk-card[data-tone="err"] { background: var(--err-soft); border-color: var(--err-line); }
 .dk-label {
   font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1153,3 +1184,67 @@ select.f-in { appearance: none; padding-right: 26px;
   background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
   background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
 textarea.f-in { resize: vertical; line-height: 1.55; }
+
+/* ==================================================================
+   Ops Room — "Today + Ports" band (README section 4).
+   ================================================================== */
+.ops-band {
+  display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 14px;
+  align-items: start;
+}
+/* minmax(0,…) above is load-bearing: a plain 1fr floors at the timeline's
+   min-content width and pushes the column wider than the shell. */
+@media (max-width: 1100px) { .ops-band { grid-template-columns: 1fr; } }
+
+.ops-tl {
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 268px; overflow-y: auto;
+  padding-right: 4px;
+}
+.ops-tl-row {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 6px 4px; border-radius: 7px;
+}
+.ops-tl-row:hover { background: var(--hover); }
+.ops-tl-time {
+  flex: none; width: 42px;
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+}
+.ops-tl-row .gso-dot { flex: none; align-self: center; }
+.ops-tl-repo {
+  flex: 0 1 auto; min-width: 0;
+  font: 500 12.5px "Readex Pro", system-ui, sans-serif; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ops-tl-text {
+  flex: 1 1 40%; min-width: 0; font-size: 12px; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ops-tl-tag {
+  flex: none; padding: 2px 7px; border-radius: 999px; background: var(--chip);
+  font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+}
+.ops-tl-label {
+  font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--label);
+}
+
+.ops-ports {
+  padding: 12px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line);
+}
+.ops-ports-head { display: flex; align-items: center; margin-bottom: 6px; }
+.ops-ports-note {
+  margin-left: auto;
+  font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3);
+}
+.ops-ports-note[data-err="1"] { color: var(--err-text); }
+.ops-port-row { display: flex; align-items: center; gap: 9px; padding: 4px 0; }
+.ops-port-n {
+  flex: none; width: 44px;
+  font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+}
+.ops-port-owner {
+  flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

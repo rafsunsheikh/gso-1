@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import git_ops
+from . import git_ops, events
 
 
 def _jsonable(v):
@@ -161,6 +161,9 @@ def publish(message: str) -> dict:
     if not c["ok"]:
         return {"ok": False, "step": "commit", "output": c["output"]}
     p = git_ops.push(SITE_DIR)
+    events.record("site" if p["ok"] else "fail", SITE_DIR.name,
+                  "published — Pages will rebuild" if p["ok"] and not c.get("nochange")
+                  else "nothing to publish" if c.get("nochange") else "publish failed")
     return {
         "ok": p["ok"],
         "committed": c["output"],

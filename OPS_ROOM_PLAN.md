@@ -1007,3 +1007,60 @@ window (`BrowserWindow({show:false, webPreferences:{offscreen:true}})`) loads th
 real app, runs a snippet to select the view, and captures with
 `capturePage()`. Every table in this section was checked against the artboard
 that way before moving on.
+
+### 13c. Shell, identity and the missing band (2026-08-23)
+
+Review after 13b: *"some sections are too compact and no gaps between them; the
+icon is still the old one; we don't need the Details button; refresh and search
+don't look nice; no top panel to hold the app"* — plus *"the LIVE section says
+nothing is running"*.
+
+**The gap bug was one line.** `.ops-view` sets `display:flex; gap:24px`, but
+every other view assigned `gridEl.style.display = "block"` inline, and an inline
+style beats a class. Whichever view ran first left `display:block` on `#grid`,
+so the Ops Room's flex gap silently never applied — measured gaps were
+`[0,0,0,0]`. Views now hand off through one `resetGrid(cls)` helper that clears
+inline styles; measured `[24,24,24,24]`. Spacing was then widened across the
+board: body padding `20 → 22/24/32`, table rows `11 → 13px`, section gaps
+`16-19 → 22-24px`.
+
+**Title bar.** The handoff specifies 38px of window chrome — traffic lights,
+centred `GSO-1 · <view>`, theme toggle right — which did not exist because
+Electron's `hiddenInset` hides the system bar and nothing replaced it. Added as
+a `-webkit-app-region: drag` row, with 78px reserved for the lights and
+`trafficLightPosition: {x:14, y:12}` in `main.js` to centre them in it. In a
+browser tab `body[data-shell="web"]` drops the reserve.
+
+**Identity.** The mark is now exactly the handoff's: 96×96 r23 in `#14121f`, 3px
+inner stroke at 14% white, four r5 cells — purple, two at 50%, one teal.
+Rasterised through an offscreen Electron window (no `rsvg`/ImageMagick on this
+machine), padded to the macOS grid, and built into `icon.icns` with `iconutil`,
+plus a black-alpha template for the tray. `~/Applications/GSO-1.app` was
+re-stamped and `lsregister -f` run — macOS caches launcher icons hard.
+
+**Header.** Details is gone: a row opens the dock, the dock closes itself, and
+the button was a third way to do it that could open on nothing. `⌘K` and rescan
+carry real inline SVG instead of the `⌲`/`⟳` glyphs, which rendered at different
+weights per font fallback; rescan spins while a sweep is in flight.
+
+**"Nothing running" was true and useless.** `overview.live` only listed apps
+GSO-1 had started, so the strip claimed nothing was up while the dashboard you
+were reading it in and the model answering you were both running. It now leads
+with the real services — `gso-1` on :8420 (not stoppable) and `llama-server`
+with its model, context and resident size — which is what the handoff's own
+sample data shows.
+
+**The band that was missing entirely.** Section 4 of the Ops Room spec — TODAY
+and PORTS — had never been built, because nothing recorded history. Added
+`events.py`: an append-only JSONL of `{at, kind, repo, text}`, trimmed at 400
+entries, written from app start/stop, git pull, site publish, llm start/stop,
+scheduled jobs and explicit rescans. `/api/events?since=<midnight>` feeds the
+timeline; `overview.ports` feeds the card, marking a port contested when a
+conflict names it.
+
+Two judgement calls there. Scans are logged **only on an explicit rescan** — the
+45-second cache refresh would have written "scanned 270 repos" every minute and
+made the timeline unreadable. And LLM traffic is **rolled up per 15-minute
+slot** rather than per request, so the feed reads
+`llama-server · 42 requests · 318k tokens · 0 errors`, which is exactly the line
+the handoff's sample data shows — arrived at from real counters.

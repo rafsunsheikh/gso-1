@@ -12,6 +12,7 @@ must not run on every poll.
 
 from __future__ import annotations
 
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
@@ -19,7 +20,11 @@ from typing import Any, Optional
 import socket
 from collections import defaultdict
 
-from . import git_ops, health, runner, scanner
+from . import config, events, git_ops, health, llm, runner, scanner, sysmon
+
+# Uptime for GSO-1 itself is measured from the first import of this module,
+# which happens during app startup.
+_PROCESS_START = time.time()
 
 # A sweep shells out to git once per repo. Cache hard; the UI polls often.
 _CACHE: dict[str, Any] = {"at": 0.0, "data": None}
@@ -84,7 +89,54 @@ def _conflicts(names: list[str], live: list[dict]) -> list[dict]:
     return out
 
 
-def build() -> dict:
+def _services() -> list[dict]:
+    """Long-running things GSO-1 owns or manages that are not scanned repos.
+
+    Without these the LIVE strip reads "nothing running" while the dashboard
+    you are reading it in — and the model answering you — are both up.
+    """
+    out: list[dict] = []
+
+    started = getattr(config, "STARTED_AT", None) or _PROCESS_START
+    out.append({
+        "name": "gso-1",
+        "kind": "service",
+        "port": int(os.environ.get("MANAGER_PORT", 8420)),
+        "pid": os.getpid(),
+        "uptime_seconds": max(0.0, time.time() - started),
+        "detail": f"dashboard · {len(scanner.list_app_names())} repos scanned",
+        "stoppable": False,
+    })
+
+    st = llm.status()
+    if st.get("state") in ("running", "loading"):
+        snap = sysmon.get_snapshot(st.get("pid"))
+        resident = ""
+        if snap and snap.get("ram", {}).get("llm_bytes"):
+            resident = f" · {snap['ram']['llm_bytes'] / 1e9:.1f}G resident"
+        ctx = st.get("ctx")
+        out.append({
+            "name": "llama-server",
+            "kind": "service",
+            "port": st.get("port"),
+            "pid": st.get("pid"),
+            "uptime_seconds": st.get("uptime_seconds") or 0,
+            "detail": f"{st.get('model') or 'model'}{f', ctx {ctx:,}' if ctx else ''}{resident}",
+            "stoppable": True,
+            "stop": "llm",
+        })
+
+    return out
+
+
+def build(record_scan: bool = False) -> dict:
+    """Aggregate everything the Ops Room needs.
+
+    `record_scan` is off for the 45s cache refresh: a timeline that logs
+    "scanned 270 repos" every minute is a timeline nobody reads. Only an
+    explicit rescan earns an entry.
+    """
+    started = time.time()
     names = scanner.list_app_names()
 
     live = []
@@ -96,10 +148,13 @@ def build() -> dict:
         if info and info.get("running"):
             live.append({
                 "name": name,
+                "kind": "app",
                 "port": port,
                 "pid": info.get("pid"),
                 "uptime_seconds": info.get("uptime_seconds", 0),
                 "type": cfg.get("type"),
+                "detail": cfg.get("start_command") or cfg.get("type") or "process",
+                "stoppable": True,
             })
         elif info and info.get("exit_code") not in (None, 0):
             failed.append({"name": name, "exit_code": info.get("exit_code")})
@@ -109,7 +164,8 @@ def build() -> dict:
             if (probe.get("state") or probe.get("status")) == "crashed":
                 failed.append({"name": name, "state": "crashed"})
 
-    conflicts = _conflicts(names, live)
+    live = _services() + live
+    conflicts = _conflicts(names, [a for a in live if a.get("kind") == "app"])
     repos = _sweep(names)
     dirty = sorted(
         (r for r in repos if r["dirty"]),
@@ -131,9 +187,29 @@ def build() -> dict:
         for r in repos
     }
 
+    if record_scan:
+        events.record("scan", "gso-1",
+                      f"scanned {len(names)} repos in {time.time() - started:.1f}s")
+
+    # Which ports are actually in use, and by what — the PORTS card.
+    ports = []
+    for a in live:
+        if a.get("port"):
+            ports.append({"port": int(a["port"]), "owner": a["name"],
+                          "tone": "live", "kind": a.get("kind", "app")})
+    clashing = {c["port"] for c in conflicts}
+    for pt in ports:
+        if pt["port"] in clashing:
+            pt["tone"] = "err"
+    for c in conflicts:
+        if not any(pt["port"] == c["port"] for pt in ports):
+            ports.append({"port": c["port"], "owner": c["held_by"], "tone": "err", "kind": "other"})
+    ports.sort(key=lambda pt: pt["port"])
+
     return {
         "generated_at": time.time(),
         "repo_index": index,
+        "ports": ports,
         "counts": {
             "apps": len(names),
             "repos": len(repos),
@@ -159,7 +235,7 @@ def get(force: bool = False) -> dict:
         cached["cached"] = True
         cached["age_seconds"] = round(now - _CACHE["at"], 1)
         return cached
-    data = build()
+    data = build(record_scan=force)
     _CACHE["at"] = now
     _CACHE["data"] = data
     out = dict(data)
