@@ -42,9 +42,36 @@ PIDFILE = VAR / "supervisor.pid"
 LOGFILE = VAR / "supervisor.log"
 STATEFILE = VAR / "state.json"
 
+def _load_env() -> None:
+    """Read <repo>/.env, without overriding variables already in the process.
+
+    The supervisor stamps MANAGER_HOST into every child it spawns, so if it did
+    not read this file the app could never see it: enabling the phone companion
+    in .env would silently keep binding loopback. Deliberately a local copy —
+    the supervisor stays stdlib-only and independent of the app package.
+    """
+    try:
+        text = (REPO / ".env").read_text()
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env()
+
 HOST = os.environ.get("MANAGER_HOST", "127.0.0.1")
 PORT = int(os.environ.get("MANAGER_PORT", "8420"))
 HEALTH_PATH = os.environ.get("SUPERVISOR_HEALTH_PATH", "/health")
+
+# 0.0.0.0 is a bind address, not a destination: probe over loopback.
+PROBE_HOST = "127.0.0.1" if HOST in ("0.0.0.0", "::", "") else HOST
 
 # Never copied into a release.
 # Never copied into a release. Secrets in particular: a release is a snapshot
@@ -280,7 +307,9 @@ def http_responds(host: str, port: int, path: str = HEALTH_PATH,
         return False
 
 
-def healthy(host: str = HOST, port: int = PORT) -> bool:
+def healthy(host: str = PROBE_HOST, port: int = PORT) -> bool:
+    if host in ("0.0.0.0", "::", ""):
+        host = "127.0.0.1"
     return tcp_open(host, port) and http_responds(host, port)
 
 
@@ -367,7 +396,7 @@ def verify(stamp: str, port: int | None = None) -> bool:
     log(f"verifying {stamp} app on port {port}")
     proc = spawn(rel, port=port)
     try:
-        ok = wait_healthy(HOST, port, timeout=60.0)
+        ok = wait_healthy(PROBE_HOST, port, timeout=60.0)
         log(f"verify {stamp}: {'PASS' if ok else 'FAIL (app)'}")
         return ok
     finally:

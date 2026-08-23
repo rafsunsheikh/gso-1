@@ -258,3 +258,44 @@ Four tabs — **Ops · Repos · Planner · Room**:
 
 Setup commands, log tails, the LLM start form and the site CMS stay on the
 desktop. The phone is for checking and unblocking, not configuring.
+
+### The phone cannot reach it
+
+Check what the process is actually bound to — this is the answer nine times in
+ten:
+
+```bash
+lsof -nP -iTCP:8420 -sTCP:LISTEN
+#   TCP 127.0.0.1:8420   -> this machine only, the phone cannot reach it
+#   TCP *:8420           -> reachable on the network
+python -m supervisor status | grep bind
+```
+
+If it says `127.0.0.1` while `.env` says `MANAGER_HOST=0.0.0.0`, something has
+**exported `MANAGER_HOST` in the shell that launched GSO-1**. A real environment
+variable beats the file, and the supervisor stamps its own value into every
+child it spawns, so the app never sees the file at all:
+
+```bash
+env | grep MANAGER_HOST      # if this prints anything, that is the cause
+unset MANAGER_HOST
+python -m supervisor stop && python -m supervisor start --daemon
+```
+
+Launching from `GSO-1.app` in Finder is unaffected — launchd gives it a clean
+environment, so `.env` wins.
+
+Other things to check, in order:
+
+1. **Same network.** The phone must be on the same Wi-Fi, not cellular, and not
+   a guest network — many routers isolate guest clients from each other.
+2. **The address changed.** DHCP reassigns; prefer `http://<hostname>.local:8420/m`,
+   which follows the machine. `scutil --get LocalHostName` prints the name.
+3. **macOS firewall.** `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate`.
+   If it is on, allow incoming connections for the Python in `.venv/bin`.
+4. **Prove it from the Mac itself** — this hits the same path the phone does:
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://$(ipconfig getifaddr en0):8420/m
+   ```
+   `200` means the server is fine and the problem is between the phone and the
+   Mac; no answer means the bind or the firewall.

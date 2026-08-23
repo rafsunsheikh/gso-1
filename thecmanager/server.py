@@ -114,6 +114,8 @@ def remote_status(request: Request) -> JSONResponse:
         "loopback": remoteauth.is_loopback(request),
         "authed": True,           # the middleware would have refused otherwise
         "token_configured": bool(config.MOBILE_TOKEN),
+        "bound_host": config.HOST,
+        "reachable_off_device": config.HOST not in ("127.0.0.1", "localhost", "::1"),
     })
 
 

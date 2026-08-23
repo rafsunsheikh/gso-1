@@ -120,7 +120,9 @@ def cmd_status(_args) -> int:
     print(f"releases   : {len(core.list_releases())}")
     for name in core.dangling_links():
         print(f"WARNING    : var/{name} -> missing release")
-    print(f"endpoint   : http://{core.HOST}:{core.PORT}")
+    print(f"endpoint   : http://{core.PROBE_HOST}:{core.PORT}")
+    if core.HOST not in ("127.0.0.1", "localhost", "::1"):
+        print(f"bind       : {core.HOST} (reachable from other devices)")
     print(f"health     : {'ok' if core.healthy() else 'down'}")
     return 0
 

@@ -41,6 +41,24 @@ path.write_text("\n".join(out) + "\n")
 path.chmod(0o600)
 PY
 
+# A MANAGER_HOST exported in the shell beats the file we just wrote, and the
+# supervisor stamps its own value into every child — so say so now rather than
+# letting the phone fail with "cannot connect".
+if [ -n "${MANAGER_HOST:-}" ] && [ "$MANAGER_HOST" != "0.0.0.0" ]; then
+  cat >&2 <<WARN
+
+  WARNING: MANAGER_HOST=$MANAGER_HOST is exported in this shell.
+  An environment variable overrides .env, so GSO-1 will keep binding
+  $MANAGER_HOST and the phone will not reach it. Either:
+
+      unset MANAGER_HOST          # then restart GSO-1 from this shell
+      export MANAGER_HOST=0.0.0.0 # or set it to match
+
+  Launching GSO-1.app from Finder is unaffected.
+
+WARN
+fi
+
 ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
 host="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
 
