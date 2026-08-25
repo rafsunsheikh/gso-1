@@ -137,6 +137,15 @@ h2 .num{font-family:var(--mono);font-size:.72rem;color:var(--accent-2);letter-sp
 .shot img{display:block;width:100%}
 .shot figcaption{padding:12px 18px;font-size:.8rem;color:var(--faint);border-top:1px solid var(--line);font-family:var(--mono)}
 
+.shots{display:grid;gap:18px;grid-template-columns:1fr 1fr;margin-top:18px}
+@media(max-width:820px){.shots{grid-template-columns:1fr}}
+/* The two shots are different shapes; crop both to one ratio and pin the
+   captions to the bottom so the pair reads as a matched set. */
+.shots .shot{display:flex;flex-direction:column}
+.shots .shot img{aspect-ratio:16/10;object-fit:cover;object-position:top center}
+.shots .shot figcaption{margin-top:auto}
+.phone{max-width:330px}
+
 /* install table */
 table{width:100%;border-collapse:collapse;margin-top:26px;font-size:.9rem;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line)}
@@ -250,8 +259,24 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
 <section class="rule">
   <div class="wrap">
     <figure class="shot rv" style="margin:0">
-      <img src="assets/screenshots/ops-room.jpg" alt="The GSO-1 Ops Room: two applications running, three repositories with uncommitted work, one failed run, and the ports currently in use">
-      <figcaption>The Ops Room, everything that needs you, on one screen.</figcaption>
+      <img src="assets/screenshots/ops-room.png" alt="The GSO-1 Ops Room: two applications running, three repositories with uncommitted work, the day's events, and the ports currently in use">
+      <figcaption>The Ops Room. Everything that needs you, on one screen.</figcaption>
+    </figure>
+
+    <div class="shots">
+      <figure class="shot rv" style="margin:0">
+        <img src="assets/screenshots/library.png" alt="The GSO-1 Library listing six projects with their detected kind: node, script, static, python, go and rust">
+        <figcaption>Six projects, six stacks. It worked out the kind on its own.</figcaption>
+      </figure>
+      <figure class="shot rv" style="margin:0">
+        <img src="assets/screenshots/first-run.png" alt="The GSO-1 first-run screen asking which folder holds your projects">
+        <figcaption>One question on first run, then it gets out of the way.</figcaption>
+      </figure>
+    </div>
+
+    <figure class="shot rv phone" style="margin:22px auto 0">
+      <img src="assets/screenshots/mobile.png" alt="The GSO-1 phone companion showing running applications, repositories needing a commit, and live RAM and CPU">
+      <figcaption>The companion at /m, behind a token you set on purpose.</figcaption>
     </figure>
   </div>
 </section>

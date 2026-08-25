@@ -26,11 +26,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshots/ops-room.jpg" alt="The GSO-1 Ops Room: two apps running, three repos with uncommitted work, one failed run, and the ports in use" width="100%">
+  <img src="docs/assets/screenshots/ops-room.png" alt="The GSO-1 Ops Room: two applications running, three repositories with uncommitted work, the day's events, and the ports currently in use" width="100%">
 </p>
 
 <p align="center">
-  <sub><em>Everything that needs you, on one screen.</em></sub>
+  <sub><em>The Ops Room. Everything that needs you, on one screen.</em></sub>
 </p>
 
 ---
@@ -123,6 +123,35 @@ It is a control plane for the machine you already own.
 
 ---
 
+## A look inside
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/assets/screenshots/first-run.png" alt="The GSO-1 first-run screen asking which folder holds your projects, with a browsable folder list" width="100%"><br>
+      <sub><strong>One question on first run.</strong> Point it at your projects folder. No config file, no terminal, and nothing leaves the machine.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/assets/screenshots/library.png" alt="The GSO-1 Library listing six projects with their detected kind: node, script, static, python, go and rust, each with state, git status and a start button" width="100%"><br>
+      <sub><strong>Six projects, six stacks, one start button each.</strong> node, script, static, python, go, rust. GSO-1 worked out the kind on its own.</sub>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="34%" valign="top" align="center">
+      <img src="docs/assets/screenshots/mobile.png" alt="The GSO-1 phone companion showing running applications with stop buttons, repositories needing a commit, and live RAM and CPU" width="86%">
+    </td>
+    <td width="66%" valign="top">
+      <br>
+      <sub><strong>The companion at <code>/m</code>.</strong> The same Ops Room on a phone: what is live, what needs a commit, and how the machine is holding up. It refuses every request from outside the machine unless you have deliberately set a token, so opening it up is a decision you make rather than a default you inherit.</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Quick start
 
 ### I just want to run it
@@ -189,14 +218,6 @@ cd desktop && npm install && npm start
 | **Multi-root** | Point it at several folders at once, `"Personal:~/Projects,Work:~/work"`, each gets its own tab. |
 | **Scheduled jobs** | Recurring tasks with their own history. |
 | **Kanban boards** | An activity monitor for what you are actually working on. |
-
-<p align="center">
-  <img src="docs/assets/screenshots/library.jpg" alt="The GSO-1 Library listing six projects with their detected kind, node, script, static, python, go, rust, plus state, git status, and a start button each" width="100%">
-</p>
-
-<p align="center">
-  <sub><em>Six projects, six stacks, one start button each. GSO-1 worked out the kind on its own.</em></sub>
-</p>
 
 ### Configuration
 
