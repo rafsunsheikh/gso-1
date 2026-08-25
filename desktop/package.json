@@ -97,7 +97,9 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "executableName": "gso-1",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
   }
 }
