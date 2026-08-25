@@ -23,6 +23,14 @@
   <img alt="Runs on localhost" src="https://img.shields.io/badge/runs-your%20machine-blue">
 </p>
 
+<p align="center">
+  <img src="docs/assets/screenshots/ops-room.jpg" alt="The GSO-1 Ops Room: two apps running, three repos with uncommitted work, one failed run, and the ports in use" width="100%">
+</p>
+
+<p align="center">
+  <sub><em>Everything that needs you, on one screen.</em></sub>
+</p>
+
 ---
 
 ## What is this, really?
@@ -136,6 +144,14 @@ cd desktop && npm install && npm start
 | **Multi-root** | Point it at several folders at once — `"Personal:~/Projects,Work:~/work"` — each gets its own tab. |
 | **Scheduled jobs** | Recurring tasks with their own history. |
 | **Kanban boards** | An activity monitor for what you are actually working on. |
+
+<p align="center">
+  <img src="docs/assets/screenshots/library.jpg" alt="The GSO-1 Library listing six projects with their detected kind — node, script, static, python, go, rust — plus state, git status, and a start button each" width="100%">
+</p>
+
+<p align="center">
+  <sub><em>Six projects, six stacks, one start button each. GSO-1 worked out the kind on its own.</em></sub>
+</p>
 
 ### Configuration
 
