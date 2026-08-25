@@ -1,4 +1,4 @@
-"""Edit a Jekyll site (your-site.github.io) from the dashboard, CMS-style.
+"""Edit a Jekyll site from the dashboard, CMS-style.
 
 Each Markdown file in a collection is an editable item: YAML front matter
 (rendered as form fields in the UI) plus a Markdown body. Save writes the file;
@@ -26,9 +26,11 @@ def _jsonable(v):
         return v.isoformat()
     return v
 
-SITE_DIR = Path(
-    os.environ.get("MANAGER_SITE_DIR", str(Path.home() / "Projects" / "your-site.github.io"))
-).expanduser()
+# Which Jekyll checkout to edit. There is no sensible default — it is one
+# specific repo on one specific machine — so the CMS stays switched off until
+# MANAGER_SITE_DIR names one.
+_SITE_ENV = os.environ.get("MANAGER_SITE_DIR", "").strip()
+SITE_DIR = Path(_SITE_ENV).expanduser() if _SITE_ENV else None
 
 # Jekyll collections to expose (folder -> label); trimmed to those that exist.
 COLLECTIONS = [
@@ -47,13 +49,33 @@ _FM_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 # ---- helpers --------------------------------------------------------------
 def configured() -> bool:
-    return SITE_DIR.is_dir() and (SITE_DIR / ".git").exists()
+    """True only once MANAGER_SITE_DIR names a real Jekyll checkout.
+
+    Every other entry point in this module goes through here first, so an
+    unset SITE_DIR turns the CMS off rather than raising on a None path.
+    """
+    return SITE_DIR is not None and SITE_DIR.is_dir() and (SITE_DIR / ".git").exists()
+
+
+def _require_site() -> Path:
+    """The configured site, or a clear error instead of a None path.
+
+    Every code path that touches the filesystem goes through here, so an
+    unconfigured CMS answers 400 with a usable message rather than raising a
+    TypeError deep in a path join.
+    """
+    if not configured():
+        raise ValueError(
+            "the site CMS is not configured — set MANAGER_SITE_DIR to a Jekyll checkout"
+        )
+    return SITE_DIR
 
 
 def _coll_dir(coll: str) -> Path:
+    root = _require_site()
     if coll not in _VALID:
         raise ValueError(f"unknown collection: {coll}")
-    return SITE_DIR / coll
+    return root / coll
 
 
 def _safe_file(coll: str, name: str) -> Path:
@@ -90,6 +112,7 @@ def _compose(frontmatter: dict, body: str) -> str:
 
 # ---- read -----------------------------------------------------------------
 def collections() -> list[dict]:
+    _require_site()
     out = []
     for folder, label in COLLECTIONS:
         d = SITE_DIR / folder
@@ -144,6 +167,7 @@ def create_item(coll: str, filename: str, frontmatter: dict, body: str) -> dict:
 
 # ---- publish --------------------------------------------------------------
 def status() -> dict:
+    _require_site()
     st = git_ops.status(SITE_DIR)
     return {
         "branch": st.get("branch"),
@@ -156,6 +180,7 @@ def status() -> dict:
 
 
 def publish(message: str) -> dict:
+    _require_site()
     msg = (message or "").strip() or "Update site content via GSO-1"
     c = git_ops.commit_all(SITE_DIR, msg)
     if not c["ok"]:
@@ -174,7 +199,7 @@ def publish(message: str) -> dict:
 
 def overview() -> dict:
     if not configured():
-        return {"configured": False, "dir": str(SITE_DIR)}
+        return {"configured": False, "dir": str(SITE_DIR) if SITE_DIR else ""}
     return {
         "configured": True,
         "dir": str(SITE_DIR),
