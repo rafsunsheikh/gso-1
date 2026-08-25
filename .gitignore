@@ -7,8 +7,12 @@ var/
 node_modules/
 .env
 .env.*
+!.env.example
 .DS_Store
 data/*.json
 data/schedule_state.json
 !data/.gitkeep
 data/*.jsonl
+
+# Local design handoff archives — not part of the distribution
+*.zip

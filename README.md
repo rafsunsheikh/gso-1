@@ -1,23 +1,107 @@
-# 🗂️ GSO-1
+<h1 align="center">GSO-1 🗂️</h1>
 
-A local application registry & launcher. GSO-1 scans your `~/Projects`
-folder, lists every app, and lets you **start/stop**, **check status &
-health**, **inspect git**, **update (git pull)**, and **read the description**
-of any app — from one dashboard, with a click.
+<p align="center">
+  <strong>Every project on your machine, in one window — running, healthy, and one click from started.</strong>
+</p>
 
-![type: localhost tool](https://img.shields.io/badge/runs-localhost-blue)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="RUNBOOK.md">Runbook</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="LICENSE">Apache 2.0</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/rafsunsheikh/the-manager/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/rafsunsheikh/the-manager?display_name=tag&color=6366f1"></a>
+  <a href="https://github.com/rafsunsheikh/the-manager/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/rafsunsheikh/the-manager/total?color=22c55e"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/macOS%20·%20Linux%20·%20Windows-supported-lightgrey">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab">
+  <img alt="Runs on localhost" src="https://img.shields.io/badge/runs-your%20machine-blue">
+</p>
+
+---
+
+## What is this, really?
+
+You have thirty-odd folders in `~/Projects`. Four of them are running right now
+and you are not completely sure which four. Two are on a stale branch. One is
+holding port 3000 hostage. Starting any of them means remembering whether it was
+`npm run dev`, `./run.sh`, `uvicorn app:app --reload`, or that one `make serve`
+you wrote in 2023.
+
+GSO-1 is the window that answers all of it.
+
+Point it at a folder — **your** folder, on **your** machine — and it walks every
+project inside, works out how each one starts, and gives you a row per app with
+a start button, a live health light, and the git state. Nothing is uploaded.
+Nothing runs in the cloud. It binds to `127.0.0.1` and talks to your filesystem
+and your processes, because that is the entire point.
+
+It is a control plane for the machine you already own.
+
+---
+
+## Stuff you do in GSO-1
+
+- **Start anything without remembering how.** GSO-1 detects the run command for
+  Node, Django, FastAPI, Flask, Streamlit, Rust, Go, static sites, and plain
+  Python — and always defers to the project's own `run.sh` or `Makefile` when
+  one exists.
+- **See what is actually up.** Each app gets a real health state — healthy,
+  starting, crashed, stopped — from process tracking plus a port probe, not from
+  hope.
+- **Find the thing eating your port** before you launch, instead of after the
+  stack trace.
+- **Check the git state of thirty repos at a glance** — branch, dirty count,
+  ahead/behind, last commit — and `git pull --ff-only` the stale ones from the
+  dashboard.
+- **Hand a project to an agent with a seatbelt on.** Read-only tools run
+  themselves; anything that writes a file or runs a command stops for an
+  explicit ✅ Allow / ❌ Deny.
+- **Run the agent on your own hardware.** A built-in Anthropic→llama proxy
+  points a Claude session at your local `llama-server`, so the whole session
+  stays on your GPU.
+- **Check on it from your phone.** A companion UI at `/m`, refused outright
+  unless you have deliberately set a token.
+
+---
 
 ## Quick start
 
+### I just want to run it
+
+Grab the installer for your platform from the
+[latest release](https://github.com/rafsunsheikh/the-manager/releases/latest):
+
+| Platform | File |
+|---|---|
+| macOS (Apple Silicon / Intel) | `GSO-1-<version>.dmg` |
+| Windows | `GSO-1-Setup-<version>.exe` |
+| Linux | `GSO-1-<version>.AppImage` |
+
+Open it, and on first run GSO-1 asks which folder holds your projects. Pick it.
+That is the whole setup — no Python, no terminal, no config file.
+
+### I want to run it from source
+
+**Requirements:** Python 3.11+, git.
+
 ```bash
-cd ~/Projects/the-manager
+git clone https://github.com/rafsunsheikh/the-manager.git
+cd the-manager
+cp .env.example .env      # point MANAGER_PROJECTS_DIRS at your code
 ./run.sh
 ```
 
-This creates a virtualenv, installs dependencies, and opens the dashboard at
-**http://127.0.0.1:8420**.
+`run.sh` builds a virtualenv, installs dependencies, and opens the dashboard at
+**<http://127.0.0.1:8420>**.
 
-Or manually:
+<details>
+<summary>Manual setup, if you would rather do it yourself</summary>
 
 ```bash
 python3 -m venv .venv
@@ -26,164 +110,126 @@ pip install -r requirements.txt
 python -m thecmanager
 ```
 
+</details>
+
+### I want the desktop shell
+
+```bash
+cd desktop && npm install && npm start
+```
+
+---
+
 ## What it does
 
 | Feature | How |
-| --- | --- |
-| **List all apps** | Scans every top-level dir in `~/Projects`. |
-| **Start / Stop** | One click. Each app runs in its own process group; logs stream to `data/logs/<app>.log`. |
-| **Status & Health** | Tracks the process and probes the app's port (healthy / starting / crashed / stopped). |
+|---|---|
+| **List every app** | Scans every top-level directory across one or more project roots. |
+| **Start / stop** | One click. Each app runs in its own process group; logs stream to `data/logs/<app>.log`. |
+| **Status & health** | Tracks the process and probes the app's port — healthy, starting, crashed, stopped. |
+| **Port conflicts** | Detected before launch, not after the crash. |
 | **Git status** | Branch, dirty file count, ahead/behind, last commit, remote. |
 | **Update** | `git pull --ff-only` from the dashboard. |
-| **Description** | Pulled from README first paragraph or `package.json`. |
-| **Auto-detect** | Guesses run command for explicit `run.sh`/`Makefile`, Node, Django, Streamlit, FastAPI, Flask, plain Python, Rust, Go, static sites. |
+| **Description** | Pulled from the README's first paragraph or `package.json`. |
+| **Auto-detect** | Guesses the run command for explicit `run.sh` / `Makefile`, Node, Django, Streamlit, FastAPI, Flask, plain Python, Rust, Go, and static sites. |
 | **Run setup / install** | Runs the detected setup command (`install.sh`, `npm install`, `pip install`) as a tracked job with live log tailing. |
-| **Per-app override** | Edit the start command / port; saved in `data/registry.json`. |
-| **Favourites** | Star apps; the home view shows favourites, "All Apps" shows everything. |
-| **Edit with VSCode** | Open a project in a new VS Code window (or focus it if already open). |
-| **Opened in VSCode** | Nav view listing folders open in VS Code windows; click to focus the window. |
-| **Local LLM** | Nav view to start/stop a llama.cpp `llama-server`, pick a GGUF model and set ctx / GPU layers / port; detects servers it didn't start. Includes a live **System load** panel (CPU / GPU / RAM, with the LLM process broken out and a top-processes list) via native macOS tools — no extra deps. |
-| **Planner** | Nav view with kanban boards (To Do / In Progress / Done), draggable task cards with notes, priority, due date, and optional links to registry apps. Saved in `data/planner.json`. |
-| **Telegram remote** | Control GSO-1 from your phone, anywhere — a built-in bot (long-polling, no port-forwarding/tunnel needed). Commands: `/apps`, `/run`, `/stop`, `/status`, `/git`, `/update`, `/logs`, `/llm`, `/sys`, `/restart`, `/tasks`, `/tasks <board>`, `/move <n> <col>`. Locked to your chat id. |
-| **Claude Code over Telegram** | `/claude <project>` attaches a Claude Code session to a project; your messages become turns, replies stream back. Read-only tools auto-run; edits/commands send an **Allow/Deny** button to Telegram and Claude waits for your tap. Multi-turn via `--resume`. `/end` closes. |
-| **Chat** | Stubbed — planned next pass (reads README + code + git, answers via Claude API). |
+| **Multi-root** | Point it at several folders at once — `"Personal:~/Projects,Work:~/work"` — each gets its own tab. |
+| **Scheduled jobs** | Recurring tasks with their own history. |
+| **Kanban boards** | An activity monitor for what you are actually working on. |
 
-## Configuration
+### Configuration
 
-Environment variables (all optional):
-
-- `MANAGER_PROJECTS_DIR` — folder to scan (default `~/Projects`)
-- `MANAGER_HOST` — bind host (default `127.0.0.1`)
-- `MANAGER_PORT` — port (default `8420`)
-- `MANAGER_TELEGRAM_TOKEN` — bot token from @BotFather (enables the Telegram bridge)
-- `MANAGER_TELEGRAM_ALLOWED` — comma-separated Telegram chat id(s) allowed to control it
-- `LLAMA_SERVER_BIN` / `MANAGER_MODEL_DIRS` — override llama.cpp binary / model search dirs
-
-### Control it from your phone (Telegram)
-
-1. In Telegram, message **@BotFather** → `/newbot` → copy the **token**.
-2. `export MANAGER_TELEGRAM_TOKEN="<token>"` and restart GSO-1 (or set it in `~/run_manager.sh`).
-3. Open your new bot and send any message — it replies with **your chat id**.
-4. `export MANAGER_TELEGRAM_ALLOWED="<that id>"` and restart. Now only you can control it.
-5. Send `/help` for the command list.
-
-Works from anywhere with no port-forwarding, tunnel, or public IP — the bot
-long-polls Telegram's servers (outbound only) from behind your home network.
-
-### Drive Claude Code from Telegram
-
-1. `/claude <project>` — **continues the project's most recent session** (e.g.
-   the one from your VS Code terminal), so you can pick up where you left off.
-   Use `/claude <project> new` to start a **fresh** session instead.
-   Add `cloud` (default) or `local` to choose the model backend — e.g.
-   `/claude <project> local`. **cloud** strips `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY`
-   so Claude uses your subscription; **local** points Claude at GSO-1's built-in
-   Anthropic→llama proxy (`/v1/messages`, in `llmproxy.py`) so the whole session
-   runs on your local `llama-server` — start it first from the Local LLM tab.
-   (Override the local endpoint with `MANAGER_LOCAL_ANTHROPIC_BASE_URL` to use your
-   own proxy like LiteLLM / claude-code-router instead.) Local tool-use reliability
-   depends on the model — run llama-server with `--jinja` and a tool-capable model.
-   (Only continue a session that's idle/closed in VS Code — don't drive the same
-   session from two places at once.)
-2. Send normal messages (no slash) — each becomes a turn; Claude works in that
-   project's directory and streams its reply back to you.
-3. When Claude wants to **edit a file, run a command, etc.**, you get an
-   **✅ Allow / ❌ Deny** button. Tap it; Claude continues or stops. Read-only
-   tools (read/search) run automatically.
-4. The conversation continues across messages (`--resume`). `/clear` starts a
-   fresh conversation (same project), `/context` shows token/context-window
-   usage, and `/end` closes the session.
-
-Requires the `claude` CLI installed and signed in on the host. Permission
-requests are routed through a small MCP server (`claude_perm_mcp.py`) that
-calls back into GSO-1, which sends you the Telegram buttons.
-
-Each session keeps **one long-lived `claude` process** alive (streaming
-stdin/stdout), so follow-up turns reuse the already-loaded context (cached) —
-much cheaper and faster than re-loading per message. Each turn's footer shows
-`✓ done · <seconds> · <output tokens>` (no dollar figure; on a Claude
-subscription there's no per-token charge anyway). `/end` shuts the process down.
-
-Per-app overrides live in `data/registry.json` and can be edited from the UI
-(✎ Edit start command / port) or by hand.
-
-### Restart remotely & keep it running (launchd)
-
-After updating GSO-1's own code from your phone, you need to restart the
-process to load it — but the Telegram bot lives *inside* that process. Two
-pieces solve this:
-
-**`/restart` command.** Sending `/restart` re-execs the process in place
-(`os.execv`) — same PID, current environment (incl. your Telegram token)
-preserved, updated code loaded. It comes back in a few seconds and resumes
-polling. Any in-flight Claude turn is dropped (just re-send it); the detached
-`llama-server` survives. Works whether or not launchd is managing GSO-1.
-
-**launchd supervisor (optional).** Run GSO-1 under a macOS LaunchAgent so it
-**starts on login** and **auto-restarts if it crashes** while you're away. A
-sample plist lives at `~/Library/LaunchAgents/com.gso1.manager.plist`; it runs
-`~/run_manager.sh` (which sets the Telegram env), with `RunAtLoad` and
-`KeepAlive`/`SuccessfulExit=false` (restart on crash, but a deliberate stop
-stays stopped), and `MANAGER_NO_BROWSER=1` so it doesn't pop a browser on each
-(re)start.
-
-Activate it (one-time, at the computer — this replaces the running instance):
+Everything is environment-driven and documented in
+[`.env.example`](.env.example). The one setting most people touch:
 
 ```bash
-kill "$(lsof -nP -iTCP:8420 -sTCP:LISTEN -t)"            # stop the current instance
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.gso1.manager.plist
-launchctl print gui/$(id -u)/com.gso1.manager | grep -E "state|pid"   # verify
+MANAGER_PROJECTS_DIRS="Personal:~/Projects,Work:~/work/repos"
 ```
 
-Manage it:
+---
 
-| Goal | Command |
-| --- | --- |
-| Force restart | `launchctl kickstart -k gui/$(id -u)/com.gso1.manager` |
-| Stop now (until next login) | `launchctl bootout gui/$(id -u)/com.gso1.manager` |
-| Stop & keep off across reboots | `launchctl disable gui/$(id -u)/com.gso1.manager` then `bootout` (re-enable with `launchctl enable …` + `bootstrap …`) |
-| Remove launchd entirely | `launchctl bootout …` then `rm ~/Library/LaunchAgents/com.gso1.manager.plist` |
-| Keep login-start, drop crash-restart | set `KeepAlive` → `<false/>` in the plist, then `bootout` + `bootstrap` |
+## Working with agents
 
-Removing launchd doesn't affect `/restart` — that re-execs the process
-directly and works on its own.
+GSO-1 can drive a `claude` CLI session inside any project it manages, from the
+dashboard or from your phone.
+
+1. Pick a project and open a session. Choose **subscription** (your normal
+   Claude account) or **local** (routes through GSO-1's built-in
+   Anthropic→llama proxy at `/v1/messages`, so the session runs on your own
+   `llama-server` — start it from the Local LLM tab first).
+2. Send messages. Each becomes a turn; the agent works in that project's
+   directory and streams its reply back.
+3. When it wants to **edit a file or run a command**, you get **✅ Allow /
+   ❌ Deny**. Read-only tools run automatically.
+4. The conversation persists across messages. `/clear` starts fresh, `/context`
+   shows token usage, `/end` closes the session.
+
+Each session keeps one long-lived process alive, so follow-up turns reuse the
+already-loaded context instead of paying to reload it every message.
+
+> Requires the `claude` CLI installed and signed in. Permission requests route
+> through a small MCP server (`claude_perm_mcp.py`) that calls back into GSO-1.
+> Local tool-use reliability depends on the model — run `llama-server` with
+> `--jinja` and a tool-capable model.
+
+---
+
+## Works today · Being wired up · Pending code
+
+| ✅ Works today | 🚧 Being wired up | 💭 Strong opinions, pending code |
+|---|---|---|
+| Registry, start/stop, health, port conflicts | Packaged installers for macOS / Windows / Linux | Plugin API for custom detectors |
+| Git status and fast-forward updates | First-run folder picker (replacing `.env`) | Remote fleet — one dashboard, several machines |
+| Auto-detection across 10+ project types | Windows support beyond the Python server | Per-project resource limits |
+| Multi-root scanning with per-root tabs | Automated test suite | |
+| Claude bridge with Allow/Deny permissions | | |
+| Local LLM proxy and model management | | |
+| Supervisor: versioned releases, health gate, rollback | | |
+| Electron desktop shell with tray | | |
+| Phone companion at `/m` behind a token | | |
+| Scheduled jobs and kanban boards | | |
+
+---
+
+## Security
+
+GSO-1 starts processes and runs commands as you. That is the feature, and it is
+also the threat model.
+
+- It binds **loopback only** by default — unreachable from your network.
+- Remote access is **refused outright** unless you set `MANAGER_MOBILE_TOKEN`.
+- Agent writes and commands require an **explicit approval**.
+
+**Do not set `MANAGER_HOST=0.0.0.0` without a strong token**, and prefer a
+tunnel over an open port. Full detail — and how to report a vulnerability
+privately — is in [SECURITY.md](SECURITY.md).
+
+---
 
 ## Layout
 
-```
-thecmanager/
-  __main__.py    # entry point (python -m thecmanager)
-  server.py      # FastAPI routes
-  scanner.py     # list apps, descriptions, effective config
-  detector.py    # auto-detect run command / type
-  registry.py    # per-app overrides (registry.json)
-  runner.py      # start/stop process management + logs (apps + setup jobs)
-  git_ops.py     # git status / pull
-  health.py      # process + port health checks
-  vscode.py      # open/focus projects + detect open VS Code windows
-  llm.py         # llama.cpp server control (start/stop/status/models)
-  sysmon.py      # CPU/GPU/RAM monitor via top + ioreg (macOS, no deps)
-  telegrambot.py # Telegram long-polling bot — remote control from your phone
-  claudebridge.py    # drives Claude Code headlessly per project + approval registry
-  claude_perm_mcp.py # standalone MCP server routing tool-permission asks to Telegram
-  llmproxy.py        # Anthropic /v1/messages -> local llama-server (for `local` mode)
-  planner.py     # kanban boards + tasks (planner.json)
-  static/index.html   # single-page dashboard
-```
+| Path | What lives there |
+|---|---|
+| `thecmanager/` | The FastAPI app — the whole dashboard backend |
+| `thecmanager/static/` | The single-page dashboard UI |
+| `supervisor/` | Release snapshots, promotion, restart-safe parent process |
+| `desktop/` | Electron shell — the window and the child lifecycle |
+| `opsroom/` | The agent sidecar |
+| `scripts/` | Host setup helpers (launchd, GPU limit, mobile) |
 
-## API (for scripting)
+More detail in [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[RUNBOOK](RUNBOOK.md).
 
-- `GET  /api/apps` — list
-- `GET  /api/apps/{name}` — full detail
-- `POST /api/apps/{name}/start` · `/stop`
-- `GET  /api/apps/{name}/status` · `/health` · `/git` · `/logs` · `/description`
-- `POST /api/apps/{name}/update`
-- `PUT  /api/apps/{name}/config` — `{start_command, port, setup_command, description}`
-- `POST /api/apps/{name}/setup` · `GET /api/apps/{name}/setup/status` · `/setup/logs`
-- `POST /api/apps/{name}/favourite` — toggle favourite
-- `POST /api/apps/{name}/vscode/open` · `/vscode/focus` · `GET /api/vscode/folders`
-- `GET  /api/llm/status` · `/llm/models` · `/llm/metrics` · `POST /api/llm/start` · `/llm/stop` · `GET /api/llm/logs`
-- `GET  /api/planner` · `POST /api/planner/boards` · `PUT|DELETE /api/planner/boards/{id}`
-- `POST /api/planner/boards/{id}/tasks` · `PUT|DELETE /api/planner/boards/{id}/tasks/{task_id}`
-```
-```
+---
+
+## Contributing
+
+Bug reports, new project-type detectors, and doc fixes are all welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md). If GSO-1 guessed the wrong run command for
+your stack, that is the best possible first pull request.
+
+This project ships a [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[Apache 2.0](LICENSE) — Copyright 2026 Md Rafsun Sheikh.

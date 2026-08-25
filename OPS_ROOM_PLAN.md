@@ -644,7 +644,7 @@ never start llama-server behind its back):
 ```bash
 curl -s -X POST http://127.0.0.1:8420/api/llm/start \
   -H 'Content-Type: application/json' \
-  -d '{"model_path":"/Users/user/unsloth/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-UD-Q4_K_XL.gguf",
+  -d '{"model_path":"~/models/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-UD-Q4_K_XL.gguf",
        "ctx":65536,"alias":"glm-4.7-flash"}'
 ```
 

@@ -362,6 +362,7 @@
     }
     let ALL = [];
     let ROOTS = [];                 // project root labels (one tab each)
+    let HOME_DIR = "";              // the host's home dir, for "~/…" paths
     let EVENTS = null;              // today's timeline for the Ops Room view
     let _evLoading = false;
     let USAGE = null;               // last-hour proxy traffic for the LLM view
@@ -463,6 +464,7 @@
       ]);
       ALL = data.apps;
       ROOTS = data.roots || [];
+      HOME_DIR = data.home || HOME_DIR;
       // If the remembered view points at a root that no longer exists, reset.
       if (activeView.startsWith("root:") && !ROOTS.includes(activeView.slice(5)))
         activeView = "opsroom";
@@ -1974,8 +1976,11 @@
 
     /** `~/a/b/c/file.gguf` with the middle elided — the ends carry the meaning. */
     function shortPath(p, keep = 2) {
-      const home = "/Users/user";
-      let t = String(p).startsWith(home) ? "~" + String(p).slice(home.length) : String(p);
+      // HOME_DIR comes from the server; fall back to the usual shapes so a
+      // stale page still abbreviates sensibly instead of printing /Users/you.
+      let t = String(p);
+      if (HOME_DIR && t.startsWith(HOME_DIR)) t = "~" + t.slice(HOME_DIR.length);
+      else t = t.replace(/^\/(?:Users|home)\/[^/]+/, "~");
       const parts = t.split("/");
       if (parts.length <= keep + 2) return t;
       return [parts[0], "…", ...parts.slice(-keep)].join("/");
