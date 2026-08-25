@@ -161,6 +161,7 @@ def list_apps() -> JSONResponse:
             "projects_dirs": [str(d) for d in config.PROJECTS_DIRS],
             # The UI abbreviates paths to "~/…"; only the host knows what ~ is.
             "home": str(Path.home()),
+            "user": config.display_name(),
             "roots": [label for label, _ in config.PROJECT_ROOTS],
             "count": len(apps),
             "apps": apps,

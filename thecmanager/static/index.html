@@ -79,9 +79,9 @@
         <nav id="side-nav" aria-label="Views"></nav>
         <div class="gso-side-foot">
           <div class="gso-user">
-            <span class="gso-avatar" aria-hidden="true">RS</span>
+            <span class="gso-avatar" id="identity-avatar" aria-hidden="true">&nbsp;</span>
             <span>
-              <span class="gso-user-name" style="display:block">Rafsun</span>
+              <span class="gso-user-name" id="identity-name" style="display:block">&nbsp;</span>
               <span class="gso-user-sub">Owner &middot; full access</span>
             </span>
           </div>
@@ -93,7 +93,7 @@
           <img src="/static/favicon.svg" alt="" style="width:22px;height:22px;border-radius:6px" />
         </button>
         <div id="rail-nav" style="display:flex;flex-direction:column;gap:7px;align-items:center"></div>
-        <span class="gso-avatar" aria-hidden="true" style="margin-top:auto">RS</span>
+        <span class="gso-avatar" id="identity-avatar-rail" aria-hidden="true" style="margin-top:auto">&nbsp;</span>
       </div>
     </aside>
 
@@ -185,6 +185,58 @@
     <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-6"
          style="background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)">
       <div id="task-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- First-run setup: shown only when nobody has told GSO-1 where the code lives.
+       Styled inline on purpose — app.css is a purged Tailwind build, and the one
+       screen a broken install must still render cannot depend on it being fresh. -->
+  <div id="setup-modal" role="dialog" aria-modal="true" aria-label="Choose your projects folder"
+       style="display:none;position:fixed;inset:0;z-index:70;background:var(--bg);
+              align-items:center;justify-content:center;padding:24px">
+    <div style="width:100%;max-width:640px;padding:28px;background:var(--surface);
+                border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)">
+      <h2 style="font-size:1.35rem;font-weight:650;margin:0 0 6px">Welcome to GSO-1 &#128194;</h2>
+      <p style="font-size:.875rem;color:var(--text-dim);margin:0 0 20px;line-height:1.5">
+        Pick the folder that holds your projects. GSO-1 lists everything inside it and
+        works out how each one starts. Nothing leaves your machine.
+      </p>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button id="setup-up" title="Go up one folder"
+                style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;
+                       background:transparent;color:var(--text);cursor:pointer">&#8593;</button>
+        <input id="setup-path" spellcheck="false" aria-label="Current folder path"
+               style="flex:1;min-width:0;padding:6px 10px;font-size:.78rem;
+                      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                      background:var(--bg);color:var(--text);
+                      border:1px solid var(--line);border-radius:8px" />
+        <button id="setup-go"
+                style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;
+                       background:transparent;color:var(--text);cursor:pointer;font-size:.8rem">Go</button>
+      </div>
+
+      <div id="setup-list"
+           style="height:15rem;overflow-y:auto;margin-bottom:16px;font-size:.85rem;
+                  border:1px solid var(--line);border-radius:10px"></div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+        <button id="setup-use"
+                style="padding:7px 14px;font-size:.85rem;font-weight:600;border:0;
+                       border-radius:8px;background:var(--accent,#6366f1);color:#fff;cursor:pointer">
+          Use this folder</button>
+        <span style="font-size:.75rem;color:var(--text-dim)">click a folder to open it</span>
+      </div>
+
+      <div id="setup-chosen" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+
+      <div style="display:flex;justify-content:flex-end">
+        <button id="setup-start"
+                style="padding:9px 18px;font-size:.875rem;font-weight:600;border:0;
+                       border-radius:8px;background:var(--accent,#6366f1);color:#fff;cursor:pointer">
+          Start GSO-1</button>
+      </div>
+      <p id="setup-error" style="display:none;font-size:.78rem;margin:12px 0 0;color:#f87171"></p>
     </div>
   </div>
 
@@ -363,6 +415,7 @@
     let ALL = [];
     let ROOTS = [];                 // project root labels (one tab each)
     let HOME_DIR = "";              // the host's home dir, for "~/…" paths
+    let USER_NAME = "";             // whoever is running GSO-1, from the OS
     let EVENTS = null;              // today's timeline for the Ops Room view
     let _evLoading = false;
     let USAGE = null;               // last-hour proxy traffic for the LLM view
@@ -465,6 +518,10 @@
       ALL = data.apps;
       ROOTS = data.roots || [];
       HOME_DIR = data.home || HOME_DIR;
+      if (data.user && data.user !== USER_NAME) {
+        USER_NAME = data.user;
+        applyIdentity();
+      }
       // If the remembered view points at a root that no longer exists, reset.
       if (activeView.startsWith("root:") && !ROOTS.includes(activeView.slice(5)))
         activeView = "opsroom";
@@ -591,7 +648,7 @@
       const c = OVERVIEW.counts || {};
       const hour = new Date().getHours();
       const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-      $("#view-title").textContent = `${greet}, Rafsun`;
+      $("#view-title").textContent = USER_NAME ? `${greet}, ${USER_NAME}` : greet;
       $("#subtitle").textContent =
         `${c.live || 0} running · ${c.dirty || 0} uncommitted · ${c.failed || 0} failed runs`;
 
@@ -1974,6 +2031,19 @@
       return months < 12 ? `${months}mo ago` : `${Math.round(months / 12)}y ago`;
     }
 
+    /** Put the real account name in the sidebar card and its avatar. */
+    function applyIdentity() {
+      const nameEl = document.getElementById("identity-name");
+      if (nameEl) nameEl.textContent = USER_NAME;
+      for (const av of [document.getElementById("identity-avatar"),
+                        document.getElementById("identity-avatar-rail")]) {
+        if (!av) continue;
+        // Initials from the first two words — "MD Rafsun Sheikh" reads as MR.
+        av.textContent = USER_NAME.split(/\s+/).filter(Boolean)
+          .slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
+      }
+    }
+
     /** `~/a/b/c/file.gguf` with the middle elided — the ends carry the meaning. */
     function shortPath(p, keep = 2) {
       // HOME_DIR comes from the server; fall back to the usual shapes so a
@@ -2499,6 +2569,9 @@
     // (no #drawer-bg: the Details dock is a column, not an overlay)
     document.addEventListener("keydown", e => {
       if (e.key !== "Escape") return;
+      // The first-run picker is not dismissible: without a folder there is
+      // no dashboard to go back to.
+      if ($("#setup-modal").style.display !== "none") return;
       const modal = $("#task-modal");
       if (modal && !modal.classList.contains("hidden")) {
         modal.classList.add("hidden");
@@ -2508,7 +2581,143 @@
       closeDrawer();
     });
 
-    load();
+    // ---- first-run setup --------------------------------------------------
+    //
+    // A packaged GSO-1 arrives knowing nothing about the machine it landed on.
+    // This asks the one question it cannot guess, then gets out of the way.
+
+    let SETUP_CWD = "";
+    let SETUP_CHOSEN = [];   // [{label, path}]
+
+    function renderSetupChosen() {
+      const box = $("#setup-chosen");
+      if (!SETUP_CHOSEN.length) {
+        box.innerHTML = `<span style="font-size:.75rem;color:var(--text-dim)">No folder chosen yet.</span>`;
+        return;
+      }
+      box.innerHTML = SETUP_CHOSEN.map((r, i) => `
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:5px 9px;
+                     font-size:.75rem;border:1px solid var(--line);border-radius:8px">
+          <strong>${escapeHtml(r.label)}</strong>
+          <code style="color:var(--text-dim)">${escapeHtml(r.path)}</code>
+          <button data-drop="${i}" title="Remove"
+                  style="background:none;border:0;color:var(--text-dim);cursor:pointer">&#10005;</button>
+        </span>`).join("");
+      box.querySelectorAll("[data-drop]").forEach(b => {
+        b.onclick = () => { SETUP_CHOSEN.splice(Number(b.dataset.drop), 1); renderSetupChosen(); };
+      });
+    }
+
+    function setupRow(label, path, icon) {
+      return `<button data-dir="${escapeHtml(path)}"
+                style="display:block;width:100%;text-align:left;padding:7px 12px;
+                       background:none;border:0;color:var(--text);cursor:pointer;font-size:.85rem">
+                ${icon} ${escapeHtml(label)}</button>`;
+    }
+
+    async function setupBrowse(path) {
+      const list = $("#setup-list");
+      list.innerHTML = `<div style="padding:12px;font-size:.78rem;color:var(--text-dim)">Loading…</div>`;
+      let d;
+      try {
+        d = await api(`/api/settings/browse?path=${encodeURIComponent(path || "")}`);
+      } catch (e) {
+        // A dead end here strands the user on the one screen they cannot skip,
+        // so offer the way back out rather than just reporting failure.
+        list.innerHTML =
+          `<div style="padding:12px;font-size:.78rem;color:var(--text-dim)">
+             Cannot read <code>${escapeHtml(path || "that folder")}</code>.
+             Type a path above, or try:
+           </div>` + setupRow("Home", "~", "&#127968;") + setupRow("/", "/", "&#128193;");
+        list.querySelectorAll("[data-dir]").forEach(b => {
+          b.onclick = () => setupBrowse(b.dataset.dir);
+        });
+        return;
+      }
+      SETUP_CWD = d.path;
+      HOME_DIR = d.home || HOME_DIR;
+      $("#setup-path").value = d.path;
+      $("#setup-up").disabled = !d.parent;
+      $("#setup-up").dataset.parent = d.parent || "";
+      list.innerHTML = d.dirs.length
+        ? d.dirs.map(x => setupRow(x.name, x.path, "&#128193;")).join("")
+        : `<div style="padding:12px;font-size:.78rem;color:var(--text-dim)">
+             No sub-folders here — "Use this folder" still works.</div>`;
+      list.querySelectorAll("[data-dir]").forEach(b => {
+        b.onclick = () => setupBrowse(b.dataset.dir);
+      });
+    }
+
+    function wireSetup() {
+      $("#setup-up").onclick = () => {
+        const parent = $("#setup-up").dataset.parent;
+        if (parent) setupBrowse(parent);
+      };
+      $("#setup-go").onclick = () => setupBrowse($("#setup-path").value.trim());
+      $("#setup-path").onkeydown = e => {
+        if (e.key === "Enter") { e.preventDefault(); setupBrowse($("#setup-path").value.trim()); }
+      };
+      $("#setup-use").onclick = () => {
+        if (!SETUP_CWD || SETUP_CHOSEN.some(r => r.path === SETUP_CWD)) return;
+        SETUP_CHOSEN.push({
+          label: SETUP_CWD.split("/").filter(Boolean).pop() || SETUP_CWD,
+          path: SETUP_CWD,
+        });
+        renderSetupChosen();
+      };
+      $("#setup-start").onclick = async () => {
+        // Nothing explicitly chosen: take the folder they are looking at.
+        const roots = SETUP_CHOSEN.length
+          ? SETUP_CHOSEN
+          : (SETUP_CWD
+              ? [{ label: SETUP_CWD.split("/").filter(Boolean).pop() || SETUP_CWD, path: SETUP_CWD }]
+              : []);
+        const err = $("#setup-error");
+        if (!roots.length) {
+          err.textContent = "Pick a folder first.";
+          err.style.display = "block";
+          return;
+        }
+        err.style.display = "none";
+        try {
+          await api("/api/settings/roots", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roots }),
+          });
+        } catch (e) {
+          err.textContent = e.message || "Could not save that folder.";
+          err.style.display = "block";
+          return;
+        }
+        $("#setup-modal").style.display = "none";
+        releaseFocus($("#setup-modal"));
+        await load();
+        toast("Projects folder set — scanning", "success");
+      };
+    }
+
+    /** Show the picker only on a genuinely fresh install. */
+    async function checkOnboarding() {
+      let st;
+      try {
+        st = await api("/api/settings/roots");
+      } catch (e) {
+        return false;             // backend unreachable: let load() report it
+      }
+      HOME_DIR = st.home || HOME_DIR;
+      if (!st.needs_onboarding) return false;
+      const modal = $("#setup-modal");
+      modal.style.display = "flex";
+      wireSetup();
+      renderSetupChosen();
+      await setupBrowse(st.home || "");
+      trapFocus(modal);
+      return true;
+    }
+
+    // Ask where the code lives before doing anything that depends on knowing.
+    checkOnboarding().then(asked => { if (!asked) load(); });
     // The Ops Room dock's Machine card is visible on every view, so sampling
     // runs for the whole session rather than only while Local LLM is open.
     startMetrics();
@@ -2517,6 +2726,8 @@
       // Chat views (it would reset inputs / drag state); those self-refresh.
       const busy = $("#drawer").dataset.open === "1"
         || !$("#task-modal").classList.contains("hidden")
+        // Nothing to scan until the first-run picker has an answer.
+        || $("#setup-modal").style.display !== "none"
         || activeView === "llm" || activeView === "planner" || activeView === "chat"
         || activeView === "site";
       if (!busy) load();

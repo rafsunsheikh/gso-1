@@ -202,6 +202,33 @@ PROJECTS_DIR: Path = Path.home() / "Projects"
 _apply_roots(_parse_roots())
 
 
+def display_name() -> str:
+    """A human name for the person running GSO-1.
+
+    The full name from the account record reads better than a login, but it is
+    routinely blank (and on some systems padded with commas), so fall back to
+    the username rather than greeting nobody.
+
+    Returned whole rather than reduced to a first name: splitting on the first
+    word greets "MD Rafsun Sheikh" as "MD", and every rule for spotting a
+    prefix is wrong for somebody.
+    """
+    try:
+        import pwd
+
+        entry = pwd.getpwuid(os.getuid())
+        full = (entry.pw_gecos or "").split(",")[0].strip()
+        return full or entry.pw_name
+    except Exception:
+        pass
+    try:
+        import getpass
+
+        return getpass.getuser()
+    except Exception:
+        return "there"
+
+
 def under_any_root(path: str) -> bool:
     """True if `path` is inside any configured projects root."""
     try:
