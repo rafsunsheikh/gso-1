@@ -23,6 +23,18 @@ const PORT = Number(process.env.MANAGER_PORT || 8420);
 const URL = `http://${HOST}:${PORT}`;
 const PY = path.join(REPO, ".venv/bin/python");
 
+/**
+ * A shipped GSO-1 carries its own backend and knows nothing about a checkout:
+ * no venv, no supervisor, no promoted release. A developer build keeps the
+ * original path, so `npm start` in the repo behaves exactly as before.
+ */
+const PACKAGED = app.isPackaged;
+const SERVER_BIN = path.join(
+  process.resourcesPath || "",
+  "server",
+  process.platform === "win32" ? "gso1-server.exe" : "gso1-server",
+);
+
 /** Boot can take a while: uvicorn start plus the first project scan. */
 const BOOT_TIMEOUT_MS = 90_000;
 
@@ -68,6 +80,50 @@ function currentReleaseExists() {
   }
 }
 
+/**
+ * Launch the backend that ships inside the app bundle.
+ *
+ * Nothing here may assume a writable install directory: on macOS the bundle is
+ * read-only and on Windows it sits in Program Files, so the server is told to
+ * keep its state in the user's data directory and is started from the user's
+ * home rather than from wherever the bundle happens to live.
+ */
+function startBundledServer() {
+  if (!fs.existsSync(SERVER_BIN)) {
+    dialog.showErrorBox(
+      "GSO-1 is incomplete",
+      `The bundled server is missing at:\n${SERVER_BIN}\n\n` +
+        "Reinstall GSO-1 from the latest release.",
+    );
+    return Promise.resolve(false);
+  }
+
+  supervisor = spawn(SERVER_BIN, [], {
+    cwd: app.getPath("home"),
+    env: {
+      ...process.env,
+      MANAGER_NO_BROWSER: "1",
+      MANAGER_HOST: HOST,
+      MANAGER_PORT: String(PORT),
+      MANAGER_DATA_DIR: process.env.MANAGER_DATA_DIR || app.getPath("userData"),
+    },
+    stdio: "ignore",
+    // Own process group, so quitting can signal the whole tree at once.
+    detached: process.platform !== "win32",
+  });
+  weOwnSupervisor = true;
+
+  supervisor.on("exit", (code) => {
+    supervisor = null;
+    if (!quitting) {
+      dialog.showErrorBox("GSO-1 stopped", `The server exited unexpectedly (code ${code}).`);
+    }
+  });
+
+  return waitForApp();
+}
+
+
 async function startSupervisor() {
   // Someone may already be running GSO-1 in a terminal. Adopt it rather than
   // fighting for the port — and remember not to kill it on quit.
@@ -75,6 +131,8 @@ async function startSupervisor() {
     weOwnSupervisor = false;
     return true;
   }
+
+  if (PACKAGED) return startBundledServer();
 
   if (!fs.existsSync(PY)) {
     dialog.showErrorBox(
@@ -114,7 +172,9 @@ function stopSupervisor() {
   if (!supervisor || !weOwnSupervisor) return;
   try {
     // Negative pid signals the group: supervisor + the GSO-1 child it spawned.
-    process.kill(-supervisor.pid, "SIGTERM");
+    // Windows has no process groups in this sense, so signal the child itself.
+    if (process.platform === "win32") supervisor.kill();
+    else process.kill(-supervisor.pid, "SIGTERM");
   } catch {
     try {
       supervisor.kill("SIGTERM");
@@ -295,7 +355,11 @@ if (!app.requestSingleInstanceLock()) {
       dialog.showErrorBox(
         "GSO-1 did not start",
         `The dashboard did not answer on ${URL} within ${BOOT_TIMEOUT_MS / 1000}s.\n\n` +
-          `Check: ${path.join(REPO, "var/supervisor.log")}`,
+          (PACKAGED
+            // A packaged build has no repo to point at; the port is the usual culprit.
+            ? `Something may already be using port ${PORT}. ` +
+              `Set MANAGER_PORT to pick another one.`
+            : `Check: ${path.join(REPO, "var/supervisor.log")}`),
       );
       quitting = true;
       app.quit();

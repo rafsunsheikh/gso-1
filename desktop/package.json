@@ -1,13 +1,78 @@
 {
   "name": "gso1-desktop",
+  "productName": "GSO-1",
   "version": "0.1.0",
-  "private": true,
-  "description": "GSO-1 desktop shell",
+  "description": "GSO-1 — a local application registry and launcher",
+  "homepage": "https://github.com/rafsunsheikh/the-manager",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Md Rafsun Sheikh"
+  },
   "main": "main.js",
+  "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^43.4.1"
+    "electron": "^43.4.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.gso1.manager",
+    "productName": "GSO-1",
+    "copyright": "Copyright © 2026 Md Rafsun Sheikh",
+    "directories": {
+      "output": "../build/release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../build/dist/gso1-server",
+        "to": "server",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "darkModeSupport": true,
+      "extendInfo": {
+        "LSUIElement": false
+      }
+    },
+    "dmg": {
+      "title": "GSO-1 ${version}"
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "GSO-1"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "synopsis": "A local application registry and launcher",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
+    }
   }
 }
