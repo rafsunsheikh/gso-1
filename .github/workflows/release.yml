@@ -20,13 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # One Apple Silicon runner cross-builds both architectures. The
+          # Intel (macos-13) runners are retired, so a job pinned to them
+          # simply queues forever instead of failing.
           - os: macos-14
-            name: macOS (Apple Silicon)
-            builder: --mac --arm64
-            artifacts: "*.dmg"
-          - os: macos-13
-            name: macOS (Intel)
-            builder: --mac --x64
+            name: macOS (Intel + Apple Silicon)
+            builder: --mac --arm64 --x64
             artifacts: "*.dmg"
           - os: windows-latest
             name: Windows
