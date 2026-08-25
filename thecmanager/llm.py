@@ -241,7 +241,7 @@ def start(
         "-ngl", str(ngl),
     ]
     # Context shift evicts the oldest tokens instead of erroring when a long
-    # session fills the window — without it llama-server rejects the request
+    # session fills the window, without it llama-server rejects the request
     # ("exceeds the available context size") after a few Claude Code turns.
     cmd.append("--context-shift" if context_shift else "--no-context-shift")
     if cache_type_k:

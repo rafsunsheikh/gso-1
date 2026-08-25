@@ -14,10 +14,10 @@ data/schedule_state.json
 !data/.gitkeep
 data/*.jsonl
 
-# Local design handoff archives — not part of the distribution
+# Local design handoff archives, not part of the distribution
 *.zip
 
-# Packaging output — installers and the frozen server are built, never committed
+# Packaging output, installers and the frozen server are built, never committed
 build/dist/
 build/release/
 build/work/

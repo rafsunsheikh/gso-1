@@ -390,7 +390,7 @@ _notifier: Optional[Callable] = None
 
 
 def set_approval_notifier(fn: Callable) -> None:
-    """fn(chat_id, approval_id, tool_name, tool_input) — sends the Telegram prompt."""
+    """fn(chat_id, approval_id, tool_name, tool_input), sends the Telegram prompt."""
     global _notifier
     _notifier = fn
 

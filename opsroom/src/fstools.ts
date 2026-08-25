@@ -6,7 +6,7 @@
  * defence in depth (find shells out to `fd`, so its operations layer alone is
  * not a reliable choke point).
  *
- * bash additionally requires human approval — it is the one tool that can do
+ * bash additionally requires human approval, it is the one tool that can do
  * anything, so it is gated rather than path-restricted.
  */
 
@@ -102,7 +102,7 @@ const writeTool = createWriteTool(SANDBOX_ROOT, {
 const editTool = createEditTool(SANDBOX_ROOT, {
   operations: {
     // Editing requires reading the original, but the write target must still be
-    // inside the sandbox — so both checks apply.
+    // inside the sandbox, so both checks apply.
     readFile: async (p) => fsReadFile(assertWritable(p)),
     writeFile: async (p, content) => fsWriteFile(assertWritable(p), content, "utf-8"),
     access: async (p) => fsAccess(assertWritable(p), fsConstants.R_OK | fsConstants.W_OK),
@@ -129,14 +129,14 @@ export const WRITE_TOOLS: AgentTool[] = [
   guardParams(editTool, "write"),
 ];
 
-/** bash is approval-gated, not path-gated — it can reach anything. */
+/** bash is approval-gated, not path-gated, it can reach anything. */
 export const SHELL_TOOLS: AgentTool[] = [guardApproval(bashTool)];
 
 /**
  * bash is OFF by default (set OPSROOM_ENABLE_BASH=1 to include it).
  *
  * Measured 2026-08-22: GLM-4.7-Flash reaches for `bash` even when the prompt
- * explicitly names the `write` tool — it answered "write M2-OK to <path>" with
+ * explicitly names the `write` tool, it answered "write M2-OK to <path>" with
  * `echo -n 'M2-OK' > <path>`. With bash present, ordinary file edits therefore
  * stall on a human approval prompt, which defeats the point of having
  * purpose-built tools. Keeping it opt-in makes the safe path the default one.

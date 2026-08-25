@@ -1,7 +1,7 @@
 # Contributing to GSO-1
 
 Thanks for wanting to help. GSO-1 is a localhost tool that starts, stops, and
-watches the projects already on your disk — so the fastest way to contribute is
+watches the projects already on your disk, so the fastest way to contribute is
 to run it against your own `~/Projects` and fix whatever annoys you.
 
 - [Code of Conduct](#code-of-conduct)
@@ -24,7 +24,7 @@ agree to uphold it.
 | | |
 |---|---|
 | 🐛 **Bug reports** | Something started, crashed, or reported the wrong health state. Include your OS, the app type, and the relevant lines from the log. |
-| 🔍 **Detectors** | GSO-1 guesses how to run a project. If it guessed wrong for your stack, that is a great first PR — see [below](#adding-a-project-type-detector). |
+| 🔍 **Detectors** | GSO-1 guesses how to run a project. If it guessed wrong for your stack, that is a great first PR, see [below](#adding-a-project-type-detector). |
 | 📖 **Docs** | If a step in the README did not work on your machine, that is a bug in the docs. |
 | ✨ **Features** | Open an issue first for anything that changes the UI or adds a background process. |
 
@@ -55,15 +55,15 @@ without one so secrets stay in exactly one place.
 
 | Path | What lives there |
 |---|---|
-| `thecmanager/` | The FastAPI app — the whole dashboard backend |
+| `thecmanager/` | The FastAPI app, the whole dashboard backend |
 | `thecmanager/scanner.py` | Walks the project roots and finds apps |
 | `thecmanager/detector.py` | Guesses the run/setup command per project type |
-| `thecmanager/runner.py` | Process lifecycle — start, stop, process groups, logs |
+| `thecmanager/runner.py` | Process lifecycle, start, stop, process groups, logs |
 | `thecmanager/health.py` | Port probing and healthy/starting/crashed state |
 | `thecmanager/git_ops.py` | Branch, dirty count, ahead/behind, `git pull --ff-only` |
 | `thecmanager/static/` | The single-page dashboard UI |
 | `supervisor/` | Release snapshots, promotion, and the restart-safe parent process |
-| `desktop/` | Electron shell — owns the window and the child lifecycle, nothing else |
+| `desktop/` | Electron shell, owns the window and the child lifecycle, nothing else |
 | `opsroom/` | The agent sidecar |
 | `scripts/` | Host setup helpers (launchd, GPU limit, mobile) |
 
@@ -75,7 +75,7 @@ without one so secrets stay in exactly one place.
    ```bash
    git checkout -b feat/short-description
    ```
-3. Make the change. Match the surrounding style — the codebase leans on plain
+3. Make the change. Match the surrounding style, the codebase leans on plain
    stdlib Python, type hints on function signatures, and docstrings that explain
    *why* rather than restating the code.
 4. **Test it against real projects.** GSO-1 has few automated tests; the real
@@ -104,7 +104,7 @@ Write the subject as what the change *does*, not what you did.
 ## Pull requests
 
 - One logical change per PR. A refactor and a feature are two PRs.
-- Fill in the PR template — especially **what you tested it against**.
+- Fill in the PR template, especially **what you tested it against**.
 - Screenshots or a short clip for anything that changes the UI.
 - Keep `README.md` in sync when you change setup, config, or behavior.
 - CI must be green.
@@ -114,7 +114,7 @@ Write the subject as what the change *does*, not what you did.
 `thecmanager/detector.py` maps a directory to a run command. Adding support for
 a new stack usually means one function and one entry.
 
-1. Add a check that recognizes the project (a marker file — `Gemfile`,
+1. Add a check that recognizes the project (a marker file, `Gemfile`,
    `go.mod`, `deno.json`).
 2. Return the run command **and** the setup command, if there is one.
 3. Return the default port the stack usually binds, so health probing works.

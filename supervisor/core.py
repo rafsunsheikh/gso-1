@@ -1,4 +1,4 @@
-"""Ops Room supervisor — core.
+"""Ops Room supervisor, core.
 
 Small, boring, stdlib-only. This module is the one component the agent must
 never edit: it is what survives a bad self-edit and rolls the app back.
@@ -47,7 +47,7 @@ def _load_env() -> None:
 
     The supervisor stamps MANAGER_HOST into every child it spawns, so if it did
     not read this file the app could never see it: enabling the phone companion
-    in .env would silently keep binding loopback. Deliberately a local copy —
+    in .env would silently keep binding loopback. Deliberately a local copy, 
     the supervisor stays stdlib-only and independent of the app package.
     """
     try:
@@ -228,7 +228,7 @@ def dangling_links() -> list[str]:
 def prune_releases(keep: int = 5, dry_run: bool = False) -> dict:
     """Delete old releases, keeping the newest `keep`.
 
-    `current` and `previous` are ALWAYS protected regardless of age — deleting
+    `current` and `previous` are ALWAYS protected regardless of age, deleting
     the live release leaves a dangling symlink and deleting the rollback target
     removes the only way back. Both happened by hand on 2026-08-22 using
     `ls -t | head -1`, which is exactly the mistake this exists to prevent.
@@ -346,7 +346,7 @@ def verify_sidecar(rel: Path) -> bool:
 
     Booting GSO-1 proves the Python app works and says nothing about the Node
     sidecar. Without this, a syntax error or a broken import in opsroom/ passes
-    verification and only surfaces after promotion — exactly when it is hardest
+    verification and only surfaces after promotion, exactly when it is hardest
     to recover from.
     """
     check = rel / "opsroom" / "src" / "selfcheck.ts"
@@ -376,7 +376,7 @@ def verify_sidecar(rel: Path) -> bool:
         return False
 
     out = (res.stdout or "").strip() or (res.stderr or "").strip()
-    log(f"verify: sidecar {'OK' if res.returncode == 0 else 'FAILED'} — {out[-400:]}")
+    log(f"verify: sidecar {'OK' if res.returncode == 0 else 'FAILED'}, {out[-400:]}")
     return res.returncode == 0
 
 
@@ -442,7 +442,7 @@ class Supervisor:
 
     def _release_dir(self) -> Path:
         if not CURRENT.is_symlink():
-            raise RuntimeError("var/current is not set — run `release create` then `promote`")
+            raise RuntimeError("var/current is not set, run `release create` then `promote`")
         return CURRENT.resolve()
 
     def start_child(self) -> None:
@@ -471,7 +471,7 @@ class Supervisor:
                     idx = 0  # it was healthy for a while; treat as a fresh fault
                 delay = BACKOFF[min(idx, len(BACKOFF) - 1)]
                 idx += 1
-                log(f"child exited rc={rc} after {uptime:.1f}s — restarting in {delay}s")
+                log(f"child exited rc={rc} after {uptime:.1f}s, restarting in {delay}s")
                 self._sleep(delay)
         finally:
             self._cleanup()
@@ -483,7 +483,7 @@ class Supervisor:
             time.sleep(0.2)
 
     def _on_signal(self, signum, _frame) -> None:
-        log(f"signal {signum} — shutting down")
+        log(f"signal {signum}, shutting down")
         self.stopping = True
         if self.proc:
             _terminate(self.proc)

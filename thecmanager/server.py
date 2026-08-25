@@ -57,7 +57,7 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health_probe() -> JSONResponse:
-    """Unauthenticated liveness — the supervisor and the phone both poll it."""
+    """Unauthenticated liveness, the supervisor and the phone both poll it."""
     return JSONResponse({"ok": True})
 
 
@@ -130,7 +130,7 @@ def list_apps() -> JSONResponse:
     for s in claudebridge.list_sessions().values():
         claude_state[s["project"]] = "working" if s.get("busy") else "attached"
     # GSO-1 lists itself. It is running (the supervisor started it), but not via
-    # runner, so `running` reads False and the UI would offer a Start button —
+    # runner, so `running` reads False and the UI would offer a Start button, 
     # which would launch a second copy and collide on the same port. Flag it so
     # the client can show state honestly and refuse to start it.
     self_path = str(opsroom_bridge.repo_root().resolve())
@@ -205,7 +205,7 @@ def start_app(name: str) -> JSONResponse:
     events.record(
         "run" if result["ok"] else "fail", name,
         f"started on :{cfg['port']}" if result["ok"] and cfg.get("port")
-        else "started" if result["ok"] else f"failed to start — {result.get('message', '')}".strip(),
+        else "started" if result["ok"] else f"failed to start, {result.get('message', '')}".strip(),
     )
     status = 200 if result["ok"] else 400
     return JSONResponse(result, status_code=status)
@@ -320,13 +320,13 @@ class CommitBody(BaseModel):
 
 @app.post("/api/apps/{name}/commit")
 def commit_app(name: str, body: CommitBody) -> JSONResponse:
-    """Stage and commit everything in a repo — the phone's one-tap Commit all."""
+    """Stage and commit everything in a repo, the phone's one-tap Commit all."""
     _require(name)
     msg = (body.message or "").strip() or f"Update {name} via GSO-1"
     result = git_ops.commit_all(scanner.app_path(name), msg)
     events.record("git" if result["ok"] else "fail", name,
                   "nothing to commit" if result.get("nochange")
-                  else f"committed — {msg}"[:110] if result["ok"] else "commit failed")
+                  else f"committed, {msg}"[:110] if result["ok"] else "commit failed")
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
@@ -473,7 +473,7 @@ def llm_logs(lines: int = 200) -> PlainTextResponse:
 
 @app.get("/api/events")
 def list_events(limit: int = 60, since: float | None = None) -> JSONResponse:
-    """The Ops Room timeline. `since` is a unix timestamp — the UI sends midnight."""
+    """The Ops Room timeline. `since` is a unix timestamp, the UI sends midnight."""
     return JSONResponse({"events": events.recent(limit=limit, since=since)})
 
 
@@ -702,7 +702,7 @@ def planner_delete_task(board_id: str, task_id: str) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------
-# Chat (stub — wired for a later pass with Claude API)
+# Chat (stub, wired for a later pass with Claude API)
 # --------------------------------------------------------------------------
 class ChatMessage(BaseModel):
     message: str
@@ -757,7 +757,7 @@ def chat_reset() -> JSONResponse:
 
 
 # --------------------------------------------------------------------------
-# Site CMS — edit the Jekyll website and publish to GitHub
+# Site CMS, edit the Jekyll website and publish to GitHub
 # --------------------------------------------------------------------------
 class SiteSave(BaseModel):
     frontmatter: dict
@@ -819,7 +819,7 @@ def site_publish(body: SitePublish) -> JSONResponse:
 # ------------------------------------------------------------ first-run setup
 #
 # A packaged GSO-1 ships without a .env, so a fresh install has to ask the user
-# where their code lives. These endpoints back that screen — and let anyone
+# where their code lives. These endpoints back that screen: and let anyone
 # change or add a root later without editing a file.
 
 
@@ -872,7 +872,7 @@ def browse(path: str = "") -> JSONResponse:
     """List sub-directories of `path`, for the folder picker in the browser UI.
 
     The desktop shell uses a native dialog instead. This walks anywhere the
-    user can already read — it is their machine, and the picker would be
+    user can already read, it is their machine, and the picker would be
     useless confined to roots that have not been chosen yet.
     """
     target = Path(path).expanduser() if path.strip() else Path.home()

@@ -1,13 +1,13 @@
 """Scheduled jobs for GSO-1.
 
 A background thread that runs recurring reports and delivers them to Telegram.
-Stdlib only — GSO-1 has exactly two dependencies (fastapi, uvicorn) and this
+Stdlib only, GSO-1 has exactly two dependencies (fastapi, uvicorn) and this
 does not need a third.
 
 Design notes:
 
 * Jobs are **deterministic Python**, not agent prompts. A git sweep is a fact,
-  not a judgement, and local inference costs ~30 s per turn — far too slow and
+  not a judgement, and local inference costs ~30 s per turn, far too slow and
   too unreliable for something that runs unattended. Ops Room decides *when*
   things are interesting; code decides *what is true*. (An `opsroom_prompt`
   kind exists for jobs that genuinely need judgement; it runs detached.)
@@ -183,17 +183,17 @@ def _git_sweep() -> str:
             ahead.append((name, st.get("ahead", 0), st.get("behind", 0)))
 
     dirty.sort(key=lambda r: -r[1])
-    lines = [f"🔍 Git sweep — {repos} repos of {scanned} apps"]
+    lines = [f"🔍 Git sweep, {repos} repos of {scanned} apps"]
     if dirty:
         lines.append(f"\n📝 {len(dirty)} with uncommitted changes:")
-        lines += [f"  • {n} — {c} file(s) on {b}" for n, c, b in dirty[:12]]
+        lines += [f"  • {n}, {c} file(s) on {b}" for n, c, b in dirty[:12]]
         if len(dirty) > 12:
             lines.append(f"  …and {len(dirty) - 12} more")
     else:
         lines.append("\n✅ Nothing uncommitted.")
     if ahead:
         lines.append(f"\n🔀 {len(ahead)} out of sync with remote:")
-        lines += [f"  • {n} — ahead {a}, behind {b}" for n, a, b in ahead[:8]]
+        lines += [f"  • {n}: ahead {a}, behind {b}" for n, a, b in ahead[:8]]
     return "\n".join(lines)
 
 
@@ -233,10 +233,10 @@ def _health_digest() -> str:
             running.append(name)
         elif state in ("crashed", "unhealthy"):
             unhealthy.append((name, state))
-    lines = [f"❤️ Health — {len(running)} up"]
+    lines = [f"❤️ Health, {len(running)} up"]
     if unhealthy:
         lines.append(f"\n⚠️ {len(unhealthy)} unhealthy:")
-        lines += [f"  • {n} — {s}" for n, s in unhealthy[:10]]
+        lines += [f"  • {n}, {s}" for n, s in unhealthy[:10]]
     return "\n".join(lines)
 
 
@@ -259,7 +259,7 @@ def _opsroom_prompt(job: dict) -> str:
             [str(ops), prompt], cwd=str(config.APP_DIR),
             stdout=fh, stderr=subprocess.STDOUT, start_new_session=True,
         )
-    return f"🤖 Started Ops Room job '{job.get('name')}' — output: {log}"
+    return f"🤖 Started Ops Room job '{job.get('name')}', output: {log}"
 
 
 KINDS: dict[str, Callable[..., str]] = {
@@ -284,7 +284,7 @@ def _notify(text: str) -> None:
 
 
 def run_job(job: dict, notify: bool = True) -> dict:
-    """Run one job now. Never raises — a bad job must not kill the thread."""
+    """Run one job now. Never raises: a bad job must not kill the thread."""
     kind = job.get("kind", "")
     fn = KINDS.get(kind)
     if not fn:

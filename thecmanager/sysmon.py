@@ -1,4 +1,4 @@
-"""System resource monitor (CPU / GPU / RAM) for macOS — no extra deps.
+"""System resource monitor (CPU / GPU / RAM) for macOS, no extra deps.
 
 Uses native tools that work without sudo:
   * `top -l 2`   -> system CPU%, PhysMem, and per-process CPU%/MEM (2nd sample)

@@ -1,7 +1,7 @@
 """Entry point for the packaged GSO-1 backend.
 
 The Electron shell spawns this binary directly, so there is no venv, no
-supervisor, and no promoted release in the picture — just the server. Anything
+supervisor, and no promoted release in the picture, just the server. Anything
 the shell needs to control is passed in the environment.
 """
 from __future__ import annotations

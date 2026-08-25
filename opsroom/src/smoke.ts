@@ -3,7 +3,7 @@
  *
  * Why this exists: on 2026-08-22 the agent was asked to add an `uptime_info`
  * tool. It wrote clean, well-structured code that fetched
- * `http://127.0.0.1:8420/api/system/uptime` — an endpoint that does not exist.
+ * `http://127.0.0.1:8420/api/system/uptime`: an endpoint that does not exist.
  * Its own `catch { return 0 }` swallowed the 404, so the tool reported "0s"
  * uptime on a machine that had been up for a day. `selfcheck` passed it and
  * `verify_release` PASSED, because both only proved the module *loads*.
@@ -23,7 +23,7 @@ const GSO1 = process.env.OPSROOM_GSO1_URL ?? "http://127.0.0.1:8420";
 
 /**
  * Tools that are safe to actually run during verification: no side effects, no
- * required parameters. Anything that mutates state or costs money stays out —
+ * required parameters. Anything that mutates state or costs money stays out, 
  * notably build/promote/rollback (destructive) and web_search (spends credits).
  */
 const SMOKE_SAFE = new Set([
@@ -49,7 +49,7 @@ export async function checkEndpoints(): Promise<Failure[]> {
   const failures: Failure[] = [];
   const files = (await readdir(SRC)).filter((f) => f.endsWith(".ts"));
 
-  // Only quoted URLs in real code. Comments are stripped first — otherwise a
+  // Only quoted URLs in real code. Comments are stripped first, otherwise a
   // docstring describing a past bug is flagged as the bug itself.
   const literal = /["'`]https?:\/\/127\.0\.0\.1:8420(\/[^"'`\s]*)["'`]/g;
   const seen = new Set<string>();
@@ -68,14 +68,14 @@ export async function checkEndpoints(): Promise<Failure[]> {
   }
 
   for (const route of seen) {
-    // Skip parameterised paths — we cannot invent a valid id for them.
+    // Skip parameterised paths, we cannot invent a valid id for them.
     if (route.includes("${") || route.includes("{")) continue;
     try {
       const res = await fetch(`${GSO1}${route}`, { signal: AbortSignal.timeout(20_000) });
       if (res.status === 404) {
         failures.push({
           check: "endpoint",
-          detail: `${route} returns 404 — this route does not exist in GSO-1. ` +
+          detail: `${route} returns 404, this route does not exist in GSO-1. ` +
             `A tool calling it will fail silently if its error handling returns a default.`,
         });
       }
@@ -108,7 +108,7 @@ export async function smokeTools(tools: AgentTool[]): Promise<Failure[]> {
       if (numbers.length >= 2 && numbers.every((n) => n === 0)) {
         failures.push({
           check: "smoke",
-          detail: `${tool.name} returned all-zero values (${text.replace(/\s+/g, " ").slice(0, 120)}) — ` +
+          detail: `${tool.name} returned all-zero values (${text.replace(/\s+/g, " ").slice(0, 120)}), ` +
             `likely a swallowed error rather than a real measurement`,
         });
       }

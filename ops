@@ -4,7 +4,7 @@
 #
 # Runs the sidecar from the PROMOTED RELEASE (var/current/opsroom) while the
 # agent edits the WORKING TREE (opsroom/). Those must be different directories,
-# or a self-edit modifies the code that is currently executing — which is how a
+# or a self-edit modifies the code that is currently executing, which is how a
 # broken edit killed the agent mid-task on 2026-08-22, before verify could
 # refuse it. Separating them means an in-progress edit cannot touch the running
 # process; the new code only takes effect once a release is built, verified and
@@ -36,7 +36,7 @@ elif [ -f "$RELEASE_DIR/src/ask.ts" ]; then
   RUN_DIR="$RELEASE_DIR"
 else
   RUN_DIR="$WORKTREE_DIR"
-  echo "ops: no promoted release at var/current/opsroom — falling back to the" >&2
+  echo "ops: no promoted release at var/current/opsroom, falling back to the" >&2
   echo "     working tree. Run: python -m supervisor release create && ... promote" >&2
 fi
 
@@ -47,7 +47,7 @@ if [ ! -d "$RUN_DIR/node_modules" ]; then
 fi
 
 # Resolve node explicitly. When GSO-1 spawns this, PATH is the bare launchd
-# default (/usr/bin:/bin:/usr/sbin:/sbin) — no Homebrew, no nvm — so relying on
+# default (/usr/bin:/bin:/usr/sbin:/sbin), no Homebrew, no nvm, so relying on
 # `exec node` gives "node: not found". Same applies under the Electron app and
 # any launchd/cron context.
 find_node() {

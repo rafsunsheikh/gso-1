@@ -1,12 +1,12 @@
 /*
- * GSO-1 design tokens — from the Decara-derived redesign handoff (2026-08-23).
+ * GSO-1 design tokens, from the Decara-derived redesign handoff (2026-08-23).
  *
  * Dark is the default surface; [data-theme="light"] overrides. Every value
  * here is the shipping value from the handoff's token table.
  *
  * Contrast rule (non-negotiable, quoted from the handoff): all muted text is
- * small (10.5–12px), so the light values were tuned to clear WCAG AA 4.5:1 on
- * white — --text-2 4.8:1+, --text-3 4.5:1+, --kind-node 5.0:1,
+ * small (10.5 to 12px), so the light values were tuned to clear WCAG AA 4.5:1 on
+ * white, --text-2 4.8:1+, --text-3 4.5:1+, --kind-node 5.0:1,
  * --kind-python 6.7:1. Do not swap these for lighter greys, and never let a
  * status colour keep its dark-theme hex in light mode.
  */
@@ -189,7 +189,7 @@
    Small pieces the redesign uses everywhere. Built by hand because this
    codebase has no component library; the handoff assumed shadcn. */
 
-/* Status dot. Colour alone is never the whole story — callers pair this
+/* Status dot. Colour alone is never the whole story, callers pair this
    with an aria-label. */
 .gso-dot {
   width: 7px; height: 7px;
@@ -258,7 +258,7 @@
 [data-theme="light"] .bg-green-400   { background-color: var(--live); }
 
 /* ==================================================================
-   Shell — sidebar, rail, content header. Values from the handoff's
+   Shell, sidebar, rail, content header. Values from the handoff's
    "Global shell" section; sizes are the shipping sizes.
    ================================================================== */
 
@@ -434,7 +434,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 }
 
 /* ==================================================================
-   Ops Room view — LIVE / NEEDS YOU / ROUTINES / RECENT
+   Ops Room view, LIVE / NEEDS YOU / ROUTINES / RECENT
    ================================================================== */
 .ops-view { display: flex; flex-direction: column; gap: 24px; }
 
@@ -515,7 +515,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .ops-chip[data-more="1"] { border-style: dashed; color: var(--text-3); }
 
 /* ==================================================================
-   Library — status strip + repo cards
+   Library, status strip + repo cards
    ================================================================== */
 .lib-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin-bottom: 16px; }
 @media (max-width: 1000px) { .lib-strip { grid-template-columns: repeat(2, 1fr); } }
@@ -576,7 +576,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-icon:hover { background: var(--hover); color: var(--text); }
 
 /* ==================================================================
-   Docks — a third shell column rather than an overlay
+   Docks: a third shell column rather than an overlay
    ================================================================== */
 .gso-dock {
   width: 322px; flex: none;
@@ -599,7 +599,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 }
 
 /* ==================================================================
-   Library table — the handoff specifies a table, not a card grid:
+   Library table, the handoff specifies a table, not a card grid:
    grid-template-columns: 34px 1fr 92px 112px 148px 100px
    ================================================================== */
 .lib-chiprow {
@@ -733,7 +733,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-head { position: sticky; top: 31px; z-index: 2; background: var(--bg); }
 
 /* ==================================================================
-   Planner — README "3. Planner". Four tone-dotted columns of drag-able
+   Planner, README "3. Planner". Four tone-dotted columns of drag-able
    cards, each column ending in a dashed add-task button.
    ================================================================== */
 .pl-chiprow { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -801,7 +801,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .pl-addinput:focus { outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
 
 /* ==================================================================
-   Local LLM — README "4. Local LLM": a live server card beside an hour
+   Local LLM, README "4. Local LLM": a live server card beside an hour
    of traffic, then the models on disk as rows.
    ================================================================== */
 .llm-wrap { display: flex; flex-direction: column; gap: 24px; }
@@ -898,7 +898,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .llm-dl-fill { height: 100%; border-radius: 999px; background: var(--primary); }
 
 /* ==================================================================
-   Ops Room dock — README "Ops Room dock (assistant)".
+   Ops Room dock, README "Ops Room dock (assistant)".
    ================================================================== */
 .gso-dock-meta {
   font: 400 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -974,7 +974,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .ops-foot-hint:empty { display: none; }
 
 /* ==================================================================
-   Site — README "5. Site": a deploy header over the content table.
+   Site, README "5. Site": a deploy header over the content table.
    ================================================================== */
 .site-wrap { display: flex; flex-direction: column; gap: 22px; }
 .site-deploy {
@@ -1032,7 +1032,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .site-when { font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-3); }
 
 /* ==================================================================
-   Details dock — README "Details dock (repo details)".
+   Details dock, README "Details dock (repo details)".
    ================================================================== */
 .dk-card {
   padding: 11px 12px; border-radius: 11px;
@@ -1124,7 +1124,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .dk-switch[aria-checked="true"]::after { transform: translateX(14px); }
 
 /* ==================================================================
-   Chat view — the Ops Room's bubble language at page width.
+   Chat view, the Ops Room's bubble language at page width.
    ================================================================== */
 /* The composer belongs at the bottom of the view, not under the last line. */
 .chat-col {
@@ -1186,7 +1186,7 @@ select.f-in { appearance: none; padding-right: 26px;
 textarea.f-in { resize: vertical; line-height: 1.55; }
 
 /* ==================================================================
-   Ops Room — "Today + Ports" band (README section 4).
+   Ops Room, "Today + Ports" band (README section 4).
    ================================================================== */
 .ops-band {
   display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: 14px;

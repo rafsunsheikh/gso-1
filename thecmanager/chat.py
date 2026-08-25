@@ -1,4 +1,4 @@
-"""Chat module — drives Claude Code (full agent + tools) on the LOCAL LLM,
+"""Chat module, drives Claude Code (full agent + tools) on the LOCAL LLM,
 surfaced in the dashboard's chat UI, with multiple persisted conversations.
 
 Each conversation maps to a Claude Code session (resumed via --resume), so the
@@ -83,7 +83,7 @@ def _on_output(chat_id, text: str) -> None:
     with _lock:
         convo = _convos.get(_active) or _ensure_active()
         convo["messages"].append({"role": role, "text": t})
-        if role == "meta":  # turn finished — capture session id + persist
+        if role == "meta":  # turn finished, capture session id + persist
             sess = claudebridge.get_session(CHAT_ID)
             if sess and sess.get("session_id"):
                 convo["session_id"] = sess["session_id"]

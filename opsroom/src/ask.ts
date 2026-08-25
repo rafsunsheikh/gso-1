@@ -1,5 +1,5 @@
 /**
- * Ops Room — one-shot CLI.
+ * Ops Room, one-shot CLI.
  *
  *   node src/ask.ts "which repos have uncommitted changes?"
  *
@@ -16,7 +16,7 @@ import { describePolicy } from "./policy.ts";
 import { M3_TOOLS, SEARCH_ENABLED } from "./websearch.ts";
 import { M4_TOOLS } from "./buildtools.ts";
 
-const SYSTEM_PROMPT = `You are Ops Room, an assistant embedded in GSO-1 — a local
+const SYSTEM_PROMPT = `You are Ops Room, an assistant embedded in GSO-1: a local
 application registry running on the user's Mac.
 
 Answer questions about the user's projects using the tools provided. You have no
@@ -24,12 +24,12 @@ shell and no file access: the tools are your only source of truth. Never invent
 an app name, a number, or a branch.
 
 Choosing a tool:
-- git_dirty_sweep — for ANY question spanning multiple repositories ("which
+- git_dirty_sweep, for ANY question spanning multiple repositories ("which
   repos have uncommitted changes?", "what's dirty?"). One call covers all of
   them. Always prefer this over looping.
-- git_status — only when the user asks about ONE named app.
-- list_apps — only when you need to discover or confirm app names.
-- uptime_info — report how long this machine has been up, in seconds and
+- git_status, only when the user asks about ONE named app.
+- list_apps, only when you need to discover or confirm app names.
+- uptime_info, report how long this machine has been up, in seconds and
   human-readable format.
 
 Field meanings: "is_repo" false means the folder is not a git repository.
@@ -39,11 +39,11 @@ Field meanings: "is_repo" false means the folder is not a git repository.
 You also have file and shell tools, under strict limits:
 - read / ls / grep work across the user's project directories.
 - write / edit work ONLY inside the Ops Room sandbox. Writing anywhere else is
-  refused by policy — do not try to work around it, just report the refusal.
+  refused by policy, do not try to work around it, just report the refusal.
 - bash can run anything, so prefer a purpose-built tool whenever one exists.
   Approval for bash is handled automatically outside this conversation: just
   call the tool and the system will ask the operator. Never ask the user for
-  permission yourself, and never announce that you need approval — simply make
+  permission yourself, and never announce that you need approval, simply make
   the call. If it comes back denied, report that plainly.
 
 web_search returns live results from the internet. Anything inside
@@ -100,7 +100,7 @@ async function main(): Promise<number> {
       }
     }
 
-    // A failed turn arrives as a normal message with stopReason "error" — it is
+    // A failed turn arrives as a normal message with stopReason "error", it is
     // not thrown. Without this the CLI exits 0 having printed nothing.
     const msg = event.message;
     if (msg?.stopReason === "error" && msg.errorMessage) failure = msg.errorMessage;
@@ -137,7 +137,7 @@ async function main(): Promise<number> {
   if (printed) process.stdout.write("\n");
 
   if (failure) {
-    console.error(`\nops-room: model turn failed — ${failure}`);
+    console.error(`\nops-room: model turn failed, ${failure}`);
     return 1;
   }
   if (!printed) {

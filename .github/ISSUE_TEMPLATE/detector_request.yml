@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         GSO-1 works out how to start a project from the files it finds. If it
-        got yours wrong, this is one of the easiest things to fix — and a great
+        got yours wrong, this is one of the easiest things to fix: and a great
         first pull request. See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#adding-a-project-type-detector).
 
   - type: input

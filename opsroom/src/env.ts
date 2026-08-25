@@ -2,7 +2,7 @@
  * Load the repo-root .env before anything reads process.env.
  *
  * Import this FIRST in every entry point. Secrets (TAVILY_API_KEY) live in
- * <repo>/.env, which is gitignored — never in the source tree, and never in a
+ * <repo>/.env, which is gitignored, never in the source tree, and never in a
  * release snapshot.
  *
  * Uses Node's built-in loader (node >= 20.12), so no dotenv dependency.
@@ -17,7 +17,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 /**
  * Candidate locations, in order. A release runs from
  * var/releases/<ts>/opsroom/src, so the repo root is two levels up from the
- * package — but the canonical secret lives in the real repo, which the
+ * package, but the canonical secret lives in the real repo, which the
  * supervisor passes through via OPSROOM_ENV_FILE when it differs.
  */
 function candidates(): string[] {
@@ -36,7 +36,7 @@ for (const file of candidates()) {
     loadedFrom = file;
     break;
   } catch {
-    // missing or unreadable — try the next candidate
+    // missing or unreadable, try the next candidate
   }
 }
 

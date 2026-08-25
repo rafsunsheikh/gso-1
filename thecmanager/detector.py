@@ -268,5 +268,5 @@ def detect(path: Path) -> dict:
         )
         return result
 
-    result["notes"] = "Could not detect project type — set a start command manually."
+    result["notes"] = "Could not detect project type, set a start command manually."
     return result

@@ -1,5 +1,5 @@
 /**
- * web_search — Tavily Search API.
+ * web_search, Tavily Search API.
  *
  * Design decisions come from the survey of codex / gemini-cli / qwen-code /
  * opencode / openclaw (2026-08-22):
@@ -38,7 +38,7 @@ const TIMEOUT_MS = Number(process.env.OPSROOM_SEARCH_TIMEOUT_MS ?? 25_000);
 
 /**
  * Mark model-visible text as attacker-controlled.
- * Escaping the closing tag matters — without it the wrapper is trivially
+ * Escaping the closing tag matters, without it the wrapper is trivially
  * escaped by content that simply includes the closing tag.
  */
 export function wrapUntrusted(text: string): string {
@@ -69,7 +69,7 @@ export const webSearchTool: AgentTool = {
   label: "Web search",
   description:
     "Search the web for current information beyond the model's knowledge cutoff. " +
-    "Returns a short synthesized answer plus title, URL and snippet per result — " +
+    "Returns a short synthesized answer plus title, URL and snippet per result, " +
     `not full page text. Returns ${DEFAULT_COUNT} results by default. Always cite the URL.`,
   parameters: Type.Object({
     query: Type.String({ description: "The search query" }),

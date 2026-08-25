@@ -5,7 +5,7 @@
 /* ------------------------------------------------------------------
    Accessibility layer.
    Tailwind's preflight removes the browser's default focus outline, and
-   nothing replaced it — so keyboard users had no idea where they were.
+   nothing replaced it, so keyboard users had no idea where they were.
    :focus-visible keeps rings off mouse clicks while showing them for
    keyboard and assistive tech.
    ------------------------------------------------------------------ */
@@ -36,7 +36,7 @@
 }
 
 @layer components {
-  /* Visible only when focused — the keyboard shortcut past 270 app cards. */
+  /* Visible only when focused, the keyboard shortcut past 270 app cards. */
   .skip-link {
     position: absolute;
     left: 0.5rem;
@@ -85,7 +85,7 @@
     .skeleton { animation: none; background: #211d3d; }
   }
 
-  /* Connection banner — the backend can restart underneath an open window
+  /* Connection banner, the backend can restart underneath an open window
      (a promoted release does exactly that), and the page must say so. */
   .conn-banner {
     position: fixed; inset-inline: 0; top: 0; z-index: 80;
@@ -100,7 +100,7 @@
   .conn-banner[data-state="down"]       { transform: translateY(0); }
   .conn-banner[data-state="recovered"]  { transform: translateY(0); background: #14532d; color: #bbf7d0; }
 
-  /* One toast, bottom-centre — see the redesign's "Toasts" section. */
+  /* One toast, bottom-centre, see the redesign's "Toasts" section. */
   #toasts {
     position: fixed; left: 50%; bottom: 18px; z-index: 90;
     transform: translateX(-50%); max-width: min(30rem, calc(100vw - 2rem));

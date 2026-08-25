@@ -16,7 +16,7 @@ APP_DIR = Path(__file__).resolve().parent.parent
 def _repo_root() -> Path:
     """The real checkout, even when running from a release snapshot.
 
-    Releases deliberately do not carry `.env` — secrets stay in one place — so
+    Releases deliberately do not carry `.env`, secrets stay in one place, so
     a release reads the canonical file through the `source` recorded at build
     time, the same way the Ops Room launcher does.
     """
@@ -63,7 +63,7 @@ def _default_data_dir() -> Path:
 
 def _resolve_data_dir() -> Path:
     """State lives beside the code in a checkout, and in the user's data
-    directory once packaged — a bundle is read-only, and two installs must not
+    directory once packaged: a bundle is read-only, and two installs must not
     fight over one registry."""
     override = os.environ.get("MANAGER_DATA_DIR", "").strip()
     if override:
@@ -87,7 +87,7 @@ def load_settings() -> dict:
 
 
 def save_settings(data: dict) -> None:
-    """Write settings atomically — a half-written file would lose the user's
+    """Write settings atomically: a half-written file would lose the user's
     project roots and send them back through onboarding."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
@@ -160,7 +160,7 @@ def _apply_roots(roots: list[tuple[str, Path]]) -> None:
     """Point every root global at `roots` at once.
 
     Callers read `config.PROJECTS_DIRS` and friends at call time, so rebinding
-    these three is enough to re-target a running scan — but they must move
+    these three is enough to re-target a running scan, but they must move
     together or the UI tabs and the scanner will disagree.
     """
     global PROJECT_ROOTS, PROJECTS_DIRS, PROJECTS_DIR

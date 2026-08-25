@@ -3,7 +3,7 @@
  *
  * Electron owns nothing but the window and the child lifecycle. It spawns the
  * supervisor, which spawns GSO-1 from the promoted release; the renderer just
- * loads the existing dashboard at 127.0.0.1:8420 — the same single index.html
+ * loads the existing dashboard at 127.0.0.1:8420, the same single index.html
  * that already works in a browser, unmodified.
  *
  * The one hard requirement: quitting must leave no orphans. The supervisor runs
@@ -126,7 +126,7 @@ function startBundledServer() {
 
 async function startSupervisor() {
   // Someone may already be running GSO-1 in a terminal. Adopt it rather than
-  // fighting for the port — and remember not to kill it on quit.
+  // fighting for the port: and remember not to kill it on quit.
   if (await probe()) {
     weOwnSupervisor = false;
     return true;
@@ -264,7 +264,7 @@ function toggleOpsPanel() {
     )
     .then((ok) => {
       if (!ok) {
-        // The loaded page predates the panel — reload to pick it up.
+        // The loaded page predates the panel, reload to pick it up.
         win.reload();
       }
     })
@@ -273,7 +273,7 @@ function toggleOpsPanel() {
 
 /**
  * An application menu. Without one, ⌘R and ⌘J only work if the loaded page
- * happens to implement them — and a page loaded before an update does not.
+ * happens to implement them: and a page loaded before an update does not.
  * Driving the toggle from the menu makes it work regardless.
  */
 function createMenu() {
@@ -370,7 +370,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("activate", showWindow);
 
-  // Children must not outlive the shell — on normal quit, on SIGINT, or on a
+  // Children must not outlive the shell, on normal quit, on SIGINT, or on a
   // crash of the main process.
   app.on("before-quit", () => {
     quitting = true;
@@ -386,6 +386,6 @@ if (!app.requestSingleInstanceLock()) {
     });
   }
 
-  // Closing the last window does not quit — the tray keeps it alive.
+  // Closing the last window does not quit, the tray keeps it alive.
   app.on("window-all-closed", () => {});
 }

@@ -42,7 +42,7 @@ path.chmod(0o600)
 PY
 
 # A MANAGER_HOST exported in the shell beats the file we just wrote, and the
-# supervisor stamps its own value into every child — so say so now rather than
+# supervisor stamps its own value into every child, so say so now rather than
 # letting the phone fail with "cannot connect".
 if [ -n "${MANAGER_HOST:-}" ] && [ "$MANAGER_HOST" != "0.0.0.0" ]; then
   cat >&2 <<WARN

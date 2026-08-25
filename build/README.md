@@ -11,7 +11,7 @@ pyinstaller build/gso1-server.spec --noconfirm \
   --distpath build/dist --workpath build/work
 ```
 
-Produces `build/dist/gso1-server/` — a self-contained server (~34 MB) that
+Produces `build/dist/gso1-server/`: a self-contained server (~34 MB) that
 needs no Python on the target machine. It serves the dashboard from static
 files collected into the bundle, defaults to loopback, and keeps its state in
 the platform user-data directory.
@@ -37,7 +37,7 @@ electron-builder copies `build/dist/gso1-server` into the bundle as
 `Contents/Resources/server` (macOS) or `resources/server` (Windows, Linux).
 Output lands in `build/release/`.
 
-`npm run pack` builds an unpacked app without an installer — much faster when
+`npm run pack` builds an unpacked app without an installer, much faster when
 you only need to test that the shell finds the server.
 
 ## Signing

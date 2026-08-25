@@ -1,5 +1,5 @@
 /**
- * Uptime info tool — reports how long the machine has been up.
+ * Uptime info tool, reports how long the machine has been up.
  */
 
 import os from "node:os";
@@ -11,7 +11,7 @@ import { Type } from "typebox";
  * Get system uptime in seconds.
  *
  * The first version of this fetched `http://127.0.0.1:8420/api/system/uptime`,
- * a route that does not exist — and its catch returned 0, so the tool reported
+ * a route that does not exist: and its catch returned 0, so the tool reported
  * "0s" on a machine up for a day, while passing verification. Node exposes
  * uptime directly; no HTTP, nothing to swallow, nothing to hallucinate.
  */

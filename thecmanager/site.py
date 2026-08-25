@@ -26,8 +26,8 @@ def _jsonable(v):
         return v.isoformat()
     return v
 
-# Which Jekyll checkout to edit. There is no sensible default — it is one
-# specific repo on one specific machine — so the CMS stays switched off until
+# Which Jekyll checkout to edit. There is no sensible default, it is one
+# specific repo on one specific machine, so the CMS stays switched off until
 # MANAGER_SITE_DIR names one.
 _SITE_ENV = os.environ.get("MANAGER_SITE_DIR", "").strip()
 SITE_DIR = Path(_SITE_ENV).expanduser() if _SITE_ENV else None
@@ -66,7 +66,7 @@ def _require_site() -> Path:
     """
     if not configured():
         raise ValueError(
-            "the site CMS is not configured — set MANAGER_SITE_DIR to a Jekyll checkout"
+            "the site CMS is not configured, set MANAGER_SITE_DIR to a Jekyll checkout"
         )
     return SITE_DIR
 
@@ -187,7 +187,7 @@ def publish(message: str) -> dict:
         return {"ok": False, "step": "commit", "output": c["output"]}
     p = git_ops.push(SITE_DIR)
     events.record("site" if p["ok"] else "fail", SITE_DIR.name,
-                  "published — Pages will rebuild" if p["ok"] and not c.get("nochange")
+                  "published, Pages will rebuild" if p["ok"] and not c.get("nochange")
                   else "nothing to publish" if c.get("nochange") else "publish failed")
     return {
         "ok": p["ok"],

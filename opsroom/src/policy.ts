@@ -2,9 +2,9 @@
  * Path policy for Ops Room.
  *
  * Two rings:
- *   READ_ROOTS    — may be read, searched, listed
- *   SANDBOX_ROOT  — the only place the agent may write
- *   IMMUTABLE     — never writable, even inside the sandbox (plan invariant #1:
+ *   READ_ROOTS, may be read, searched, listed
+ *   SANDBOX_ROOT, the only place the agent may write
+ *   IMMUTABLE, never writable, even inside the sandbox (plan invariant #1:
  *                   the supervisor is what rolls back a bad self-edit, so the
  *                   agent must never be able to touch it)
  *

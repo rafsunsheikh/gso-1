@@ -1,4 +1,4 @@
-# GSO-1 + Ops Room — Runbook
+# GSO-1 + Ops Room, Runbook
 
 How to start everything, and how to check each piece actually works.
 Written 2026-08-23. Companion to `OPS_ROOM_PLAN.md` (the build log).
@@ -11,15 +11,15 @@ Written 2026-08-23. Companion to `OPS_ROOM_PLAN.md` (the build log).
 |---|---|---|
 | **GSO-1** | FastAPI app + dashboard. The thing you already had. | 8420 |
 | **llama-server** | Local model, owned by GSO-1's `llm.py`. | 8080 |
-| **supervisor** | Runs GSO-1 from a versioned release; health-checks and rolls back. | — |
-| **Ops Room** | pi-based agent sidecar. One-shot CLI via `./ops`. | — |
-| **GSO-1.app** | Electron shell in `~/Applications`. | — |
+| **supervisor** | Runs GSO-1 from a versioned release; health-checks and rolls back. |, |
+| **Ops Room** | pi-based agent sidecar. One-shot CLI via `./ops`. |, |
+| **GSO-1.app** | Electron shell in `~/Applications`. |, |
 
 ---
 
 ## Starting
 
-### Option A — the desktop app (normal use)
+### Option A, the desktop app (normal use)
 
 Double-click **GSO-1** in `~/Applications`, or:
 
@@ -31,7 +31,7 @@ It adopts an already-running GSO-1 if there is one, otherwise starts the
 supervisor itself. Closing the window hides to the menu bar; quit from the tray
 icon or ⌘Q. Quitting stops only what it started.
 
-### Option B — supervised, no GUI
+### Option B, supervised, no GUI
 
 ```bash
 cd ~/Projects/gso-1
@@ -40,13 +40,13 @@ python -m supervisor status
 python -m supervisor stop
 ```
 
-### Option C — plain, the old way
+### Option C, plain, the old way
 
 ```bash
 cd ~/Projects/gso-1 && ./run.sh    # working tree, no supervisor
 ```
 
-Only one of these at a time — they all want port 8420.
+Only one of these at a time, they all want port 8420.
 
 ### The local model
 
@@ -74,7 +74,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8420/api/apps
 
 `200`. Note it scans ~270 projects, so it can take several seconds.
 
-### 2. Ops Room — read-only
+### 2. Ops Room, read-only
 
 ```bash
 cd ~/Projects/gso-1
@@ -91,9 +91,9 @@ git, the rest inference. `--verbose` shows tool calls and the active policy.
 ```
 
 Needs `TAVILY_API_KEY` in `.env`. Without it the tool silently disappears from
-the list rather than erroring — check with `./ops --verbose "hi"`.
+the list rather than erroring, check with `./ops --verbose "hi"`.
 
-### 4. Sandbox policy — the guards
+### 4. Sandbox policy, the guards
 
 ```bash
 ./ops "write the text hello into /tmp/should_not_work.txt"   # must be REFUSED
@@ -126,7 +126,7 @@ Takes ~15 min. Then promote (Telegram approval required):
 ./ops "promote_release with stamp <the stamp it printed>"
 ```
 
-**Verify that it refuses a broken build too** — that matters more than the
+**Verify that it refuses a broken build too**, that matters more than the
 happy path:
 
 ```bash
@@ -144,7 +144,7 @@ python -m supervisor prune --keep 5 --dry-run
 python -m supervisor rollback          # back to previous
 ```
 
-Never delete releases by hand with `ls -t` — `prune` protects
+Never delete releases by hand with `ls -t`, `prune` protects
 `current`/`previous`, hand-deletion does not.
 
 ### 8. Scheduler
@@ -188,12 +188,12 @@ cd opsroom && node src/selfcheck.ts   # sidecar integrity + behavioural checks
 ```
 
 `status` warns when `current`/`previous` point at a release that no longer
-exists — worth checking before relying on `rollback`.
+exists, worth checking before relying on `rollback`.
 
 ## The phone companion
 
 The iPhone app is the same server: a phone-shaped page at `/m`, served by GSO-1
-itself. There is nothing to install and nothing in the App Store — you add it to
+itself. There is nothing to install and nothing in the App Store, you add it to
 the Home Screen and it runs full-screen.
 
 ### Turning it on
@@ -213,7 +213,7 @@ Home Screen**. Re-run the script to rotate the code.
 | Where you are | How | Notes |
 |---|---|---|
 | Same Wi-Fi | `http://<mac-ip>:8420/m` or `http://<hostname>.local:8420/m` | What the setup script prints. The `.local` name survives a DHCP lease change; the IP does not. |
-| Anywhere | Tailscale (or any WireGuard mesh) | Install it on both, then use the Mac's tailnet IP — same URL, no ports opened on your router. Encrypted, and the device stays private. |
+| Anywhere | Tailscale (or any WireGuard mesh) | Install it on both, then use the Mac's tailnet IP, same URL, no ports opened on your router. Encrypted, and the device stays private. |
 | Public internet | Cloudflare Tunnel / ngrok | Works, but puts a start-stop-and-run-an-agent surface on the open web behind one shared code. Prefer the mesh. |
 
 **Never port-forward 8420 on the router.** The access code is one secret over
@@ -224,7 +224,7 @@ it is not.
 
 `remoteauth.py` is a middleware in front of everything:
 
-- Requests from `127.0.0.1` pass untouched — the desktop app is unchanged and
+- Requests from `127.0.0.1` pass untouched, the desktop app is unchanged and
   needs no code.
 - Anything else must present the code, as `Authorization: Bearer <code>` or the
   `gso_token` cookie. The cookie exists because `EventSource` cannot set
@@ -232,7 +232,7 @@ it is not.
   cannot read it back out.
 - With no code configured, non-loopback requests are refused outright. Binding
   the wrong interface by accident cannot expose the machine.
-- `/m`, `/static/*` and `/health` are reachable without the code — enough to
+- `/m`, `/static/*` and `/health` are reachable without the code, enough to
   paint a login screen, and nothing else.
 
 Verify it from another machine on the network:
@@ -244,24 +244,24 @@ curl -s -o /dev/null -w '%{http_code}\n' http://<mac-ip>:8420/m           # 200
 
 ### What the phone can do
 
-Four tabs — **Ops · Repos · Planner · Room**:
+Four tabs, **Ops · Repos · Planner · Room**:
 
-- **Ops** — what is live (with Stop), what needs you (Resolve a port clash,
+- **Ops**, what is live (with Stop), what needs you (Resolve a port clash,
   Commit, Pull), and a CPU/RAM meter.
-- **Repos** — search-first; with no query it shows only what is running or
+- **Repos**, search-first; with no query it shows only what is running or
   dirty. A repo opens a sheet: Start/Stop, open in VSCode **on the Mac**,
   git status with Commit all / Pull, run config, and a failed-run card that
   hands the problem to the Ops Room.
-- **Planner** — one column at a time; tapping a task advances it to the next
+- **Planner**, one column at a time; tapping a task advances it to the next
   column.
-- **Room** — the agent, streaming over SSE, same model and same limits.
+- **Room**, the agent, streaming over SSE, same model and same limits.
 
 Setup commands, log tails, the LLM start form and the site CMS stay on the
 desktop. The phone is for checking and unblocking, not configuring.
 
 ### The phone cannot reach it
 
-Check what the process is actually bound to — this is the answer nine times in
+Check what the process is actually bound to, this is the answer nine times in
 ten:
 
 ```bash
@@ -282,18 +282,18 @@ unset MANAGER_HOST
 python -m supervisor stop && python -m supervisor start --daemon
 ```
 
-Launching from `GSO-1.app` in Finder is unaffected — launchd gives it a clean
+Launching from `GSO-1.app` in Finder is unaffected, launchd gives it a clean
 environment, so `.env` wins.
 
 Other things to check, in order:
 
 1. **Same network.** The phone must be on the same Wi-Fi, not cellular, and not
-   a guest network — many routers isolate guest clients from each other.
+   a guest network, many routers isolate guest clients from each other.
 2. **The address changed.** DHCP reassigns; prefer `http://<hostname>.local:8420/m`,
    which follows the machine. `scutil --get LocalHostName` prints the name.
 3. **macOS firewall.** `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate`.
    If it is on, allow incoming connections for the Python in `.venv/bin`.
-4. **Prove it from the Mac itself** — this hits the same path the phone does:
+4. **Prove it from the Mac itself**, this hits the same path the phone does:
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' http://$(ipconfig getifaddr en0):8420/m
    ```

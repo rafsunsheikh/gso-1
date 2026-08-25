@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [0.1.0] — 2026-08-25
+## [0.1.0], 2026-08-25
 
 The first public release: a dashboard that finds every app in your projects
-folder and runs it — on your machine, not just on the one it was written on.
+folder and runs it, on your machine, not just on the one it was written on.
 
 ### Packaging & distribution
 - Installers for macOS (`.dmg`, Apple Silicon and Intel), Windows (NSIS), and
@@ -32,7 +32,7 @@ folder and runs it — on your machine, not just on the one it was written on.
   been reachable from the network without a token; no such route existed, but
   the gate was one route name away from opening.
 
-### Fixed — portability
+### Fixed, portability
 Everything below only ever worked on the original author's machine:
 - The dashboard abbreviated paths against a hardcoded home directory; the
   server now reports the real one via `/api/apps`.
@@ -40,7 +40,7 @@ Everything below only ever worked on the original author's machine:
   from the OS account record.
 - The Jekyll CMS defaulted to one specific personal repo; `MANAGER_SITE_DIR`
   now has no default and the CMS stays off until it names a real checkout.
-- Ops Room's sandbox root — the only directory the agent may write to —
+- Ops Room's sandbox root, the only directory the agent may write to, 
   defaulted to a fixed `~/Projects/…` path; it is now resolved from the
   sidecar's own install location.
 - Ops Room's readable roots named a specific work folder; they now follow
@@ -50,7 +50,7 @@ Everything below only ever worked on the original author's machine:
 - Scans every top-level directory across one or more project roots.
 - Start / stop any app in its own process group, with logs streaming to
   `data/logs/<app>.log`.
-- Health tracking — probes the app's port and reports healthy, starting,
+- Health tracking, probes the app's port and reports healthy, starting,
   crashed, or stopped.
 - Port-conflict detection before launch.
 - Auto-detected run and setup commands for explicit `run.sh` / `Makefile`,
@@ -58,7 +58,7 @@ Everything below only ever worked on the original author's machine:
   sites. Per-app overrides live in `data/registry.json` and are editable
   from the UI.
 - Git panel per app: branch, dirty file count, ahead/behind, last commit, and
-  remote — plus `git pull --ff-only` from the dashboard.
+  remote, plus `git pull --ff-only` from the dashboard.
 - Descriptions pulled from the README's first paragraph or `package.json`.
 
 **Interface**
@@ -70,7 +70,7 @@ Everything below only ever worked on the original author's machine:
 
 **Agents & automation**
 - Ops Room: a pi-based agent sidecar with an HTTP bridge.
-- Claude bridge with an MCP permission server — read-only tools run
+- Claude bridge with an MCP permission server, read-only tools run
   automatically, writes and commands require explicit Allow/Deny.
 - Anthropic→llama proxy (`/v1/messages`) so agent sessions can run entirely on
   a local `llama-server`.

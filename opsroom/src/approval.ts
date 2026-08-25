@@ -83,7 +83,7 @@ export async function requestApproval(
         if (decision === "deny") return { allowed: false, reason: "denied by operator" };
       }
     } catch {
-      /* transient — keep polling until the deadline */
+      /* transient, keep polling until the deadline */
     }
     await sleep(POLL_MS);
   }
@@ -93,5 +93,5 @@ export async function requestApproval(
 /** Throws DeniedError unless the operator approves. */
 export async function requireApproval(toolName: string, toolInput: unknown): Promise<void> {
   const v = await requestApproval(toolName, toolInput);
-  if (!v.allowed) throw new DeniedError(`${toolName} not run — ${v.reason}`);
+  if (!v.allowed) throw new DeniedError(`${toolName} not run, ${v.reason}`);
 }

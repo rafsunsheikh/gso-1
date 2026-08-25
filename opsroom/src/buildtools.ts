@@ -1,10 +1,10 @@
 /**
- * Self-build tools — the M4 loop.
+ * Self-build tools, the M4 loop.
  *
  * The agent edits the repo working tree with `write`/`edit` (its sandbox), then
  * drives the supervisor through these tools to snapshot, verify, and promote.
  *
- * The agent never writes into var/ directly — that path is immutable to its
+ * The agent never writes into var/ directly, that path is immutable to its
  * file tools. Only the supervisor mutates release state, and the supervisor
  * itself is immutable to the agent. That is the invariant that lets a bad
  * self-edit be undone: the thing that rolls back is never the thing replaced.

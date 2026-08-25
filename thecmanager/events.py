@@ -1,11 +1,11 @@
 """A day's worth of what happened, for the Ops Room timeline.
 
-The redesign's TODAY band is a chronological feed — a run came up, a job
+The redesign's TODAY band is a chronological feed: a run came up, a job
 finished, a test failed, a site edit went unpublished. Nothing in GSO-1 kept
 that history: every view showed current state only.
 
 This is deliberately small. Events append to one JSONL file, the file is
-trimmed when it grows past `MAX_EVENTS`, and nothing here is on a hot path —
+trimmed when it grows past `MAX_EVENTS`, and nothing here is on a hot path, 
 a failed write must never take an action down with it.
 """
 
@@ -33,7 +33,7 @@ def _path():
 
 
 def record(kind: str, repo: str, text: str) -> None:
-    """Append one event. Never raises — logging must not break the action."""
+    """Append one event. Never raises, logging must not break the action."""
     row = {"at": time.time(), "kind": kind, "repo": repo, "text": text}
     try:
         with _lock:
@@ -58,7 +58,7 @@ def _trim(path) -> None:
 
 
 def recent(limit: int = 60, since: Optional[float] = None) -> list[dict]:
-    """Newest first. `since` is a unix timestamp — the UI passes local midnight."""
+    """Newest first. `since` is a unix timestamp, the UI passes local midnight."""
     try:
         lines = _path().read_text(errors="ignore").splitlines()
     except OSError:

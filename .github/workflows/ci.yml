@@ -92,7 +92,7 @@ jobs:
         # These are what stopped GSO-1 running on anyone else's machine.
         run: |
           if git grep -InE '/(Users|home)/[a-z][a-z0-9_-]+' -- '*.py' '*.js' '*.ts' '*.html' ; then
-            echo "::error::hardcoded home directory — derive it at runtime"
+            echo "::error::hardcoded home directory, derive it at runtime"
             exit 1
           fi
           echo "clean"

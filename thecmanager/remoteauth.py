@@ -1,13 +1,13 @@
 """Gate for requests that do not come from this machine.
 
 GSO-1 starts and stops processes, edits files and runs an agent. On loopback
-that is fine — you are the only caller. The phone companion means binding a
+that is fine, you are the only caller. The phone companion means binding a
 port the rest of the network can reach, and every one of those capabilities
 would come with it.
 
 So: loopback is unchanged and unauthenticated (the desktop app must keep
 working exactly as it did), and everything else must present a shared secret.
-With no secret configured the answer is no — a misconfigured bind cannot
+With no secret configured the answer is no: a misconfigured bind cannot
 silently expose the machine.
 
 The token travels either as `Authorization: Bearer <token>` or as the

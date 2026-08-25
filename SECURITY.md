@@ -17,7 +17,7 @@ you would treat an unlocked terminal.
 
 | Control | Default | Where |
 |---|---|---|
-| Bind address | `127.0.0.1` — loopback only, unreachable from the network | `MANAGER_HOST` |
+| Bind address | `127.0.0.1`, loopback only, unreachable from the network | `MANAGER_HOST` |
 | Remote access | Refused outright unless a token is set | `MANAGER_MOBILE_TOKEN` |
 | Non-loopback requests | Must present the shared token | `thecmanager/remoteauth.py` |
 | Agent tool use | Read-only tools auto-run; writes and commands require explicit Allow/Deny | `thecmanager/claude_perm_mcp.py` |
@@ -54,7 +54,7 @@ Report privately through GitHub:
 | Initial assessment | Within 10 business days |
 | Fix or mitigation plan | Communicated once assessed |
 
-This is a solo-maintained project, not a funded security program — timelines
+This is a solo-maintained project, not a funded security program, timelines
 are best-effort. There is no bug bounty.
 
 ### In scope
@@ -67,7 +67,7 @@ are best-effort. There is no bug bounty.
 
 ### Out of scope
 
-- The fact that localhost users can run commands — that is the product
+- The fact that localhost users can run commands, that is the product
 - Anything requiring an attacker to already have your shell
 - Findings that depend on you deliberately disabling the documented defaults
 - Vulnerabilities in third-party dependencies with no GSO-1-specific impact

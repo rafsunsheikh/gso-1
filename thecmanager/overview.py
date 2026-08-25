@@ -6,7 +6,7 @@ return: live process detail (pid, uptime), per-repo git state across every
 repo, and which runs failed.
 
 Doing it per-repo from the browser would be ~270 round trips, so it is
-aggregated here and cached — a full git sweep costs ~12s of subprocesses and
+aggregated here and cached: a full git sweep costs ~12s of subprocesses and
 must not run on every poll.
 """
 
@@ -38,7 +38,7 @@ def _repo_state(name: str) -> Optional[dict]:
         return None
     try:
         st = git_ops.status(path)
-    except Exception:  # noqa: BLE001 — one bad repo must not sink the sweep
+    except Exception:  # noqa: BLE001, one bad repo must not sink the sweep
         return None
     return {
         "name": name,
@@ -93,7 +93,7 @@ def _services() -> list[dict]:
     """Long-running things GSO-1 owns or manages that are not scanned repos.
 
     Without these the LIVE strip reads "nothing running" while the dashboard
-    you are reading it in — and the model answering you — are both up.
+    you are reading it in: and the model answering you: are both up.
     """
     out: list[dict] = []
 
@@ -174,7 +174,7 @@ def build(record_scan: bool = False) -> dict:
     unsynced = [r for r in repos if r["ahead"] or r["behind"]]
 
     # The Library table shows a git cell on every row, so it needs state for
-    # every repo — not just the dirty ones. Keyed by name and trimmed to the
+    # every repo, not just the dirty ones. Keyed by name and trimmed to the
     # four fields the cell renders; the full list is ~250 entries.
     index = {
         r["name"]: {
@@ -191,7 +191,7 @@ def build(record_scan: bool = False) -> dict:
         events.record("scan", "gso-1",
                       f"scanned {len(names)} repos in {time.time() - started:.1f}s")
 
-    # Which ports are actually in use, and by what — the PORTS card.
+    # Which ports are actually in use, and by what, the PORTS card.
     ports = []
     for a in live:
         if a.get("port"):

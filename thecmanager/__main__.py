@@ -14,7 +14,7 @@ def main() -> None:
     url = f"http://{config.HOST}:{config.PORT}"
     loopback_only = config.HOST in ("127.0.0.1", "localhost", "::1")
     print("=" * 60)
-    print("  GSO-1 — local application registry")
+    print("  GSO-1, local application registry")
     print(f"  Projects: {', '.join(str(d) for d in config.PROJECTS_DIRS)}")
     print(f"  Dashboard: {url}")
     print(f"  Bound to:  {config.HOST}  "
@@ -24,7 +24,7 @@ def main() -> None:
         # that launched GSO-1, so it wins over the .env the setup script wrote.
         print("  WARNING: a phone access code is set, but GSO-1 is bound to "
               "loopback,\n           so no other device can reach it. "
-              "Set MANAGER_HOST=0.0.0.0 —\n           and check it is not "
+              "Set MANAGER_HOST=0.0.0.0, \n           and check it is not "
               "exported in your shell, which overrides .env.")
     print("=" * 60)
     if not os.environ.get("MANAGER_NO_BROWSER"):

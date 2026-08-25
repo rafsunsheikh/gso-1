@@ -104,7 +104,7 @@
           <div class="gso-title" id="view-title">Library</div>
           <div class="gso-subtitle" id="subtitle">Loading&hellip;</div>
         </div>
-        <button id="cmdk" class="gso-cmdk" title="Jump to anything — Cmd+K"
+        <button id="cmdk" class="gso-cmdk" title="Jump to anything, Cmd+K"
           aria-label="Jump to anything">
           <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none"
                stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -189,7 +189,7 @@
   </div>
 
   <!-- First-run setup: shown only when nobody has told GSO-1 where the code lives.
-       Styled inline on purpose — app.css is a purged Tailwind build, and the one
+       Styled inline on purpose: app.css is a purged Tailwind build, and the one
        screen a broken install must still render cannot depend on it being fresh. -->
   <div id="setup-modal" role="dialog" aria-modal="true" aria-label="Choose your projects folder"
        style="display:none;position:fixed;inset:0;z-index:70;background:var(--bg);
@@ -302,7 +302,7 @@
     /**
      * Hardened fetch wrapper.
      *
-     * The previous one-liner did `fetch(p).then(r => r.json())` — no status
+     * The previous one-liner did `fetch(p).then(r => r.json())`, no status
      * check, no timeout. A 500 returning an HTML error page threw an opaque
      * JSON parse error, and a 404 returning {"detail": ...} was handed to
      * callers as if it were success data.
@@ -355,7 +355,7 @@
       const b = document.getElementById("conn-banner");
       if (!b) return;
       if (!ok) {
-        b.textContent = "⚠ Lost connection to GSO-1 — retrying…";
+        b.textContent = "⚠ Lost connection to GSO-1, retrying…";
         b.dataset.state = "down";
         announce("Lost connection to GSO-1");
       } else {
@@ -489,8 +489,8 @@
       } catch (e) {
         const grid = $("#grid");
         if (grid) grid.removeAttribute("aria-busy");
-        // Keep whatever is on screen if we have loaded before — stale data
-        // beats a blank page — but say clearly that it is stale.
+        // Keep whatever is on screen if we have loaded before, stale data
+        // beats a blank page, but say clearly that it is stale.
         if (_loadedOnce) {
           toast(`Could not refresh: ${e.message || e}`, "error");
         } else if (grid) {
@@ -569,7 +569,7 @@
     let _ovLoading = false;
     let _ovError = null;
 
-    /** Today's events, from local midnight — the Ops Room timeline. */
+    /** Today's events, from local midnight, the Ops Room timeline. */
     async function loadEvents() {
       if (_evLoading) return;
       _evLoading = true;
@@ -823,7 +823,7 @@
         ]},
         { label: "Attention", items: [
           // These three need per-repo git and health state in the list payload,
-          // which /api/apps does not yet return — wired up in a later phase.
+          // which /api/apps does not yet return, wired up in a later phase.
           { id: "uncommitted", label: "Uncommitted", dot: "warn",
             n: OVERVIEW ? OVERVIEW.counts.dirty : null },
           { id: "failed", label: "Failed runs", dot: "err",
@@ -908,7 +908,7 @@
     }
 
     function selectView(id) {
-      // Ops Room is a dock, not a page — until its own view lands.
+      // Ops Room is a dock, not a page, until its own view lands.
       activeView = id;
       activeType = "all";
       if ((id === "uncommitted" || id === "failed") && !OVERVIEW) {
@@ -937,7 +937,7 @@
 
     /** Hand #grid to a view: drop whatever the last view set inline.
         An inline display:block from a previous render was silently defeating
-        .ops-view's flex gap — every section sat flush against the next. */
+        .ops-view's flex gap, every section sat flush against the next. */
     function resetGrid(cls) {
       const g = $("#grid");
       g.className = cls || "";
@@ -962,7 +962,7 @@
         a.name.toLowerCase().includes(q));
 
       // The table's git column and the chip counts both come from the overview.
-      // Kick one load (never more than one — _ovLoading guards) and redraw when
+      // Kick one load (never more than one, _ovLoading guards) and redraw when
       // it lands; until then rows show a skeleton in the git cell.
       if (!OVERVIEW && !_ovLoading && !_ovError) {
         loadOverview().then(() => { renderViews(); render(); });
@@ -1152,7 +1152,7 @@
       const bubbles = items.map(chatBubble).join("") ||
         `<div class="ops-hint">Claude Code running on your local model, working in
           <span class="mono">${escapeHtml(CHAT.dir || "~")}</span>.
-          Ask anything about this computer — "what's using my disk?", "summarise this folder".
+          Ask anything about this computer, "what's using my disk?", "summarise this folder".
           Read-only tools run automatically; commands ask first.</div>`;
       const banner = llmDown ? `<div class="chat-banner">
           <span class="gso-dot" data-state="" aria-hidden="true"></span>
@@ -1415,7 +1415,7 @@
       siteBusy = true; renderSite();
       try {
         const r = await api("/api/site/publish", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({message: msg})});
-        if (r.ok) flash(r.nochange ? "Nothing to publish." : "Published — GitHub Pages will rebuild shortly.", true);
+        if (r.ok) flash(r.nochange ? "Nothing to publish." : "Published, GitHub Pages will rebuild shortly.", true);
         else flash("Publish failed: "+(r.output||r.pushed||""), false);
         SITE = await api("/api/site");
       } catch (e) { flash("Publish failed", false); }
@@ -1524,7 +1524,7 @@
         <div class="llm-stats">${stats.map(([l, v]) =>
           `<div><div class="llm-stat-l">${l}</div><div class="llm-stat-v">${v}</div></div>`).join("")}</div>
         ${busy && !s.managed ? `<p style="margin-top:11px;font-size:11.5px;color:var(--warn-text)">
-          Started outside GSO-1 — Stop terminates whatever holds :${s.port}.</p>` : ""}
+          Started outside GSO-1, Stop terminates whatever holds :${s.port}.</p>` : ""}
         ${!s.server_bin ? `<p style="margin-top:11px;font-size:11.5px;color:var(--err-text)">
           llama-server binary not found. Set LLAMA_SERVER_BIN.</p>` : ""}
       </div>`;
@@ -1661,7 +1661,7 @@
               <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
                 <input id="llm-jinja" type="checkbox" checked class="mt-0.5"/>
                 <span>Use <span class="mono">--jinja</span> (model chat template)
-                  <span class="block text-[11px] text-slate-500">Applies the model's own template — required for function/tool calling. Leave on unless debugging.</span></span></label>
+                  <span class="block text-[11px] text-slate-500">Applies the model's own template, required for function/tool calling. Leave on unless debugging.</span></span></label>
             </div>
 
             <button id="llm-start" class="lib-act" style="height:34px">Start server</button>
@@ -1786,7 +1786,7 @@
       <div class="space-y-4">
         <div>
           <div class="flex justify-between text-xs mb-1">
-            <span class="text-slate-300">CPU — ${c.busy}% busy</span>
+            <span class="text-slate-300">CPU, ${c.busy}% busy</span>
             <span><span class="text-indigo-400">LLM ${c.llm}%</span> · <span class="text-amber-400">other ${c.other}%</span> · idle ${c.idle}%</span>
           </div>
           ${cpuBar}
@@ -1794,7 +1794,7 @@
         </div>
         <div>
           <div class="flex justify-between text-xs mb-1">
-            <span class="text-slate-300">RAM — ${gb(r.used_bytes)} / ${gb(r.total_bytes)} GB (${r.percent}%)</span>
+            <span class="text-slate-300">RAM, ${gb(r.used_bytes)} / ${gb(r.total_bytes)} GB (${r.percent}%)</span>
             <span><span class="text-indigo-400">LLM ${gb(r.llm_bytes)}G</span> · <span class="text-emerald-400">other ${gb(r.other_bytes)}G</span> · free ${gb(r.free_bytes)}G</span>
           </div>
           ${ramBar}
@@ -1803,7 +1803,7 @@
         ${g.available ? `
         <div>
           <div class="flex justify-between text-xs mb-1">
-            <span class="text-slate-300">GPU — ${g.util}% utilization</span>
+            <span class="text-slate-300">GPU, ${g.util}% utilization</span>
             <span class="text-sky-400">active mem ~${gb(g.mem_bytes)}G</span>
           </div>
           ${gpuBar}
@@ -1816,7 +1816,7 @@
           Memory figures are each process's physical footprint (matches Activity Monitor); for the
           GPU-offloaded model (<span class="mono">-ngl</span>) that includes its Metal/wired weights, which
           <span class="mono">ps</span>/RSS would miss. macOS doesn't expose per-process GPU utilization, so
-          the GPU bar is system-wide — with the model on GPU, that activity is essentially the LLM.
+          the GPU bar is system-wide, with the model on GPU, that activity is essentially the LLM.
         </p>
       </div>`;
     }
@@ -2038,13 +2038,13 @@
       for (const av of [document.getElementById("identity-avatar"),
                         document.getElementById("identity-avatar-rail")]) {
         if (!av) continue;
-        // Initials from the first two words — "MD Rafsun Sheikh" reads as MR.
+        // Initials from the first two words, "MD Rafsun Sheikh" reads as MR.
         av.textContent = USER_NAME.split(/\s+/).filter(Boolean)
           .slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
       }
     }
 
-    /** `~/a/b/c/file.gguf` with the middle elided — the ends carry the meaning. */
+    /** `~/a/b/c/file.gguf` with the middle elided, the ends carry the meaning. */
     function shortPath(p, keep = 2) {
       // HOME_DIR comes from the server; fall back to the usual shapes so a
       // stale page still abbreviates sensibly instead of printing someone
@@ -2057,7 +2057,7 @@
       return [parts[0], "…", ...parts.slice(-keep)].join("/");
     }
 
-    /** The quantisation is in the filename by convention — Q4_K_M, F16, BF16. */
+    /** The quantisation is in the filename by convention, Q4_K_M, F16, BF16. */
     function quantOf(name) {
       const m = String(name).match(/\b(IQ\d[\w_]*|Q\d[\w_]*|BF16|F16|F32)\b/i);
       return m ? m[1].toUpperCase() : "—";
@@ -2132,7 +2132,7 @@
       const board = PLANNER.boards.find(b=>b.id===boardId);
       const t = board && board.tasks.find(x=>x.id===taskId);
       if (!t) return;
-      const appOpts = ['<option value="">— none —</option>']
+      const appOpts = ['<option value="">, none, </option>']
         .concat(ALL.map(a=>`<option value="${a.name}" ${t.app===a.name?'selected':''}>${a.name}</option>`)).join("");
       const priOpts = ["low","med","high"].map(p=>`<option value="${p}" ${t.priority===p?'selected':''}>${p}</option>`).join("");
       const statOpts = COLS.map(c=>`<option value="${c.id}" ${t.status===c.id?'selected':''}>${c.label}</option>`).join("");
@@ -2208,7 +2208,7 @@
       return (OVERVIEW.dirty || []).find(r => r.name === name) || null;
     }
 
-    /** Git state for any repo, clean ones included — null if it is not a repo. */
+    /** Git state for any repo, clean ones included, null if it is not a repo. */
     function gitFor(name) {
       if (!OVERVIEW) return null;
       const idx = OVERVIEW.repo_index;
@@ -2264,7 +2264,7 @@
         const r = await api(`/api/apps/${encodeURIComponent(name)}/${action}`, {method:"POST"});
         if (r.ok) {
           // Undo is the inverse action, which is exactly what this function does.
-          toast(`${name} — ${action === "start" ? "started" : "stopped"}`, "success",
+          toast(`${name}, ${action === "start" ? "started" : "stopped"}`, "success",
                 () => toggleRun(name, action === "start"));
         } else {
           toast(r.message || `Could not ${action} ${name}`, "error");
@@ -2371,7 +2371,7 @@
       const state = running ? "running" : h.state === "crashed" ? "crashed" : "idle";
       const failed = (p && !p.running && p.exit_code) || h.state === "crashed";
 
-      // 1 — identity and the two actions that matter most.
+      // 1, identity and the two actions that matter most.
       const identity = `<div class="dk-card">
         <div class="dk-name"><b>${escapeHtml(d.name)}</b>
           <span class="dk-statepill" data-s="${state}">${state}${running && c.port ? ` :${c.port}` : ""}</span></div>
@@ -2387,7 +2387,7 @@
         </div>
       </div>`;
 
-      // 2 — git.
+      // 2, git.
       const git = `<div class="dk-card">
         <div class="dk-label">Git</div>
         ${g.is_repo ? `
@@ -2404,7 +2404,7 @@
         : `<div class="dk-row">Not a git repository.</div>`}
       </div>`;
 
-      // 3 — run config, with the favourite switch.
+      // 3, run config, with the favourite switch.
       const runcfg = `<div class="dk-card">
         <div class="dk-label">Run config</div>
         <div class="dk-row">Start<b>${escapeHtml(c.start_command || "not set")}</b></div>
@@ -2430,7 +2430,7 @@
           <pre id="setup-out" class="dk-log hidden"></pre>` : ""}
       </div>`;
 
-      // 4 — the failed run, when there is one. This is the card that turns a
+      // 4, the failed run, when there is one. This is the card that turns a
       // dead app into a next action.
       const fail = failed ? `<div class="dk-card" data-tone="err">
         <div class="dk-fail-head">
@@ -2643,7 +2643,7 @@
       list.innerHTML = d.dirs.length
         ? d.dirs.map(x => setupRow(x.name, x.path, "&#128193;")).join("")
         : `<div style="padding:12px;font-size:.78rem;color:var(--text-dim)">
-             No sub-folders here — "Use this folder" still works.</div>`;
+             No sub-folders here, "Use this folder" still works.</div>`;
       list.querySelectorAll("[data-dir]").forEach(b => {
         b.onclick = () => setupBrowse(b.dataset.dir);
       });
@@ -2694,7 +2694,7 @@
         $("#setup-modal").style.display = "none";
         releaseFocus($("#setup-modal"));
         await load();
-        toast("Projects folder set — scanning", "success");
+        toast("Projects folder set, scanning", "success");
       };
     }
 

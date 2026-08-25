@@ -1,7 +1,7 @@
 /**
  * Model wiring for Ops Room.
  *
- * The local llama-server is owned by GSO-1's llm.py — Ops Room only connects to
+ * The local llama-server is owned by GSO-1's llm.py, Ops Room only connects to
  * it. Never start or stop it from here; that would fight the existing manager.
  */
 
@@ -73,7 +73,7 @@ export async function assertServerUp(): Promise<void> {
  *
  * llama-server ignores the `model` field in a request and serves whatever is
  * loaded, so MODEL_ID here is only a label. On 2026-08-22 the server was
- * swapped from GLM to Qwen mid-milestone and nothing noticed for hours —
+ * swapped from GLM to Qwen mid-milestone and nothing noticed for hours, 
  * behavioural findings recorded in that window could not be attributed to a
  * model. Surface the mismatch instead of silently talking to the wrong one.
  */

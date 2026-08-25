@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Ops Room — pi-based agent sidecar for GSO-1",
+  "description": "Ops Room, pi-based agent sidecar for GSO-1",
   "scripts": {
     "ask": "node src/ask.ts"
   },

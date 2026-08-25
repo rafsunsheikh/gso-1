@@ -1,4 +1,4 @@
-"""Ops Room supervisor — CLI.
+"""Ops Room supervisor, CLI.
 
     python -m supervisor release create
     python -m supervisor release list
@@ -24,7 +24,7 @@ def _resolve(stamp: str) -> str:
     if stamp == "latest":
         rels = core.list_releases()
         if not rels:
-            sys.exit("no releases yet — run `release create` first")
+            sys.exit("no releases yet, run `release create` first")
         return rels[-1]
     return stamp
 
@@ -67,7 +67,7 @@ def cmd_release(args) -> int:
 def cmd_promote(args) -> int:
     core.promote(_resolve(args.stamp))
     if core.running_pid():
-        print("supervisor is running — restart it to pick up the new release:")
+        print("supervisor is running, restart it to pick up the new release:")
         print("  python -m supervisor stop && python -m supervisor start --daemon")
     return 0
 
@@ -89,7 +89,7 @@ def cmd_start(args) -> int:
     if core.running_pid():
         sys.exit(f"supervisor already running (pid {core.running_pid()})")
     if not core.CURRENT.is_symlink():
-        sys.exit("var/current not set — run `release create` then `promote latest`")
+        sys.exit("var/current not set, run `release create` then `promote latest`")
 
     if args.daemon:
         core.ensure_layout()

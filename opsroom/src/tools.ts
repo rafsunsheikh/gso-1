@@ -1,5 +1,5 @@
 /**
- * M1 tools — read-only wrappers over GSO-1 endpoints that already exist.
+ * M1 tools, read-only wrappers over GSO-1 endpoints that already exist.
  *
  * Deliberately NOT giving the agent bash or file access here. GSO-1's Python
  * already does these operations deterministically; the agent's job is to decide
@@ -82,7 +82,7 @@ export const gitStatusTool: AgentTool = {
   },
 };
 
-/** Bounded-concurrency map — avoids 270 concurrent git subprocesses. */
+/** Bounded-concurrency map: avoids 270 concurrent git subprocesses. */
 async function mapPool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -104,7 +104,7 @@ export const gitDirtySweepTool: AgentTool = {
   description:
     "Check EVERY registered app's git state in one call and return only the " +
     "repositories that have uncommitted changes, or are ahead/behind their " +
-    "remote. Use this to answer questions about many repos at once — it is far " +
+    "remote. Use this to answer questions about many repos at once, it is far " +
     "cheaper than calling git_status repeatedly.",
   parameters: Type.Object({
     include_ahead_behind: Type.Optional(

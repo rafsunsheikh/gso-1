@@ -3,7 +3,7 @@
 The Local LLM view shows a LAST HOUR histogram. llama.cpp keeps no such
 history, so the proxy records one here: every request that passes through
 `/v1/messages` lands in a per-minute bucket. Sixty buckets is ~5 KB of state,
-so it lives in memory and resets with the process — an hour of history does not
+so it lives in memory and resets with the process: an hour of history does not
 justify a file.
 """
 
@@ -65,7 +65,7 @@ def _rollup_due(now: int) -> Optional[tuple[int, int]]:
 
 def _log_rollup(window: tuple[int, int]) -> None:
     """Summarise a closed slot onto the timeline. Import is local: llmusage is
-    imported by the proxy, and events imports config — keep the cycle out."""
+    imported by the proxy, and events imports config, keep the cycle out."""
     start, span = window
     with _lock:
         agg = {"requests": 0, "tokens": 0, "errors": 0}
@@ -97,7 +97,7 @@ def summary() -> dict:
     per_bar = WINDOW_MINUTES // BARS  # 7 minutes with a 60/8 split
     bars = []
     for i in range(BARS):
-        # Slice i covers the minutes [now - (BARS-i)*per_bar, ... ) — oldest first.
+        # Slice i covers the minutes [now - (BARS-i)*per_bar, ... ), oldest first.
         start = now - (BARS - i) * per_bar + 1
         agg = {"requests": 0, "tokens": 0, "errors": 0}
         for m in range(start, start + per_bar):

@@ -1,7 +1,7 @@
-"""Telegram bot bridge — control GSO-1 from your phone, anywhere.
+"""Telegram bot bridge, control GSO-1 from your phone, anywhere.
 
 Uses Telegram's long-polling (getUpdates) so it works from behind home NAT
-with no port-forwarding, tunnel, or public IP. No third-party deps — just the
+with no port-forwarding, tunnel, or public IP. No third-party deps, just the
 stdlib HTTP client.
 
 Setup:
@@ -61,7 +61,7 @@ def _call(method: str, params: dict | None = None, timeout: int = 20) -> dict:
 
 # Telegram caps one message at 4096 chars. Long replies (the local LLM can be
 # very verbose / repeat earlier turns) are chunked across messages instead of
-# head-truncated, so the newest content — which lives at the END — is never the
+# head-truncated, so the newest content, which lives at the END, is never the
 # part that gets cut. If a reply is enormous we keep the LAST chunks.
 _TG_CHUNK = 4000
 _MAX_CHUNKS = 20
@@ -92,7 +92,7 @@ def _split(text: str, limit: int = _TG_CHUNK) -> list[str]:
 def _send(chat_id, text: str, reply_markup: dict | None = None) -> None:
     chunks = _split(text)
     if len(chunks) > _MAX_CHUNKS:
-        # Drop the OLDEST chunks — the latest answer is at the tail.
+        # Drop the OLDEST chunks, the latest answer is at the tail.
         chunks = ["…(earlier output trimmed)", *chunks[-_MAX_CHUNKS:]]
     for i, chunk in enumerate(chunks):
         params = {"chat_id": chat_id, "text": chunk}
@@ -137,7 +137,7 @@ def _restart(confirm_update_id: int | None = None) -> None:
     supervisor is managing us, and the current environment (incl. the Telegram
     token) carries over to the new image.
 
-    We first acknowledge the triggering Telegram update — otherwise getUpdates
+    We first acknowledge the triggering Telegram update, otherwise getUpdates
     would redeliver /restart after we come back and we'd restart in a loop.
     In-flight Claude turns are dropped; the detached llama-server survives.
     """
@@ -177,37 +177,37 @@ def _resolve(query: str):
 
 
 HELP = (
-    "🗂️ GSO-1 — commands\n\n"
-    "/apps [query] — list running+favourite apps, or search\n"
-    "/run <app> — start an app\n"
-    "/stop <app> — stop an app\n"
-    "/status <app> — process + health\n"
-    "/health <app> — health only\n"
-    "/git <app> — git status\n"
-    "/update <app> — git pull\n"
-    "/desc <app> — description\n"
-    "/logs <app> — recent log lines\n"
-    "/running — what's currently running\n"
-    "/llm — local LLM status\n"
-    "/llmstart <model> — start llama-server with a model\n"
-    "/llmstop — stop the local LLM\n"
-    "/sys — CPU / GPU / RAM load\n"
-    "/restart — restart GSO-1 (reloads updated code)\n"
-    "/tasks — list planner boards\n"
-    "/tasks <board> — list a board's tasks (numbered)\n"
-    "/add <title> — add a task to the last board you listed\n"
-    "/add <board> | <title> — add a task to a named board\n"
-    "/move <number> <todo|doing|done> — move a task between columns\n"
+    "🗂️ GSO-1, commands\n\n"
+    "/apps [query], list running+favourite apps, or search\n"
+    "/run <app>, start an app\n"
+    "/stop <app>, stop an app\n"
+    "/status <app>, process + health\n"
+    "/health <app>, health only\n"
+    "/git <app>, git status\n"
+    "/update <app>, git pull\n"
+    "/desc <app>, description\n"
+    "/logs <app>, recent log lines\n"
+    "/running, what's currently running\n"
+    "/llm, local LLM status\n"
+    "/llmstart <model>, start llama-server with a model\n"
+    "/llmstop, stop the local LLM\n"
+    "/sys, CPU / GPU / RAM load\n"
+    "/restart, restart GSO-1 (reloads updated code)\n"
+    "/tasks, list planner boards\n"
+    "/tasks <board>, list a board's tasks (numbered)\n"
+    "/add <title>: add a task to the last board you listed\n"
+    "/add <board> | <title>: add a task to a named board\n"
+    "/move <number> <todo|doing|done>, move a task between columns\n"
     "\n🤖 Claude Code:\n"
-    "/claude <project> — continue the project's latest Claude session (cloud LLM)\n"
-    "/claude <project> new — start a fresh Claude session instead\n"
-    "/claude <project> local — use the local LLM (add 'new' too if you like)\n"
+    "/claude <project>, continue the project's latest Claude session (cloud LLM)\n"
+    "/claude <project> new, start a fresh Claude session instead\n"
+    "/claude <project> local, use the local LLM (add 'new' too if you like)\n"
     "(then just send messages here to talk to Claude; approve tool use with the buttons)\n"
-    "/clear — clear the conversation (fresh session, same project)\n"
-    "/context — show token / context-window usage\n"
-    "/end — close the Claude session\n"
-    "/sessions — list active Claude sessions\n"
-    "/help — this message"
+    "/clear, clear the conversation (fresh session, same project)\n"
+    "/context, show token / context-window usage\n"
+    "/end, close the Claude session\n"
+    "/sessions, list active Claude sessions\n"
+    "/help, this message"
 )
 
 
@@ -371,7 +371,7 @@ def _cmd_sys() -> str:
     lines = [
         "📈 System load",
         f"CPU: {c['busy']}% busy (LLM {c['llm']}% · other {c['other']}% · idle {c['idle']}%)",
-        f"RAM: {_gb(r['used_bytes'])}/{_gb(r['total_bytes'])}GB ({r['percent']}%) — LLM {_gb(r['llm_bytes'])}GB, free {_gb(r['free_bytes'])}GB",
+        f"RAM: {_gb(r['used_bytes'])}/{_gb(r['total_bytes'])}GB ({r['percent']}%), LLM {_gb(r['llm_bytes'])}GB, free {_gb(r['free_bytes'])}GB",
     ]
     if g.get("available"):
         lines.append(f"GPU: {g['util']}% utilization")
@@ -422,7 +422,7 @@ def _cmd_tasks(chat_id, arg: str) -> str:
     tasks = sorted(board["tasks"], key=lambda t: (order.get(t["status"], 9), t.get("order", 0)))
     _task_index[str(chat_id)] = [(board["id"], t["id"]) for t in tasks]
     if not tasks:
-        return f"📋 {board['name']} — no tasks yet."
+        return f"📋 {board['name']}, no tasks yet."
     lines, last_col, n = [f"📋 {board['name']}"], None, 0
     for t in tasks:
         if t["status"] != last_col:
@@ -463,7 +463,7 @@ def _cmd_add(chat_id, arg: str) -> str:
         return "The task needs a title."
     task = planner.create_task(board["id"], title=title)
     if not task:
-        return "Couldn't add the task — the board may have been deleted."
+        return "Couldn't add the task, the board may have been deleted."
     _last_board[str(chat_id)] = board["id"]
     return f"➕ Added to {board['name']} → To Do:\n{task['title']}"
 
@@ -487,7 +487,7 @@ def _cmd_move(chat_id, arg: str) -> str:
     board_id, task_id = idx[num - 1]
     task = planner.move_task(board_id, task_id, col, 9999)  # append to end of column
     if not task:
-        return "Couldn't move that task — it may have been deleted. Re-run /tasks <board>."
+        return "Couldn't move that task, it may have been deleted. Re-run /tasks <board>."
     return f"✅ Moved '{task['title']}' → {_COL_LABEL[col]}."
 
 
@@ -512,20 +512,20 @@ def _dispatch(chat_id, text: str) -> str:
         llm_mode = "local" if "local" in flags else "cloud"
         warn = ""
         if llm_mode == "local" and not llm.status().get("healthy"):
-            warn = ("\n⚠️ The local LLM server isn't running — start it from the Local LLM tab "
+            warn = ("\n⚠️ The local LLM server isn't running, start it from the Local LLM tab "
                     "(or /llmstart), or Claude will error.")
         ok, res = claudebridge.attach(chat_id, tokens[0], mode, llm_mode)
         if not ok:
             return res
         llm_note = ("🏠 local LLM" if llm_mode == "local" else "☁️ cloud (subscription)")
         if mode == "new":
-            return (f"🤖 Attached to '{res}' — fresh session · {llm_note}.\n"
+            return (f"🤖 Attached to '{res}', fresh session · {llm_note}.\n"
                     "Send a message to begin. I'll ask before any edit/command runs. /end to close." + warn)
         if claudebridge.has_existing_session(res):
-            return (f"🤖 Attached to '{res}' — continuing latest session · {llm_note}.\n"
+            return (f"🤖 Attached to '{res}', continuing latest session · {llm_note}.\n"
                     "⚠️ If that session is still open in your VS Code terminal, close/idle it first.\n"
                     "Send a message to continue. /end to close." + warn)
-        return (f"🤖 Attached to '{res}' — no prior session, starting fresh · {llm_note}.\n"
+        return (f"🤖 Attached to '{res}', no prior session, starting fresh · {llm_note}.\n"
                 "Send a message to begin. /end to close." + warn)
     if cmd == "end":
         return "🤖 Claude session closed." if claudebridge.detach(chat_id) else "No active session."
@@ -539,8 +539,8 @@ def _dispatch(chat_id, text: str) -> str:
         if not c:
             return "No active Claude session. Use /claude <project> first."
         if not c["has_turn"]:
-            return f"🧮 {c['project']} ({c['llm']}) — no turns yet. Send a message first."
-        line = f"🧮 Context — {c['project']} ({c['llm']})\n~{c['context_tokens']:,} tokens in context"
+            return f"🧮 {c['project']} ({c['llm']}), no turns yet. Send a message first."
+        line = f"🧮 Context, {c['project']} ({c['llm']})\n~{c['context_tokens']:,} tokens in context"
         if c["window"]:
             pct = round(c["context_tokens"] / c["window"] * 100, 1)
             line += f" / {c['window']:,} ({pct}%)"
@@ -663,7 +663,7 @@ def _handle_update(upd: dict) -> None:
         if cmd0 == "restart":
             _send(chat_id, "♻️ Restarting GSO-1… back in a few seconds. Send /help once I'm up.")
             _restart(upd.get("update_id"))  # re-execs; returns only if it failed
-            _send(chat_id, "⚠️ Restart failed — check the logs or restart manually.")
+            _send(chat_id, "⚠️ Restart failed, check the logs or restart manually.")
             return
         _send(chat_id, _dispatch(chat_id, text))
         return

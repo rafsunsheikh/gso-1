@@ -1,10 +1,10 @@
 /**
- * Sidecar self-check — the health gate for Ops Room itself.
+ * Sidecar self-check, the health gate for Ops Room itself.
  *
  * `supervisor verify` boots GSO-1 and probes its port, which proves the Python
  * app works. It says nothing about the Node sidecar: a syntax error or bad
  * import in opsroom/ would pass verification and only fail later, at the worst
- * possible moment — after promotion.
+ * possible moment: after promotion.
  *
  * This script imports every tool module and asserts the tool set is intact.
  * It touches no network and no model, so it is fast and deterministic.
@@ -76,7 +76,7 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  // Structure is now proven. Behaviour is not — a tool can load perfectly and
+  // Structure is now proven. Behaviour is not: a tool can load perfectly and
   // still return nonsense (see smoke.ts for the incident that motivated this).
   const { checkEndpoints, smokeTools } = await import("./smoke.ts");
   const allTools = [

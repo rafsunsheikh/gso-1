@@ -11,8 +11,8 @@ import os
 from PyInstaller.utils.hooks import collect_submodules
 
 # Everything below is anchored to the spec's own directory, never to the
-# working directory. PyInstaller can be invoked from anywhere — locally from
-# build/, in CI from the repo root — and a relative pathex silently resolves
+# working directory. PyInstaller can be invoked from anywhere, locally from
+# build/, in CI from the repo root: and a relative pathex silently resolves
 # to the wrong tree, producing a binary that builds fine and then cannot
 # import its own package.
 ROOT = os.path.abspath(os.path.join(SPECPATH, os.pardir))

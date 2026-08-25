@@ -501,7 +501,7 @@
       : `<div class="empty"><div class="empty-t">Nothing running</div>
            <div class="empty-s">Start something from Repos, or ask the Room.</div></div>`;
 
-    // One row per problem, one action each — the phone is for unblocking.
+    // One row per problem, one action each, the phone is for unblocking.
     const needs = [
       ...(ov.conflicts || []).slice(0, 3).map(k => ({
         name: k.name, metric: `:${k.port} held by ${k.held_by}`,
@@ -708,7 +708,7 @@
         <div class="chat" id="chatlog">
           ${bubbles || `<div class="empty" style="padding-top:52px">
             <div class="empty-t">Ask about your machine</div>
-            <div class="empty-s">Git state, what is running, what failed — or have it change its own code.
+            <div class="empty-s">Git state, what is running, what failed, or have it change its own code.
               Runs on the local model; a reply takes ~30s.</div></div>`}
           ${STATE.chatBusy ? `<div class="typing"><i></i><i></i><i></i></div>` : ""}
           ${replies}
@@ -788,7 +788,7 @@
       try {
         if (b.dataset.kind === "llm") await api("/api/llm/stop", { method: "POST" });
         else await api(`/api/apps/${encodeURIComponent(b.dataset.stop)}/stop`, { method: "POST" });
-        toast(`${b.dataset.stop} — stopped`);
+        toast(`${b.dataset.stop}, stopped`);
         await loadOverview(true); render();
       } catch (e) { toast(`Could not stop it: ${e.message}`, "error"); }
     });
@@ -844,7 +844,7 @@
           const owner = holder && (STATE.overview.live || []).find(l => l.port === holder.port);
           if (owner && owner.stoppable !== false) {
             await api(`/api/apps/${encodeURIComponent(owner.name)}/stop`, { method: "POST" });
-            toast(`Freed :${holder.port} — ${owner.name} stopped`);
+            toast(`Freed :${holder.port}, ${owner.name} stopped`);
             await loadOverview(true); return render();
           }
         }
@@ -853,11 +853,11 @@
       if (act === "commit") {
         await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
           method: "POST", body: JSON.stringify({ message: `Update ${name} via GSO-1 mobile` }) });
-        toast(`${name} — committed`);
+        toast(`${name}, committed`);
       }
       if (act === "pull") {
         await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
-        toast(`${name} — pulled`);
+        toast(`${name}, pulled`);
       }
       await loadOverview(true); render();
     } catch (e) {
@@ -878,7 +878,7 @@
       if (act === "run") {
         const running = !!(d.process && d.process.running);
         await api(`/api/apps/${encodeURIComponent(name)}/${running ? "stop" : "start"}`, { method: "POST" });
-        toast(`${name} — ${running ? "stopped" : "started"}`);
+        toast(`${name}, ${running ? "stopped" : "started"}`);
       } else if (act === "vscode") {
         await api(`/api/apps/${encodeURIComponent(name)}/vscode/open`, { method: "POST" });
         toast(`Opening ${name} in VSCode on your Mac`);
@@ -887,10 +887,10 @@
       } else if (act === "commit") {
         await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
           method: "POST", body: JSON.stringify({ message: `Update ${name} via GSO-1 mobile` }) });
-        toast(`${name} — committed`);
+        toast(`${name}, committed`);
       } else if (act === "pull") {
         await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
-        toast(`${name} — pulled`);
+        toast(`${name}, pulled`);
       } else if (act === "askops") {
         STATE.tab = "room";
         render();
@@ -909,7 +909,7 @@
     if (!board) return;
     const task = board.tasks.find(t => t.id === id);
     if (!task) return;
-    // Tapping advances a task one column — the phone gesture for "done with this".
+    // Tapping advances a task one column, the phone gesture for "done with this".
     const i = COLS.findIndex(c => c.id === task.status);
     const next = COLS[Math.min(COLS.length - 1, i + 1)].id;
     if (next === task.status) return toast("Already done");

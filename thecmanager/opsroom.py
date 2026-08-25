@@ -6,7 +6,7 @@ dashboard can host the agent in a docked panel instead of a terminal.
 Two details worth knowing:
 
 * **Launcher resolution.** When GSO-1 runs from a release, `APP_DIR` is
-  `var/releases/<stamp>`, and that release contains its own copy of `ops` —
+  `var/releases/<stamp>`, and that release contains its own copy of `ops`, 
   which would resolve its repo root to the release and look for
   `var/current/opsroom` *inside* it. So we read `.release.json`, written at
   snapshot time, to find the real repo and use its launcher.
