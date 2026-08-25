@@ -34,7 +34,7 @@ icon or ⌘Q. Quitting stops only what it started.
 ### Option B — supervised, no GUI
 
 ```bash
-cd ~/Projects/the-manager
+cd ~/Projects/gso-1
 python -m supervisor start --daemon      # runs var/current, restarts on crash
 python -m supervisor status
 python -m supervisor stop
@@ -43,7 +43,7 @@ python -m supervisor stop
 ### Option C — plain, the old way
 
 ```bash
-cd ~/Projects/the-manager && ./run.sh    # working tree, no supervisor
+cd ~/Projects/gso-1 && ./run.sh    # working tree, no supervisor
 ```
 
 Only one of these at a time — they all want port 8420.
@@ -77,7 +77,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8420/api/apps
 ### 2. Ops Room — read-only
 
 ```bash
-cd ~/Projects/the-manager
+cd ~/Projects/gso-1
 ./ops "which repos have uncommitted changes?"
 ```
 
@@ -100,7 +100,7 @@ the list rather than erroring — check with `./ops --verbose "hi"`.
 ls /tmp/should_not_work.txt                                   # must not exist
 ```
 
-Writes only work under `~/Projects/the-manager`, and never in `supervisor/`,
+Writes only work under `~/Projects/gso-1`, and never in `supervisor/`,
 `var/`, or `ops`.
 
 ### 5. Human approval

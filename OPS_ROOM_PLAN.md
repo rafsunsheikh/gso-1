@@ -25,7 +25,7 @@ slightly more capable than the last.
 All facts below were checked on **2026-08-22**. Re-verify before relying on them
 in a much later session.
 
-### GSO-1 (`~/Projects/the-manager`)
+### GSO-1 (`~/Projects/gso-1`)
 
 | | |
 |---|---|
@@ -120,7 +120,7 @@ Non-negotiable. Every milestone must preserve all six.
 4. **Destructive operations are Python functions, not shell strings.** The
    agent decides *when*, `git_ops.py`-style code decides *how*. No open `rm`.
 5. **Path allowlist on write/bash.** Implemented via pi's pluggable tool
-   operations. Default allow: the `the-manager` checkout and `var/`. Everything
+   operations. Default allow: the `gso-1` checkout and `var/`. Everything
    else — including `~/Projects/*` — is read-only unless explicitly granted.
 6. **Human approval for the risky class**, reusing `claude_perm_mcp.py`:
    `bash`, `write`/`edit` outside the sandbox root, and any release flip.
@@ -342,7 +342,7 @@ loop.**
 | Check | Result |
 |---|---|
 | Acceptance question answered | ✅ "98 repositories have uncommitted changes" + top-N list |
-| Numbers correct | ✅ spot-checked vs raw `git status`: the-manager 21, example_lab 39, example_press 22 — all exact |
+| Numbers correct | ✅ spot-checked vs raw `git status`: gso-1 21, example_lab 39, example_press 22 — all exact |
 | Sweep cost | 270 apps → 250 repos → 98 dirty in **11.3 s**, ~3,400 tokens |
 | Tool executed once, not looped | ✅ instrumented: 1 real execution |
 | End-to-end latency | ~41 s (11 s sweep + ~30 s local inference) |
@@ -384,7 +384,7 @@ Tool surface is now 9: `list_apps` `git_status` `git_dirty_sweep` `read` `ls`
 
 | Ring | Default |
 |---|---|
-| writable | `~/Projects/the-manager` only |
+| writable | `~/Projects/gso-1` only |
 | readable | the sandbox + `~/Projects` + `~/work` |
 | immutable | `supervisor/`, `var/` — never writable (invariant #1) |
 

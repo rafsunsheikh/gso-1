@@ -15,8 +15,17 @@
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const home = os.homedir();
+
+/**
+ * The GSO-1 checkout this sidecar ships inside, found from its own location
+ * rather than guessed from a path under $HOME. The guess was wrong on every
+ * machine but the author's, and a sandbox root that does not exist fails in
+ * the least useful direction.
+ */
+const INSTALL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function expand(p: string): string {
   return path.resolve(p.startsWith("~") ? path.join(home, p.slice(1)) : p);
@@ -24,13 +33,34 @@ function expand(p: string): string {
 
 /** The one writable root. Everything else is read-only at best. */
 export const SANDBOX_ROOT = expand(
-  process.env.OPSROOM_SANDBOX_ROOT ?? path.join(home, "Projects/the-manager"),
+  process.env.OPSROOM_SANDBOX_ROOT ?? INSTALL_ROOT,
 );
+
+/**
+ * The project roots GSO-1 itself is configured with, as passed through the
+ * environment. Falls back to ~/Projects, the same default the server uses.
+ */
+function projectRootsFromEnv(): string[] {
+  const raw = process.env.MANAGER_PROJECTS_DIRS ?? process.env.MANAGER_PROJECTS_DIR ?? "";
+  const entries = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    // Entries may carry a display label as "Label:/path".
+    .map((e) => {
+      const i = e.indexOf(":");
+      if (i > 0 && /^\s*[~/.]/.test(e.slice(i + 1))) return e.slice(i + 1).trim();
+      return e;
+    });
+  return entries.length ? entries : [path.join(home, "Projects")];
+}
 
 /** Readable roots. Defaults to the sandbox plus the project directories. */
 export const READ_ROOTS: string[] = (
   process.env.OPSROOM_READ_ROOTS ??
-  [SANDBOX_ROOT, path.join(home, "Projects"), path.join(home, "work")].join(",")
+  // The server already knows where the user keeps their code; reuse that
+  // rather than naming somebody's folders here.
+  [SANDBOX_ROOT, ...projectRootsFromEnv()].join(",")
 )
   .split(",")
   .map((s) => s.trim())

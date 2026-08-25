@@ -15,8 +15,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rafsunsheikh/the-manager/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/rafsunsheikh/the-manager?display_name=tag&color=6366f1"></a>
-  <a href="https://github.com/rafsunsheikh/the-manager/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/rafsunsheikh/the-manager/total?color=22c55e"></a>
+  <a href="https://github.com/rafsunsheikh/gso-1/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/rafsunsheikh/gso-1?display_name=tag&color=6366f1"></a>
+  <a href="https://github.com/rafsunsheikh/gso-1/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/rafsunsheikh/gso-1/total?color=22c55e"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/macOS%20·%20Linux%20·%20Windows-supported-lightgrey">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab">
@@ -83,7 +83,7 @@ It is a control plane for the machine you already own.
 ### I just want to run it
 
 Grab the installer for your platform from the
-[latest release](https://github.com/rafsunsheikh/the-manager/releases/latest):
+[latest release](https://github.com/rafsunsheikh/gso-1/releases/latest):
 
 | Platform | File |
 |---|---|
@@ -99,8 +99,8 @@ That is the whole setup — no Python, no terminal, no config file.
 **Requirements:** Python 3.11+, git.
 
 ```bash
-git clone https://github.com/rafsunsheikh/the-manager.git
-cd the-manager
+git clone https://github.com/rafsunsheikh/gso-1.git
+cd gso-1
 cp .env.example .env      # point MANAGER_PROJECTS_DIRS at your code
 ./run.sh
 ```

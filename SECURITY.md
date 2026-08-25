@@ -42,7 +42,7 @@ GSO-1 is pre-1.0. Only the **latest release** receives security fixes.
 
 Report privately through GitHub:
 
-1. Go to the [Security tab](https://github.com/rafsunsheikh/the-manager/security/advisories/new)
+1. Go to the [Security tab](https://github.com/rafsunsheikh/gso-1/security/advisories/new)
 2. Click **Report a vulnerability**
 3. Include what you did, what happened, and what you expected
 

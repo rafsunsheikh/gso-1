@@ -33,8 +33,8 @@ agree to uphold it.
 **Requirements:** Python 3.11+, Node 20+ (only for the desktop shell), git.
 
 ```bash
-git clone https://github.com/rafsunsheikh/the-manager.git
-cd the-manager
+git clone https://github.com/rafsunsheikh/gso-1.git
+cd gso-1
 cp .env.example .env      # then edit MANAGER_PROJECTS_DIRS to point at your code
 ./run.sh
 ```

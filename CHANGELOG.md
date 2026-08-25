@@ -63,5 +63,5 @@ projects folder and runs it.
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/the-manager/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rafsunsheikh/the-manager/releases/tag/v0.1.0
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.0
