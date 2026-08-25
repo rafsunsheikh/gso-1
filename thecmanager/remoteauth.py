@@ -32,14 +32,25 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 # Reachable without a token from anywhere: the phone's shell and what it needs
 # to paint a login screen. None of these read or change anything.
+#
+# Matched on a path boundary, never as a bare string prefix: "/m" must cover
+# "/m" and "/m/login" while leaving a future "/models" or "/metrics" behind the
+# gate. A plain startswith here would hand out any route that happened to begin
+# with the same letters.
 PUBLIC_PREFIXES: tuple[str, ...] = (
     "/m",
-    "/static/",
-    "/favicon",
-    "/manifest.webmanifest",
+    "/static",
     "/api/remote/login",
     "/health",
 )
+
+# Single files served from the root, where there is no boundary to match on.
+PUBLIC_FILES: frozenset[str] = frozenset({
+    "/manifest.webmanifest",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/favicon.png",
+})
 
 
 def is_loopback(request: Request) -> bool:
@@ -62,8 +73,9 @@ def token_ok(presented: str) -> bool:
 
 
 def _public(path: str, prefixes: Iterable[str]) -> bool:
-    return any(path == p or path.startswith(p.rstrip("/") + "/") or path.startswith(p)
-               for p in prefixes)
+    if path in PUBLIC_FILES:
+        return True
+    return any(path == p or path.startswith(p.rstrip("/") + "/") for p in prefixes)
 
 
 class RemoteAuthMiddleware(BaseHTTPMiddleware):
