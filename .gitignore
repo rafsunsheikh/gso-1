@@ -21,3 +21,6 @@ data/*.jsonl
 build/dist/
 build/release/
 build/work/
+
+# Article drafts, kept with the project but not part of it
+article/
