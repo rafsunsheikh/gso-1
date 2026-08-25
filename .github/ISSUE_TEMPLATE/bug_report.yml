@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in GSO-1 did not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not use this form for security issues —
+        see [SECURITY.md](../blob/main/SECURITY.md) for private reporting.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what happened, and what you expected instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running GSO-1?
+      options:
+        - Packaged app (.dmg / .exe / AppImage)
+        - From source (./run.sh)
+        - Desktop shell from source (npm start)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "v0.1.0, or the commit sha"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15.2 (Apple Silicon), Windows 11, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: project-type
+    attributes:
+      label: Project type involved
+      description: If the bug is about one app, what kind is it?
+      placeholder: "Next.js, Django, Rust, static site…"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >
+        From `data/logs/<app>.log` in a source checkout, or the app's log
+        directory when packaged. Please redact anything private.
+      render: shell

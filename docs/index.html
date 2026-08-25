@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GSO-1 — every project on your machine, in one window</title>
+<meta name="description" content="A local application registry and launcher. GSO-1 scans your projects folder, lists every app, and lets you start, stop, and check the health of any of them from one dashboard.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --line: #e3e6ea;
+    --text: #14161a; --dim: #5b6472; --accent: #4f46e5; --ok: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09080f; --surface: #13121c; --line: #262336;
+      --text: #ecedf1; --dim: #9aa1b1; --accent: #8b87f5; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 88px 0 56px; text-align: center; }
+  h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); margin: 0 0 12px; letter-spacing: -.02em; }
+  .tag { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: var(--dim); margin: 0 auto 32px; max-width: 34ch; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 10px;
+    font-weight: 600; text-decoration: none; font-size: .95rem;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost { border: 1px solid var(--line); color: var(--text); }
+  .note { font-size: .82rem; color: var(--dim); margin-top: 16px; }
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 1.5rem; margin: 0 0 20px; letter-spacing: -.01em; }
+  .grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--dim); font-size: .9rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px; overflow-x: auto; font-size: .85rem;
+  }
+  .safe { color: var(--ok); font-weight: 600; }
+  footer { padding: 40px 0 64px; color: var(--dim); font-size: .85rem; text-align: center; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>GSO-1 🗂️</h1>
+    <p class="tag">Every project on your machine, in one window — running, healthy, and one click from started.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/rafsunsheikh/the-manager/releases/latest">Download {{VERSION}}</a>
+      <a class="btn btn-ghost" href="https://github.com/rafsunsheikh/the-manager">View on GitHub</a>
+    </div>
+    <p class="note">macOS · Windows · Linux — free and open source, Apache&nbsp;2.0</p>
+  </header>
+
+  <section>
+    <h2>What it is</h2>
+    <p>You have thirty-odd folders of code. Four are running and you are not sure which four.
+       One is holding a port hostage. Starting any of them means remembering whether it was
+       <code>npm run dev</code>, <code>./run.sh</code>, or that one <code>make serve</code>.</p>
+    <p>GSO-1 is the window that answers all of it. Point it at your projects folder and it walks
+       every project inside, works out how each one starts, and gives you a row per app with a
+       start button, a live health light, and the git state.</p>
+    <p><span class="safe">It runs entirely on your machine.</span> It binds to <code>127.0.0.1</code>,
+       talks to your filesystem and your processes, and uploads nothing.</p>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Starts anything</h3><p>Detects the run command for Node, Django, FastAPI, Flask, Streamlit, Rust, Go, static sites, and plain Python — and always defers to a project's own <code>run.sh</code> or <code>Makefile</code>.</p></div>
+      <div class="card"><h3>Real health</h3><p>Healthy, starting, crashed, or stopped — from process tracking plus a port probe, not from hope.</p></div>
+      <div class="card"><h3>Port conflicts</h3><p>Finds what is already holding the port before you launch, instead of after the stack trace.</p></div>
+      <div class="card"><h3>Git at a glance</h3><p>Branch, dirty count, ahead/behind, last commit — across every repo, with fast-forward updates from the dashboard.</p></div>
+      <div class="card"><h3>Agents with a seatbelt</h3><p>Read-only tools run themselves; anything that writes a file or runs a command stops for an explicit approval.</p></div>
+      <div class="card"><h3>Your own hardware</h3><p>A built-in Anthropic→llama proxy points an agent session at your local <code>llama-server</code>.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <table>
+      <tr><th>Platform</th><th>File</th></tr>
+      <tr><td>macOS (Apple Silicon)</td><td><code>GSO-1-*-arm64.dmg</code></td></tr>
+      <tr><td>macOS (Intel)</td><td><code>GSO-1-*.dmg</code></td></tr>
+      <tr><td>Windows</td><td><code>GSO-1-Setup-*.exe</code></td></tr>
+      <tr><td>Linux</td><td><code>GSO-1-*.AppImage</code> / <code>.deb</code></td></tr>
+    </table>
+    <p class="note">On first run GSO-1 asks which folder holds your projects. That is the whole setup —
+       no Python, no terminal, no config file. Builds are currently unsigned, so macOS and Windows
+       will ask you to allow the app once.</p>
+
+    <h2 style="margin-top:36px">Or run from source</h2>
+    <pre><code>git clone https://github.com/rafsunsheikh/the-manager.git
+cd the-manager
+cp .env.example .env
+./run.sh</code></pre>
+  </section>
+
+  <section>
+    <h2>A note on what it can do</h2>
+    <p>GSO-1 starts processes and runs commands as you. That is the feature, and it is also the
+       threat model. It binds loopback only by default, refuses remote access outright unless you
+       set a token, and requires explicit approval for agent writes and commands.</p>
+    <p>Full detail in the <a href="https://github.com/rafsunsheikh/the-manager/blob/main/SECURITY.md">security policy</a>.</p>
+  </section>
+
+  <footer>
+    <p><a href="https://github.com/rafsunsheikh/the-manager">GitHub</a> ·
+       <a href="https://github.com/rafsunsheikh/the-manager/releases">Releases</a> ·
+       <a href="https://github.com/rafsunsheikh/the-manager/blob/main/CONTRIBUTING.md">Contributing</a> ·
+       <a href="https://github.com/rafsunsheikh/the-manager/blob/main/LICENSE">Apache 2.0</a></p>
+    <p>Copyright © 2026 Md Rafsun Sheikh</p>
+  </footer>
+
+</div>
+</body>
+</html>

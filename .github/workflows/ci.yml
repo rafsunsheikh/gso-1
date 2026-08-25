@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Byte-compile every module
+        run: python -m compileall -q thecmanager supervisor
+
+      - name: Import the app
+        # Catches the failure that matters most: a server that cannot start.
+        env:
+          MANAGER_PROJECTS_DIRS: ${{ github.workspace }}
+        run: python -c "from thecmanager import server; print('app imported:', server.app.title)"
+
+      - name: Boot and probe
+        env:
+          MANAGER_PROJECTS_DIRS: ${{ github.workspace }}
+          MANAGER_NO_BROWSER: "1"
+          MANAGER_PORT: "8420"
+        run: |
+          python -m thecmanager &
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:8420/; then
+              echo "dashboard answered"
+              curl -sf http://127.0.0.1:8420/api/settings/roots
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "dashboard never answered" >&2
+          exit 1
+
+  desktop:
+    name: Desktop shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax-check the shell
+        run: node --check desktop/main.js
+      - name: Validate the builder config
+        run: node -e "const p=require('./desktop/package.json'); if(!p.build?.appId) throw new Error('missing build.appId'); console.log('config ok:', p.build.productName)"
+
+  hygiene:
+    name: Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No secrets committed
+        run: |
+          if git grep -InE '(sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY)' -- . ; then
+            echo "::error::possible secret committed"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: No hardcoded home directories
+        # These are what stopped GSO-1 running on anyone else's machine.
+        run: |
+          if git grep -InE '/(Users|home)/[a-z][a-z0-9_-]+' -- '*.py' '*.js' '*.html' ; then
+            echo "::error::hardcoded home directory — derive it at runtime"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: .env is not tracked
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env must never be committed"
+            exit 1
+          fi
+          echo "clean"

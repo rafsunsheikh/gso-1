@@ -2047,7 +2047,8 @@
     /** `~/a/b/c/file.gguf` with the middle elided — the ends carry the meaning. */
     function shortPath(p, keep = 2) {
       // HOME_DIR comes from the server; fall back to the usual shapes so a
-      // stale page still abbreviates sensibly instead of printing /Users/you.
+      // stale page still abbreviates sensibly instead of printing someone
+      // else's literal home path.
       let t = String(p);
       if (HOME_DIR && t.startsWith(HOME_DIR)) t = "~" + t.slice(HOME_DIR.length);
       else t = t.replace(/^\/(?:Users|home)\/[^/]+/, "~");

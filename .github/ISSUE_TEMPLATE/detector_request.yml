@@ -1,0 +1,46 @@
+name: Project type not detected
+description: GSO-1 guessed the wrong run command, or none at all
+labels: ["detector"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        GSO-1 works out how to start a project from the files it finds. If it
+        got yours wrong, this is one of the easiest things to fix — and a great
+        first pull request. See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#adding-a-project-type-detector).
+
+  - type: input
+    id: stack
+    attributes:
+      label: What kind of project is it?
+      placeholder: "Deno, Phoenix, Rails, Bun…"
+    validations:
+      required: true
+
+  - type: input
+    id: marker
+    attributes:
+      label: What file identifies it?
+      placeholder: "deno.json, mix.exs, Gemfile…"
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: How should it be started?
+      placeholder: "deno task dev"
+    validations:
+      required: true
+
+  - type: input
+    id: port
+    attributes:
+      label: Default port
+      placeholder: "8000"
+
+  - type: textarea
+    id: got
+    attributes:
+      label: What GSO-1 did instead
+      placeholder: "Listed it with no start command / tried `python -m …`"
