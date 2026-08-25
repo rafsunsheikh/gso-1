@@ -385,7 +385,7 @@ Tool surface is now 9: `list_apps` `git_status` `git_dirty_sweep` `read` `ls`
 | Ring | Default |
 |---|---|
 | writable | `~/Projects/gso-1` only |
-| readable | the sandbox + `~/Projects` + `~/work` |
+| readable | the sandbox + every configured project root |
 | immutable | `supervisor/`, `var/` — never writable (invariant #1) |
 
 Checks resolve symlinks and `..` before comparing, so escape attempts fail
