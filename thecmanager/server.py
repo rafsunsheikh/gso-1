@@ -815,4 +815,82 @@ def site_publish(body: SitePublish) -> JSONResponse:
     return JSONResponse(site_cms.publish(body.message))
 
 
+# ------------------------------------------------------------ first-run setup
+#
+# A packaged GSO-1 ships without a .env, so a fresh install has to ask the user
+# where their code lives. These endpoints back that screen — and let anyone
+# change or add a root later without editing a file.
+
+
+class RootEntry(BaseModel):
+    label: str | None = None
+    path: str
+
+
+class RootsBody(BaseModel):
+    roots: list[RootEntry]
+
+
+def _roots_payload() -> dict:
+    return {
+        "needs_onboarding": config.needs_onboarding(),
+        # Roots forced by the environment cannot be changed from the UI; say so
+        # rather than letting the user save into a void.
+        "locked_by_env": bool(config._env_roots()),
+        "home": str(Path.home()),
+        "roots": [
+            {"label": label, "path": str(path), "exists": path.is_dir()}
+            for label, path in config.PROJECT_ROOTS
+        ],
+    }
+
+
+@app.get("/api/settings/roots")
+def get_roots() -> JSONResponse:
+    return JSONResponse(_roots_payload())
+
+
+@app.post("/api/settings/roots")
+def set_roots(body: RootsBody) -> JSONResponse:
+    if config._env_roots():
+        raise HTTPException(
+            status_code=409,
+            detail="Project roots are set by MANAGER_PROJECTS_DIRS; unset it to "
+            "choose folders from the app.",
+        )
+    try:
+        config.set_project_roots([r.model_dump() for r in body.roots])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    scanner.invalidate()
+    return JSONResponse(_roots_payload())
+
+
+@app.get("/api/settings/browse")
+def browse(path: str = "") -> JSONResponse:
+    """List sub-directories of `path`, for the folder picker in the browser UI.
+
+    The desktop shell uses a native dialog instead. This walks anywhere the
+    user can already read — it is their machine, and the picker would be
+    useless confined to roots that have not been chosen yet.
+    """
+    target = Path(path).expanduser() if path.strip() else Path.home()
+    try:
+        target = target.resolve()
+        entries = sorted(
+            (e for e in target.iterdir() if e.is_dir() and not e.name.startswith(".")),
+            key=lambda e: e.name.lower(),
+        )
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=f"cannot read {target}: {e}")
+    return JSONResponse(
+        {
+            "path": str(target),
+            "parent": str(target.parent) if target.parent != target else None,
+            "home": str(Path.home()),
+            "dirs": [{"name": e.name, "path": str(e)} for e in entries[:500]],
+        }
+    )
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

@@ -61,6 +61,16 @@ def root_label(name: str) -> str:
 _detect_cache: dict[str, tuple[float, dict]] = {}
 
 
+def invalidate() -> None:
+    """Drop the detection cache.
+
+    Entries are keyed by app name, not by full path, so changing the project
+    roots can otherwise serve a stale detection for a same-named app under a
+    different root.
+    """
+    _detect_cache.clear()
+
+
 def detect_cached(name: str) -> dict:
     path = app_path(name)
     try:
