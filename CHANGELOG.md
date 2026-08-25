@@ -7,25 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Apache-2.0 license, `NOTICE`, and full community docs (`CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md`, `SECURITY.md`).
-- `.env.example` documenting every supported configuration variable.
-- `/api/apps` now reports the host's home directory so the UI can abbreviate
-  paths correctly on any machine.
+Nothing yet.
 
-### Fixed
-- Removed hardcoded developer paths from the dashboard and the Ops Room plan —
-  path abbreviation now works for any user on macOS and Linux.
+## [0.1.0] — 2026-08-25
 
-## [0.1.0] — 2026-08-23
+The first public release: a dashboard that finds every app in your projects
+folder and runs it — on your machine, not just on the one it was written on.
 
-The first release worth cutting: a dashboard that finds every app in your
-projects folder and runs it.
+### Packaging & distribution
+- Installers for macOS (`.dmg`, Apple Silicon and Intel), Windows (NSIS), and
+  Linux (AppImage, `.deb`). The Python backend is frozen with PyInstaller and
+  bundled, so **no Python is required** to run GSO-1.
+- First-run screen: pick the folder holding your projects, browse or type a
+  path, add several roots. No config file, no terminal.
+- State is stored per platform (`Application Support`, `%APPDATA%`,
+  `XDG_DATA_HOME`) when packaged, and beside the code in a source checkout.
+- Apache-2.0 license with `NOTICE`, plus `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `SECURITY.md`, and an `.env.example` documenting every
+  configuration variable.
 
-### Added
+### Security
+- Remote-auth public paths are matched on a path boundary rather than as a bare
+  string prefix. Previously a route named `/models` or `/metrics` would have
+  been reachable from the network without a token; no such route existed, but
+  the gate was one route name away from opening.
 
-**Registry & launcher**
+### Fixed — portability
+Everything below only ever worked on the original author's machine:
+- The dashboard abbreviated paths against a hardcoded home directory; the
+  server now reports the real one via `/api/apps`.
+- The greeting, sidebar and avatars were hardcoded to one name; they now come
+  from the OS account record.
+- The Jekyll CMS defaulted to one specific personal repo; `MANAGER_SITE_DIR`
+  now has no default and the CMS stays off until it names a real checkout.
+- Ops Room's sandbox root — the only directory the agent may write to —
+  defaulted to a fixed `~/Projects/…` path; it is now resolved from the
+  sidecar's own install location.
+- Ops Room's readable roots named a specific work folder; they now follow
+  `MANAGER_PROJECTS_DIRS`.
+
+### Registry & launcher
 - Scans every top-level directory across one or more project roots.
 - Start / stop any app in its own process group, with logs streaming to
   `data/logs/<app>.log`.
