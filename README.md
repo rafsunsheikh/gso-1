@@ -1,10 +1,12 @@
 <h1 align="center">GSO-1 🗂️</h1>
 
 <p align="center">
-  <strong>Every project on your machine, in one window — running, healthy, and one click from started.</strong>
+  <strong>The staff officer for your machine.</strong><br>
+  <sub>Every project you own — running, healthy, and one click from started.</sub>
 </p>
 
 <p align="center">
+  <a href="#why-it-is-called-gso-1">The idea</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="RUNBOOK.md">Runbook</a> ·
@@ -30,6 +32,49 @@
 <p align="center">
   <sub><em>Everything that needs you, on one screen.</em></sub>
 </p>
+
+---
+
+## Why it is called GSO-1
+
+In a division headquarters there is an officer called the **GSO-1** — General
+Staff Officer Grade 1, a Lieutenant Colonel who heads the General Staff branch.
+He is the right hand of the **GOC**, the General Officer Commanding the
+division. He plans the operations, keeps the picture current, and drafts the
+orders the GOC signs. In peace and in war, the division runs through him.
+
+He works from the **Ops Room** — the nerve centre where the maps, the traces,
+the unit locations, the strengths and the intelligence are all displayed and
+kept up to date. It is where the commander is briefed, and where decisions get
+made, because it is the one place the whole situation can actually be seen.
+
+**Your computer is your garrison, and you are its GOC.**
+
+You should not have to remember which of thirty services is running, which
+branch each repo is on, or what command starts the one you touched last March.
+That is staff work. GSO-1 does the staff work, and the Ops Room is where you
+come to see everything and decide.
+
+The old British staff manuals are unusually clear about what makes a good
+one, and it turns out to be a decent product specification:
+
+> **Serve the commander wisely and well.** Point it at your machine and it
+> works out how everything runs, so you never type `npm run dev` from memory
+> again.
+>
+> **Stay invisible; the commander gets the credit.** GSO-1 has no opinions
+> about how you build software. It starts what you already built, and stays
+> out of the way.
+>
+> **Shield the commander from unnecessary detail, reserving him for the real
+> decisions.** Thirty repos, and the dashboard leads with the four that need
+> you: the dirty ones, the stale ones, the one that crashed.
+>
+> **Never be a "yes man".** A staff officer who only ever reports good news is
+> worse than none. So GSO-1 shows you the crashed process, the failed run, and
+> the port conflict — plainly, in red, on the first screen.
+
+Everything else in this README is detail. That is the idea.
 
 ---
 

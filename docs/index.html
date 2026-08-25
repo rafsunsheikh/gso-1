@@ -3,135 +3,399 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GSO-1 — every project on your machine, in one window</title>
-<meta name="description" content="A local application registry and launcher. GSO-1 scans your projects folder, lists every app, and lets you start, stop, and check the health of any of them from one dashboard.">
+<title>GSO-1 — the staff officer for your machine</title>
+<meta name="description" content="A local application registry and launcher. Your computer is your garrison; GSO-1 does the staff work. Start, stop, and watch every project from one Ops Room.">
+<meta property="og:title" content="GSO-1 — the staff officer for your machine">
+<meta property="og:description" content="Every project you own: running, healthy, and one click from started. Runs entirely on your machine.">
+<meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
 <style>
-  :root {
-    --bg: #ffffff; --surface: #f6f7f9; --line: #e3e6ea;
-    --text: #14161a; --dim: #5b6472; --accent: #4f46e5; --ok: #15803d;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #09080f; --surface: #13121c; --line: #262336;
-      --text: #ecedf1; --dim: #9aa1b1; --accent: #8b87f5; --ok: #4ade80;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
-  header { padding: 88px 0 56px; text-align: center; }
-  h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); margin: 0 0 12px; letter-spacing: -.02em; }
-  .tag { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: var(--dim); margin: 0 auto 32px; max-width: 34ch; }
-  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    display: inline-block; padding: 12px 22px; border-radius: 10px;
-    font-weight: 600; text-decoration: none; font-size: .95rem;
-  }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-ghost { border: 1px solid var(--line); color: var(--text); }
-  .note { font-size: .82rem; color: var(--dim); margin-top: 16px; }
-  section { padding: 48px 0; border-top: 1px solid var(--line); }
-  h2 { font-size: 1.5rem; margin: 0 0 20px; letter-spacing: -.01em; }
-  .grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  .card h3 { margin: 0 0 8px; font-size: 1rem; }
-  .card p { margin: 0; color: var(--dim); font-size: .9rem; }
-  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-  th { color: var(--dim); font-weight: 600; }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  pre {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: 10px; padding: 16px; overflow-x: auto; font-size: .85rem;
-  }
-  .safe { color: var(--ok); font-weight: 600; }
-  footer { padding: 40px 0 64px; color: var(--dim); font-size: .85rem; text-align: center; border-top: 1px solid var(--line); }
-  a { color: var(--accent); }
+/* ─────────────────────────────────────────────────────────── tokens ── */
+:root{
+  --bg:#07070c; --bg-2:#0b0b13; --panel:#11111c; --panel-2:#161624;
+  --line:#23233a; --line-2:#2e2e4a;
+  --ink:#eef0f6; --dim:#9ea6bd; --faint:#6b7390;
+  --accent:#6f6af8; --accent-2:#9b97ff;
+  --ok:#3ddc97; --warn:#f5b642; --bad:#ff6b6b;
+  --grid:rgba(111,106,248,.075);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  --maxw:1060px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ────────────────────────────────────────────────────────── chrome ── */
+.topbar{
+  position:fixed;inset:0 0 auto 0;z-index:50;height:52px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(7,7,12,.72);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.topbar .wrap{display:flex;align-items:center;justify-content:space-between;width:100%}
+.brand{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:-.01em}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(61,220,151,.6);animation:pulse 2.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,.5)}70%{box-shadow:0 0 0 9px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
+.topnav{display:flex;gap:22px;font-size:.85rem;color:var(--dim)}
+.topnav a{color:var(--dim)}
+.topnav a:hover{color:var(--ink);text-decoration:none}
+@media(max-width:720px){.topnav{display:none}}
+
+/* ──────────────────────────────────────────────────────────── hero ── */
+.hero{position:relative;padding:150px 0 90px;text-align:center;overflow:hidden}
+.hero-bg{position:absolute;inset:0;pointer-events:none}
+.hero-bg::before{
+  content:"";position:absolute;inset:-50%;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse 60% 55% at 50% 35%,#000 30%,transparent 72%);
+  -webkit-mask-image:radial-gradient(ellipse 60% 55% at 50% 35%,#000 30%,transparent 72%);
+  animation:drift 24s linear infinite;
+}
+@keyframes drift{to{transform:translate(44px,44px)}}
+/* radar sweep — the Ops Room conceit, kept faint */
+.sweep{
+  position:absolute;left:50%;top:26%;width:min(760px,120vw);aspect-ratio:1;
+  translate:-50% -50%;border-radius:50%;pointer-events:none;opacity:.5;
+  background:conic-gradient(from 0deg,transparent 0deg,transparent 300deg,rgba(111,106,248,.16) 352deg,rgba(155,151,255,.30) 360deg);
+  mask-image:radial-gradient(circle,#000 38%,transparent 70%);
+  -webkit-mask-image:radial-gradient(circle,#000 38%,transparent 70%);
+  animation:sweep 7s linear infinite;
+}
+@keyframes sweep{to{rotate:360deg}}
+.rings{position:absolute;left:50%;top:26%;width:min(760px,120vw);aspect-ratio:1;translate:-50% -50%;pointer-events:none;opacity:.5}
+.rings i{position:absolute;inset:0;margin:auto;border:1px solid var(--line);border-radius:50%}
+.rings i:nth-child(1){width:32%;height:32%}
+.rings i:nth-child(2){width:58%;height:58%}
+.rings i:nth-child(3){width:84%;height:84%}
+
+.eyebrow{
+  position:relative;display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:26px;
+  background:rgba(17,17,28,.6);
+}
+h1{position:relative;font-size:clamp(3rem,9vw,5.4rem);line-height:1;margin:0 0 18px;letter-spacing:-.035em;font-weight:700}
+h1 .g{background:linear-gradient(180deg,#fff,#a9a4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{position:relative;font-size:clamp(1.1rem,2.6vw,1.4rem);color:var(--dim);margin:0 auto 12px;max-width:34ch}
+.sub{position:relative;color:var(--faint);font-size:.98rem;margin:0 auto 34px;max-width:46ch}
+.cta{position:relative;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:11px;font-weight:600;font-size:.94rem;border:1px solid transparent;transition:transform .18s,box-shadow .18s,background .18s}
+.btn:hover{text-decoration:none;transform:translateY(-2px)}
+.btn-primary{background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#fff;box-shadow:0 8px 26px -8px rgba(111,106,248,.75)}
+.btn-primary:hover{box-shadow:0 14px 34px -10px rgba(111,106,248,.85)}
+.btn-ghost{border-color:var(--line-2);color:var(--ink);background:rgba(17,17,28,.5)}
+.btn-ghost:hover{background:var(--panel-2)}
+.plat{position:relative;font-family:var(--mono);font-size:.76rem;color:var(--faint);letter-spacing:.04em}
+
+/* ─────────────────────────────────────────────────────── sections ── */
+section{padding:88px 0;position:relative}
+.rule{border-top:1px solid var(--line)}
+h2{font-size:clamp(1.6rem,3.6vw,2.15rem);letter-spacing:-.02em;margin:0 0 14px;font-weight:680}
+h2 .num{font-family:var(--mono);font-size:.72rem;color:var(--accent-2);letter-spacing:.16em;display:block;margin-bottom:10px;font-weight:500}
+.say{color:var(--dim);max-width:62ch;margin:0 0 18px}
+.say strong{color:var(--ink)}
+
+/* chain of command diagram */
+.chain{display:grid;gap:14px;grid-template-columns:repeat(3,1fr);margin:34px 0 10px}
+@media(max-width:760px){.chain{grid-template-columns:1fr}}
+.node{
+  border:1px solid var(--line);border-radius:14px;padding:20px;background:linear-gradient(180deg,var(--panel),var(--bg-2));
+  position:relative;overflow:hidden;
+}
+.node::after{content:"";position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.55}
+.node .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:var(--faint)}
+.node h3{margin:8px 0 6px;font-size:1.02rem}
+.node p{margin:0;font-size:.88rem;color:var(--dim)}
+.node .who{font-family:var(--mono);font-size:.74rem;color:var(--accent-2);margin-top:10px;display:block}
+
+/* doctrine */
+.doct{display:grid;gap:0;margin-top:34px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.doct div{padding:22px 24px;border-bottom:1px solid var(--line);background:var(--panel);transition:background .2s}
+.doct div:last-child{border-bottom:0}
+.doct div:hover{background:var(--panel-2)}
+.doct b{display:block;margin-bottom:5px;font-size:.98rem}
+.doct span{color:var(--dim);font-size:.9rem}
+
+/* cards */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));margin-top:32px}
+.card{border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--panel);transition:transform .2s,border-color .2s}
+.card:hover{transform:translateY(-3px);border-color:var(--line-2)}
+.card h3{margin:0 0 8px;font-size:1rem}
+.card p{margin:0;color:var(--dim);font-size:.9rem}
+.card .ico{font-size:1.25rem;display:block;margin-bottom:12px}
+
+/* screenshot */
+.shot{margin-top:34px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 30px 70px -30px rgba(0,0,0,.9)}
+.shot img{display:block;width:100%}
+.shot figcaption{padding:12px 18px;font-size:.8rem;color:var(--faint);border-top:1px solid var(--line);font-family:var(--mono)}
+
+/* install table */
+table{width:100%;border-collapse:collapse;margin-top:26px;font-size:.9rem;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line)}
+th{background:var(--panel);color:var(--faint);font-family:var(--mono);font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;font-weight:500}
+tr:last-child td{border-bottom:0}
+td code{font-family:var(--mono);font-size:.84rem;color:var(--accent-2)}
+pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;overflow-x:auto;font-size:.85rem;font-family:var(--mono);color:var(--dim);margin-top:22px}
+pre .c{color:var(--faint)}
+
+.note{font-size:.85rem;color:var(--faint);margin-top:16px}
+.badge-ok{color:var(--ok);font-weight:600}
+
+footer{border-top:1px solid var(--line);padding:44px 0 60px;text-align:center;color:var(--faint);font-size:.86rem}
+footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+
+/* ─────────────────────────────────────────────────── reveal anim ── */
+.rv{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
+.rv.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  .rv{opacity:1;transform:none;transition:none}
+  .sweep,.hero-bg::before,.brand .dot{animation:none}
+  html{scroll-behavior:auto}
+  .btn:hover,.card:hover{transform:none}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
-    <h1>GSO-1 🗂️</h1>
-    <p class="tag">Every project on your machine, in one window — running, healthy, and one click from started.</p>
+<div class="topbar">
+  <div class="wrap">
+    <span class="brand"><span class="dot"></span> GSO-1</span>
+    <nav class="topnav">
+      <a href="#idea">The idea</a>
+      <a href="#does">What it does</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="hero-bg"></div>
+  <div class="sweep"></div>
+  <div class="rings"><i></i><i></i><i></i></div>
+  <div class="wrap">
+    <span class="eyebrow">Division HQ · Ops Room · Your machine</span>
+    <h1><span class="g">GSO-1</span></h1>
+    <p class="lede">The staff officer for your machine.</p>
+    <p class="sub">Every project you own — running, healthy, and one click from started.
+       Your computer is your garrison. You are its commander. This does the staff work.</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/rafsunsheikh/gso-1/releases/latest">Download {{VERSION}}</a>
-      <a class="btn btn-ghost" href="https://github.com/rafsunsheikh/gso-1">View on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/rafsunsheikh/gso-1">View source</a>
     </div>
-    <p class="note">macOS · Windows · Linux — free and open source, Apache&nbsp;2.0</p>
-  </header>
+    <p class="plat">macOS · Windows · Linux — Apache 2.0 — nothing leaves your machine</p>
+  </div>
+</header>
 
-  <section style="padding-top:0;border-top:0">
-    <img src="assets/screenshots/ops-room.jpg" alt="The GSO-1 Ops Room showing running apps, repos needing attention, and ports in use"
-         style="width:100%;border:1px solid var(--line);border-radius:12px;display:block">
-  </section>
+<section id="idea" class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">01 — The name</span>Why it is called GSO-1</h2>
+    <p class="say rv">In a division headquarters there is an officer called the <strong>GSO-1</strong> —
+      General Staff Officer Grade 1, a Lieutenant Colonel who heads the General Staff branch.
+      He is the right hand of the <strong>GOC</strong>, the General Officer Commanding the division.
+      He plans the operations, keeps the picture current, and drafts the orders the GOC signs.
+      In peace and in war, the division runs through him.</p>
+    <p class="say rv">He works from the <strong>Ops Room</strong> — the nerve centre where the maps,
+      the traces, the unit locations, the strengths and the intelligence are displayed and kept up
+      to date. It is where the commander is briefed, and where decisions get made, because it is the
+      one place the whole situation can actually be seen.</p>
 
-  <section>
-    <h2>What it is</h2>
-    <p>You have thirty-odd folders of code. Four are running and you are not sure which four.
-       One is holding a port hostage. Starting any of them means remembering whether it was
-       <code>npm run dev</code>, <code>./run.sh</code>, or that one <code>make serve</code>.</p>
-    <p>GSO-1 is the window that answers all of it. Point it at your projects folder and it walks
-       every project inside, works out how each one starts, and gives you a row per app with a
-       start button, a live health light, and the git state.</p>
-    <p><span class="safe">It runs entirely on your machine.</span> It binds to <code>127.0.0.1</code>,
-       talks to your filesystem and your processes, and uploads nothing.</p>
-  </section>
+    <div class="chain">
+      <div class="node rv"><span class="tag">Commands</span><h3>You</h3>
+        <p>You decide what gets built and what ships. You should not also be remembering which of
+           thirty services is currently up.</p>
+        <span class="who">→ GOC · your garrison</span></div>
+      <div class="node rv"><span class="tag">Serves</span><h3>GSO-1</h3>
+        <p>Finds every project, works out how each one starts, watches its health, and keeps the
+           git picture current. Quietly.</p>
+        <span class="who">→ the staff officer</span></div>
+      <div class="node rv"><span class="tag">Displays</span><h3>Ops Room</h3>
+        <p>One screen holding the whole situation: what is live, what is dirty, what crashed, what
+           is holding a port.</p>
+        <span class="who">→ where you decide</span></div>
+    </div>
+  </div>
+</section>
 
-  <section>
-    <h2>What it does</h2>
+<section class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">02 — The doctrine</span>What makes a good staff officer</h2>
+    <p class="say rv">The old British staff manuals are unusually clear about this, and it turns out
+      to be a decent product specification.</p>
+    <div class="doct">
+      <div class="rv"><b>Serve the commander wisely and well.</b>
+        <span>Point it at your machine and it works out how everything runs, so you never type
+          <code>npm run dev</code> from memory again.</span></div>
+      <div class="rv"><b>Stay invisible; the commander gets the credit.</b>
+        <span>GSO-1 has no opinions about how you build software. It starts what you already built,
+          and stays out of the way.</span></div>
+      <div class="rv"><b>Shield the commander from unnecessary detail.</b>
+        <span>Thirty repos, and the dashboard leads with the four that need you: the dirty ones, the
+          stale ones, the one that crashed.</span></div>
+      <div class="rv"><b>Never be a "yes man".</b>
+        <span>A staff officer who only reports good news is worse than none. So the crashed process,
+          the failed run and the port conflict show up plainly, in red, on the first screen.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="rule">
+  <div class="wrap">
+    <figure class="shot rv" style="margin:0">
+      <img src="assets/screenshots/ops-room.jpg" alt="The GSO-1 Ops Room: two applications running, three repositories with uncommitted work, one failed run, and the ports currently in use">
+      <figcaption>The Ops Room — everything that needs you, on one screen.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="does" class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">03 — The work</span>What it actually does</h2>
     <div class="grid">
-      <div class="card"><h3>Starts anything</h3><p>Detects the run command for Node, Django, FastAPI, Flask, Streamlit, Rust, Go, static sites, and plain Python — and always defers to a project's own <code>run.sh</code> or <code>Makefile</code>.</p></div>
-      <div class="card"><h3>Real health</h3><p>Healthy, starting, crashed, or stopped — from process tracking plus a port probe, not from hope.</p></div>
-      <div class="card"><h3>Port conflicts</h3><p>Finds what is already holding the port before you launch, instead of after the stack trace.</p></div>
-      <div class="card"><h3>Git at a glance</h3><p>Branch, dirty count, ahead/behind, last commit — across every repo, with fast-forward updates from the dashboard.</p></div>
-      <div class="card"><h3>Agents with a seatbelt</h3><p>Read-only tools run themselves; anything that writes a file or runs a command stops for an explicit approval.</p></div>
-      <div class="card"><h3>Your own hardware</h3><p>A built-in Anthropic→llama proxy points an agent session at your local <code>llama-server</code>.</p></div>
+      <div class="card rv"><span class="ico">▶</span><h3>Starts anything</h3>
+        <p>Detects the run command for Node, Django, FastAPI, Flask, Streamlit, Rust, Go, static
+           sites and plain Python — and always defers to a project's own <code>run.sh</code> or
+           <code>Makefile</code>.</p></div>
+      <div class="card rv"><span class="ico">◉</span><h3>Real health</h3>
+        <p>Healthy, starting, crashed or stopped — from process tracking plus a port probe, not
+           from hope.</p></div>
+      <div class="card rv"><span class="ico">⚠</span><h3>Port conflicts</h3>
+        <p>Finds what is already holding the port before you launch, instead of after the stack
+           trace.</p></div>
+      <div class="card rv"><span class="ico">⎇</span><h3>Git at a glance</h3>
+        <p>Branch, dirty count, ahead/behind and last commit across every repo, with fast-forward
+           updates from the dashboard.</p></div>
+      <div class="card rv"><span class="ico">⛨</span><h3>Agents with a seatbelt</h3>
+        <p>Read-only tools run themselves; anything that writes a file or runs a command stops for
+           an explicit approval.</p></div>
+      <div class="card rv"><span class="ico">▤</span><h3>Your own hardware</h3>
+        <p>A built-in Anthropic→llama proxy points an agent session at your local
+           <code>llama-server</code>.</p></div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section>
-    <h2>Install</h2>
-    <table>
+<section id="install" class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">04 — Deployment</span>Install</h2>
+    <table class="rv">
       <tr><th>Platform</th><th>File</th></tr>
       <tr><td>macOS (Apple Silicon)</td><td><code>GSO-1-*-arm64.dmg</code></td></tr>
       <tr><td>macOS (Intel)</td><td><code>GSO-1-*.dmg</code></td></tr>
       <tr><td>Windows</td><td><code>GSO-1-Setup-*.exe</code></td></tr>
-      <tr><td>Linux</td><td><code>GSO-1-*.AppImage</code> / <code>.deb</code></td></tr>
+      <tr><td>Linux</td><td><code>GSO-1-*.AppImage</code> · <code>.deb</code></td></tr>
     </table>
-    <p class="note">On first run GSO-1 asks which folder holds your projects. That is the whole setup —
-       no Python, no terminal, no config file. Builds are currently unsigned, so macOS and Windows
-       will ask you to allow the app once.</p>
+    <p class="note rv">On first run GSO-1 asks which folder holds your projects. That is the whole
+      setup — no Python, no terminal, no config file. Builds are currently unsigned, so macOS and
+      Windows will ask you to allow the app once.</p>
 
-    <h2 style="margin-top:36px">Or run from source</h2>
-    <pre><code>git clone https://github.com/rafsunsheikh/gso-1.git
+    <h2 class="rv" style="margin-top:52px"><span class="num">05 — From source</span>Or build it yourself</h2>
+    <pre class="rv"><span class="c"># requires Python 3.11+</span>
+git clone https://github.com/rafsunsheikh/gso-1.git
 cd gso-1
 cp .env.example .env
-./run.sh</code></pre>
-  </section>
+./run.sh</pre>
+  </div>
+</section>
 
-  <section>
-    <h2>A note on what it can do</h2>
-    <p>GSO-1 starts processes and runs commands as you. That is the feature, and it is also the
-       threat model. It binds loopback only by default, refuses remote access outright unless you
-       set a token, and requires explicit approval for agent writes and commands.</p>
-    <p>Full detail in the <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">security policy</a>.</p>
-  </section>
+<section class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">06 — Standing orders</span>A note on what it can do</h2>
+    <p class="say rv">GSO-1 starts processes and runs commands as you. That is the feature, and it
+      is also the threat model.</p>
+    <p class="say rv"><span class="badge-ok">Loopback only by default</span> — unreachable from your
+      network. Remote access is refused outright unless you set a token, and agent writes and
+      commands require explicit approval. Full detail in the
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">security policy</a>.</p>
+  </div>
+</section>
 
-  <footer>
-    <p><a href="https://github.com/rafsunsheikh/gso-1">GitHub</a> ·
-       <a href="https://github.com/rafsunsheikh/gso-1/releases">Releases</a> ·
-       <a href="https://github.com/rafsunsheikh/gso-1/blob/main/CONTRIBUTING.md">Contributing</a> ·
-       <a href="https://github.com/rafsunsheikh/gso-1/blob/main/LICENSE">Apache 2.0</a></p>
-    <p>Copyright © 2026 Md Rafsun Sheikh</p>
-  </footer>
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/releases">Releases</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/LICENSE">Apache 2.0</a>
+    </div>
+    <p>Copyright © 2026 Md Rafsun Sheikh — built for the garrison of one.</p>
+  </div>
+</footer>
 
-</div>
+<script>
+// Reveal on scroll.
+//
+// The animation is a nicety; the content is not. Every path here ends with the
+// element visible — an element stuck at opacity 0 because a scroll outran the
+// observer is a far worse bug than no motion at all. Hence three belts:
+// a zero-threshold observer, a scroll sweep for anything already passed, and a
+// timer that gives up and shows everything.
+(function () {
+  var els = Array.prototype.slice.call(document.querySelectorAll('.rv'));
+  if (!els.length) return;
+
+  function showAll() { els.forEach(function (e) { e.classList.add('in'); }); }
+
+  if (!('IntersectionObserver' in window) ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    showAll();
+    return;
+  }
+
+  function show(el, stagger) {
+    if (el.classList.contains('in')) return;
+    if (stagger) {
+      var sibs = Array.prototype.slice.call(el.parentNode.children).filter(function (n) {
+        return n.classList && n.classList.contains('rv');
+      });
+      var i = Math.max(0, sibs.indexOf(el));
+      el.style.transitionDelay = Math.min(i * 80, 320) + 'ms';
+    }
+    el.classList.add('in');
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      show(en.target, true);
+      io.unobserve(en.target);
+    });
+  }, { threshold: 0 });
+
+  els.forEach(function (e) { io.observe(e); });
+
+  // Anything at or above the fold — including whatever a fast scroll skipped.
+  function sweep() {
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    els.forEach(function (e) {
+      if (e.classList.contains('in')) return;
+      var r = e.getBoundingClientRect();
+      if (r.top < h * 0.96) { show(e, false); io.unobserve(e); }
+    });
+  }
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { sweep(); ticking = false; });
+  }
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', onScroll, { passive: true });
+  addEventListener('load', sweep);
+  sweep();
+
+  // Last resort: never leave anything hidden.
+  setTimeout(showAll, 4000);
+})();
+</script>
 </body>
 </html>
