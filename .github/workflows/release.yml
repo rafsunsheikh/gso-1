@@ -23,11 +23,11 @@ jobs:
           - os: macos-14
             name: macOS (Apple Silicon)
             builder: --mac --arm64
-            artifacts: "*.dmg,*.zip"
+            artifacts: "*.dmg"
           - os: macos-13
             name: macOS (Intel)
             builder: --mac --x64
-            artifacts: "*.dmg,*.zip"
+            artifacts: "*.dmg"
           - os: windows-latest
             name: Windows
             builder: --win --x64
@@ -92,7 +92,12 @@ jobs:
       - name: Build the installer
         working-directory: desktop
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Deliberately no GH_TOKEN. Its presence makes electron-builder infer
+          # a GitHub publish provider and build auto-update metadata, which then
+          # dies on `--publish never` with "Cannot read properties of null
+          # (reading 'channel')". The release is assembled from uploaded
+          # artifacts in the publish job instead.
+          #
           # Unsigned builds still install; users get an OS warning. Set the
           # signing secrets in the repo to produce trusted builds.
           CSC_IDENTITY_AUTO_DISCOVERY: false

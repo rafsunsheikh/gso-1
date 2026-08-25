@@ -2,7 +2,7 @@
   "name": "gso1-desktop",
   "productName": "GSO-1",
   "version": "0.1.0",
-  "description": "GSO-1 — a local application registry and launcher",
+  "description": "GSO-1 \u2014 a local application registry and launcher",
   "homepage": "https://github.com/rafsunsheikh/gso-1",
   "license": "Apache-2.0",
   "author": {
@@ -25,7 +25,7 @@
   "build": {
     "appId": "com.gso1.manager",
     "productName": "GSO-1",
-    "copyright": "Copyright © 2026 Md Rafsun Sheikh",
+    "copyright": "Copyright \u00a9 2026 Md Rafsun Sheikh",
     "directories": {
       "output": "../build/release",
       "buildResources": "assets"
@@ -38,15 +38,22 @@
       {
         "from": "../build/dist/gso1-server",
         "to": "server",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "darkModeSupport": true,
       "extendInfo": {
@@ -58,7 +65,14 @@
     },
     "win": {
       "icon": "assets/icon.png",
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -70,8 +84,18 @@
       "category": "Development",
       "synopsis": "A local application registry and launcher",
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     }
   }
