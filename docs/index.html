@@ -116,6 +116,21 @@ h2 .num{font-family:var(--mono);font-size:.72rem;color:var(--accent-2);letter-sp
 .node p{margin:0;font-size:.88rem;color:var(--dim)}
 .node .who{font-family:var(--mono);font-size:.74rem;color:var(--accent-2);margin-top:10px;display:block}
 
+/* read-the-article card */
+.readmore{
+  display:block;margin-top:26px;padding:22px 24px;text-decoration:none;
+  border:1px solid var(--line);border-left:2px solid var(--accent);border-radius:14px;
+  background:linear-gradient(180deg,var(--panel),var(--bg-2));
+  transition:border-color .2s,transform .2s;
+}
+.readmore:hover{border-color:var(--line-2);transform:translateY(-2px);text-decoration:none}
+.rm-kicker{
+  display:block;font-family:var(--mono);font-size:.68rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--accent-2);margin-bottom:8px;
+}
+.rm-title{display:block;font-size:1.05rem;font-weight:650;color:var(--ink);margin-bottom:7px}
+.rm-meta{display:block;font-size:.85rem;color:var(--dim);line-height:1.55}
+
 /* doctrine */
 .doct{display:grid;gap:0;margin-top:34px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .doct div{padding:22px 24px;border-bottom:1px solid var(--line);background:var(--panel);transition:background .2s}
@@ -181,6 +196,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
       <a href="#idea">The idea</a>
       <a href="#does">What it does</a>
       <a href="#install">Install</a>
+      <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a>
       <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
     </nav>
   </div>
@@ -206,7 +222,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
 
 <section id="idea" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">01, The name</span>Why it is called GSO-1</h2>
+    <h2 class="rv"><span class="num">01 / The name</span>Why it is called GSO-1</h2>
     <p class="say rv">In a division headquarters there is an officer called the <strong>GSO-1</strong>, 
       General Staff Officer Grade 1, a Lieutenant Colonel who heads the General Staff branch.
       He is the right hand of the <strong>GOC</strong>, the General Officer Commanding the division.
@@ -231,12 +247,19 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
            is holding a port.</p>
         <span class="who">→ where you decide</span></div>
     </div>
+
+    <a class="readmore rv" href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">
+      <span class="rm-kicker">Read the long version</span>
+      <span class="rm-title">Your Computer Is a Garrison. It Needs a Staff Officer.</span>
+      <span class="rm-meta">The naming, the staff doctrine behind the design, and what it took to
+        ship a tool that ran on exactly one machine &nbsp;/&nbsp; 12 min read on Medium</span>
+    </a>
   </div>
 </section>
 
 <section class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">02, The doctrine</span>What makes a good staff officer</h2>
+    <h2 class="rv"><span class="num">02 / The doctrine</span>What makes a good staff officer</h2>
     <p class="say rv">The old British staff manuals are unusually clear about this, and it turns out
       to be a decent product specification.</p>
     <div class="doct">
@@ -283,7 +306,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
 
 <section id="does" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">03, The work</span>What it actually does</h2>
+    <h2 class="rv"><span class="num">03 / The work</span>What it actually does</h2>
     <div class="grid">
       <div class="card rv"><span class="ico">▶</span><h3>Starts anything</h3>
         <p>Detects the run command for Node, Django, FastAPI, Flask, Streamlit, Rust, Go, static
@@ -310,7 +333,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
 
 <section id="install" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">04, Deployment</span>Install</h2>
+    <h2 class="rv"><span class="num">04 / Deployment</span>Install</h2>
     <table class="rv">
       <tr><th>Platform</th><th>File</th></tr>
       <tr><td>macOS (Apple Silicon)</td><td><code>GSO-1-*-arm64.dmg</code></td></tr>
@@ -322,7 +345,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
       setup, no Python, no terminal, no config file. Builds are currently unsigned, so macOS and
       Windows will ask you to allow the app once.</p>
 
-    <h2 class="rv" style="margin-top:52px"><span class="num">05, From source</span>Or build it yourself</h2>
+    <h2 class="rv" style="margin-top:52px"><span class="num">05 / From source</span>Or build it yourself</h2>
     <pre class="rv"><span class="c"># requires Python 3.11+</span>
 git clone https://github.com/rafsunsheikh/gso-1.git
 cd gso-1
@@ -333,7 +356,7 @@ cp .env.example .env
 
 <section class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">06, Standing orders</span>A note on what it can do</h2>
+    <h2 class="rv"><span class="num">06 / Standing orders</span>A note on what it can do</h2>
     <p class="say rv">GSO-1 starts processes and runs commands as you. That is the feature, and it
       is also the threat model.</p>
     <p class="say rv"><span class="badge-ok">Loopback only by default</span>, unreachable from your
@@ -348,6 +371,7 @@ cp .env.example .env
     <div class="links">
       <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
       <a href="https://github.com/rafsunsheikh/gso-1/releases">Releases</a>
+      <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a>
       <a href="https://github.com/rafsunsheikh/gso-1/blob/main/CONTRIBUTING.md">Contributing</a>
       <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">Security</a>
       <a href="https://github.com/rafsunsheikh/gso-1/blob/main/LICENSE">Apache 2.0</a>

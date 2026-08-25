@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="#why-it-is-called-gso-1">The idea</a> ·
+  <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="RUNBOOK.md">Runbook</a> ·
@@ -75,6 +76,10 @@ one, and it turns out to be a decent product specification:
 > the port conflict, plainly, in red, on the first screen.
 
 Everything else in this README is detail. That is the idea.
+
+> 📄 **The long version:** [Your Computer Is a Garrison. It Needs a Staff Officer.](https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140)
+> The naming, the staff doctrine behind the design decisions, and what it took to
+> turn a tool that ran on exactly one machine into installers for three platforms.
 
 ---
 
