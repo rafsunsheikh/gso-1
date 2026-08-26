@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.3] — 2026-08-26
+
+### Changed
+- **First run always asks which folder holds your projects.** It previously
+  adopted `~/Projects` without asking whenever that folder happened to exist,
+  which meant a new install could open on a list the user never chose and had
+  no obvious way to change. The picker now opens on a suggested folder, so the
+  common case is still one click, but it is a suggestion rather than a decision.
+  Only an environment override or a saved choice counts as an answer.
+
 ## [0.1.2] — 2026-08-26
 
 GSO-1 can now be set up entirely from the application. Nothing in this release
@@ -148,7 +158,8 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.3
 [0.1.2]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.2
 [0.1.1]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.1
 [0.1.0]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.0

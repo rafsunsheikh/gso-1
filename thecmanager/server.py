@@ -837,8 +837,11 @@ class RootsBody(BaseModel):
 
 
 def _roots_payload() -> dict:
+    suggested = config.suggested_root()
     return {
         "needs_onboarding": config.needs_onboarding(),
+        # Where the first-run picker should open. A suggestion, not a choice.
+        "suggested": str(suggested) if suggested else None,
         # Roots forced by the environment cannot be changed from the UI; say so
         # rather than letting the user save into a void.
         "locked_by_env": bool(config._env_roots()),

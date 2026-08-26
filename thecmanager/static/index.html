@@ -3004,10 +3004,17 @@
       HOME_DIR = st.home || HOME_DIR;
       if (!st.needs_onboarding) return false;
       const modal = $("#setup-modal");
+      modal.dataset.mode = "";
       modal.style.display = "flex";
       wireSetup();
+      // Pre-select the obvious folder when there is one, so the common case is
+      // a single click, while still showing what was chosen and letting the
+      // user browse away from it.
+      SETUP_CHOSEN = st.suggested
+        ? [{ label: st.suggested.split("/").filter(Boolean).pop(), path: st.suggested }]
+        : [];
       renderSetupChosen();
-      await setupBrowse(st.home || "");
+      await setupBrowse(st.suggested || st.home || "");
       trapFocus(modal);
       return true;
     }
