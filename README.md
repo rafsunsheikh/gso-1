@@ -260,12 +260,21 @@ cd desktop && npm install && npm start
 |---|---|
 | **Project folders** | Which folders GSO-1 scans. Add or remove them without restarting. |
 | **Telegram** | Bot token and allowed chat ids, with a **Send a test message** button so a wrong chat id fails on the screen where you typed it rather than silently later. |
-| **Local LLM** | Where `llama-server` is, which folders hold your models, and the endpoint the Ops Room agent talks to. |
 | **Phone access** | The token required for any access from another device, and the bind address. |
 | **Other** | Jekyll checkout for the Site tab, Tavily key for agent web search. |
 
+The local model has its own screen rather than a Settings tab: the **Local LLM**
+tab owns where `llama-server` and your `.gguf` files live, remembers the flags
+each model was last started with, and points the Ops Room agent at whatever
+server it is actually running. Arriving with neither llama.cpp nor a model is a
+supported starting point: the tab offers the install command for your package
+manager (and will run it, if you ask), then a short list of tool-capable models
+filtered to what your machine can hold, downloaded straight into the folder it
+scans.
+
 Settings are written to `settings.json` in GSO-1's data folder, `0600`, and take
-effect after a restart, which the app offers as a button.
+effect after a restart, which the app offers as a button. Model folders and the
+`llama-server` path are the exception: those apply to the next scan immediately.
 
 <details>
 <summary>Precedence, and configuring from a terminal instead</summary>
@@ -308,13 +317,10 @@ fails closed. Anything that writes a file or runs a command stops for an explici
 Allow or Deny; read-only tools run without asking, because prompting you to
 approve a `git status` would train you to approve everything.
 
-Point it at a local model in two lines:
-
-```bash
-llama-server --model ~/models/your-model.gguf --port 8080 --ctx-size 65536 --jinja
-# then, in .env:
-OPSROOM_LLAMA_URL=http://127.0.0.1:8080/v1
-```
+Start a model from the **Local LLM** tab and the agent follows it: the endpoint
+and model id are read from the server GSO-1 is running, so there is nothing to
+keep in sync by hand. Set `OPSROOM_LLAMA_URL` / `OPSROOM_MODEL` only to point the
+agent at some *other* endpoint.
 
 ```bash
 ./ops "which repos have uncommitted changes?"

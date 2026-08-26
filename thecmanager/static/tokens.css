@@ -605,7 +605,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-chiprow {
   display: flex; align-items: center; gap: 8px;
   padding: 13px 24px; border-bottom: 1px solid var(--line-2);
-  margin: -22px -24px 0;      /* bleed to the content column edges */
+  margin: 0 -24px;            /* bleed to the content column edges */
   flex-wrap: wrap;
 }
 .lib-chip {
@@ -634,7 +634,7 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-bulk button:hover { text-decoration: underline; }
 .lib-bulk .lib-bulk-clear { margin-left: auto; color: var(--text-3); }
 
-.lib-table { margin: 14px -24px 0; }
+.lib-table { margin: 0 -24px; }
 .lib-row {
   display: grid;
   grid-template-columns: 34px 1fr 92px 112px 148px 100px;
@@ -728,9 +728,39 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .gso-search::placeholder { color: var(--text-3); }
 .gso-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 
-/* The filter chips and the column header stay put while rows scroll past. */
-.lib-chiprow { position: sticky; top: -22px; z-index: 3; background: var(--surface); }
-.lib-head { position: sticky; top: 31px; z-index: 2; background: var(--bg); }
+/* A button that reads as a link, for pointing at another screen from inside a
+   sentence without dropping out of the prose. */
+.lnk-inline {
+  all: unset; cursor: pointer; color: var(--primary-text);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.lnk-inline:hover { opacity: .85; }
+
+/* Search, chips, bulk actions and the column header all stay put while rows
+   scroll past: in a list of 270 repos, needing to scroll back to the top to
+   type a name is the exact moment you wanted the search box.
+
+   Only two sticky elements, and only one offset between them. Everything below
+   the search box lives in one `.lib-sticky` wrapper, so those parts cannot
+   overlap each other no matter what they contain, and the single offset that
+   remains is measured from the search row at render time rather than guessed.
+   Hardcoding it is what put the chips on top of the input twice. */
+/* No negative top margin: it puts the row's flow position above where it is
+   painted, and everything after it inherits that 22px error, which is how the
+   first repo row ended up under the column header. The body drops its own top
+   padding for list views instead, so flow and paint agree. */
+.gso-body[data-list="1"] { padding-top: 0; }
+#search-row {
+  position: sticky; top: 0; z-index: 4; background: var(--surface);
+  margin: 0 -24px; padding: 22px 24px 12px;
+}
+.lib-sticky {
+  position: sticky; top: var(--lib-sticky-top, 70px); z-index: 3;
+  background: var(--surface); margin: 0 -24px;
+}
+.lib-sticky .lib-chiprow { margin: 0; }
+.lib-sticky .lib-bulk { margin: 12px 24px; }
+.lib-head { background: var(--bg); }
 
 /* ==================================================================
    Planner, README "3. Planner". Four tone-dotted columns of drag-able

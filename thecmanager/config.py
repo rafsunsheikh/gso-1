@@ -1,6 +1,7 @@
 """Configuration and paths for GSO-1."""
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,64 @@ _REAL_ENV: frozenset[str] = frozenset(os.environ)
 def set_by_environment(key: str) -> bool:
     """True when `key` came from the real environment rather than a file."""
     return key in _REAL_ENV
+
+
+# Files that plausibly export a variable into a GUI app's environment. Order is
+# the order they are reported in, most specific first: a launcher we can name
+# beats a shell rc file the app never even sourced.
+def _env_source_files() -> list[Path]:
+    home = Path.home()
+    files: list[Path] = []
+    # A LaunchAgent is how a desktop app inherits variables no interactive
+    # shell ever sets, and it is the case nobody thinks to look at. The plist
+    # may declare them itself or, more often, exec a script that does.
+    for plist in sorted((home / "Library" / "LaunchAgents").glob("*.plist")):
+        files.append(plist)
+        try:
+            text = plist.read_text()
+        except OSError:
+            continue
+        for m in re.finditer(r"<string>([^<]+)</string>", text):
+            arg = m.group(1)
+            if arg.endswith((".sh", ".bash", ".zsh", ".command")):
+                files.append(Path(arg))
+    files.append(home / "run_manager.sh")           # GSO-1's own legacy launcher
+    files += [home / n for n in (".zshenv", ".zprofile", ".zshrc",
+                                 ".bash_profile", ".bashrc", ".profile")]
+    return files
+
+
+def env_origin(key: str) -> str | None:
+    """Best guess at which file exports `key` into our environment, if any.
+
+    A guess, deliberately: os.environ records the value, never its author, so
+    the only honest thing to do is look in the handful of places that could
+    have set it and say which one mentions it. Worth doing because the
+    alternative, telling somebody a setting is "locked by your environment"
+    and leaving them to find out where, is how an app becomes unfixable from
+    inside itself.
+
+    Returns None for anything we did not export, so a value from .env or from
+    Settings is never blamed on a shell file that happens to mention it.
+    """
+    if key not in _REAL_ENV:
+        return None
+    home = str(Path.home())
+    shell = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}=", re.M)
+    plist = re.compile(rf"<key>{re.escape(key)}</key>")
+    seen: set[Path] = set()
+    for path in _env_source_files():
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        if (plist if path.suffix == ".plist" else shell).search(text):
+            p = str(path)
+            return "~" + p[len(home):] if p.startswith(home) else p
+    return None
 
 # Where GSO-1 itself lives (this package's parent of parent).
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -140,6 +199,32 @@ def save_settings(data: dict) -> None:
     except OSError:
         pass  # filesystems without POSIX modes, e.g. some Windows mounts
     tmp.replace(SETTINGS_FILE)
+
+
+def save_env_setting(key: str, value: str) -> bool:
+    """Persist one env-backed setting and apply it to this process at once.
+
+    Returns False when a real environment variable owns the key, since writing
+    settings.json would then be a lie: `_apply_saved_env` skips anything that
+    was genuinely exported, so the saved value would never take effect.
+
+    Applying live is the point. Settings that only bite after a restart are
+    settings people get wrong twice, and for the ones read at call time, model
+    folders, binary paths, there is no reason to wait.
+    """
+    if key in _REAL_ENV:
+        return False
+    settings = load_settings()
+    env = dict(settings.get("env") or {})
+    if value:
+        env[key] = value
+        os.environ[key] = value
+    else:
+        env.pop(key, None)
+        os.environ.pop(key, None)
+    settings["env"] = env
+    save_settings(settings)
+    return True
 
 
 # ------------------------------------------------------------ project roots

@@ -362,6 +362,13 @@ def verify_sidecar(rel: Path) -> bool:
     env = dict(os.environ)
     # Point the release's sidecar at the canonical secrets file.
     env.setdefault("OPSROOM_ENV_FILE", str(REPO / ".env"))
+    # ...and at the real checkout as its sandbox, exactly as `./ops` does.
+    # Without this the sidecar falls back to its own install root, which for a
+    # release is var/releases/<stamp>, a directory with no .venv in it: every
+    # build tool that shells out to Python then fails with ENOENT and no
+    # release can ever pass verification. The launcher has always exported
+    # this; verify was the one caller that did not.
+    env.setdefault("OPSROOM_SANDBOX_ROOT", str(REPO))
     try:
         res = subprocess.run(
             [node, str(check)],

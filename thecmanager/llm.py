@@ -20,26 +20,37 @@ from typing import Optional
 from . import config
 
 # --- locations -------------------------------------------------------------
-DEFAULT_PORT = int(os.environ.get("LLAMA_PORT", "8080"))
-HOST = os.environ.get("LLAMA_HOST", "127.0.0.1")
+#
+# Every one of these reads os.environ when it is called, not when the module is
+# imported. That is what lets the Local LLM tab add a model folder and have the
+# next scan see it: as import-time constants they could only be changed by
+# restarting the whole app, which is a heavy price for "I moved my models".
 
-_SERVER_CANDIDATES = [
-    os.environ.get("LLAMA_SERVER_BIN", ""),
-    str(Path.home() / "llama.cpp/build/bin/llama-server"),
-    str(Path.home() / "Projects/llama.cpp/build/bin/llama-server"),
-    str(Path.home() / "Projects/llama_cpp/build/bin/llama-server"),
-]
-
-# Directories scanned for models. Override with MANAGER_MODEL_DIRS (colon-sep).
-_MODEL_DIRS = [
-    p for p in os.environ.get("MANAGER_MODEL_DIRS", "").split(":") if p
-] or [
-    str(Path.home() / "unsloth"),
-    str(Path.home() / "models"),
-    str(Path.home() / ".cache/llama.cpp"),
-]
+_BUILTIN_BIN_PATHS = (
+    "llama.cpp/build/bin/llama-server",
+    "Projects/llama.cpp/build/bin/llama-server",
+    "Projects/llama_cpp/build/bin/llama-server",
+)
+_BUILTIN_MODEL_DIRS = ("unsloth", "models", ".cache/llama.cpp")
 
 _MIN_MODEL_BYTES = 300 * 1024 * 1024  # ignore tiny vocab/test ggufs
+
+
+def host() -> str:
+    return os.environ.get("LLAMA_HOST") or "127.0.0.1"
+
+
+def default_port() -> int:
+    try:
+        return int(os.environ.get("LLAMA_PORT") or "8080")
+    except ValueError:
+        return 8080
+
+
+def model_dirs() -> list[str]:
+    """Folders scanned for .gguf files: MANAGER_MODEL_DIRS, else the usual spots."""
+    chosen = [d for d in os.environ.get("MANAGER_MODEL_DIRS", "").split(":") if d]
+    return chosen or [str(Path.home() / d) for d in _BUILTIN_MODEL_DIRS]
 
 
 @dataclass
@@ -59,7 +70,10 @@ _lock = threading.Lock()
 
 # --- discovery -------------------------------------------------------------
 def server_bin() -> Optional[str]:
-    for c in _SERVER_CANDIDATES:
+    """The llama-server binary: the configured one, else wherever it usually is."""
+    candidates = [os.environ.get("LLAMA_SERVER_BIN", "")]
+    candidates += [str(Path.home() / c) for c in _BUILTIN_BIN_PATHS]
+    for c in candidates:
         if c and Path(c).exists():
             return c
     return None
@@ -68,7 +82,7 @@ def server_bin() -> Optional[str]:
 def list_models() -> list[dict]:
     models: list[dict] = []
     seen: set[str] = set()
-    for d in _MODEL_DIRS:
+    for d in model_dirs():
         base = Path(d)
         if not base.exists():
             continue
@@ -95,11 +109,87 @@ def list_models() -> list[dict]:
     return models
 
 
+# --- launch presets --------------------------------------------------------
+#
+# The flags below are not preferences, they are what makes a local model usable
+# as a Claude Code backend, and the right values differ per model: a thinking
+# model needs its own reasoning format, a 30B needs a smaller window than a 4B.
+# Remembering them per model is the difference between "load this one" and
+# re-deriving fifteen flags from memory every time.
+
+# Sane for any model, and specifically tuned for tool-calling. -np 1 keeps the
+# whole KV pool in one slot (auto picks 4 and the context limit bites early);
+# --context-shift evicts old tokens instead of erroring mid-session; q8_0 KV
+# roughly halves cache memory so a large window actually fits.
+DEFAULT_PRESET: dict = {
+    "ctx": 131072,
+    "ngl": 99,
+    "jinja": True,
+    "alias": "",
+    "threads": None,
+    "batch": None,
+    "parallel": 1,
+    "reasoning_format": "",
+    "temp": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "min_p": 0.0,
+    "context_shift": True,
+    "cache_type_k": "q8_0",
+    "cache_type_v": "q8_0",
+}
+
+_PRESET_KEYS = frozenset(DEFAULT_PRESET) | {"port"}
+
+
+def _llm_settings() -> dict:
+    d = config.load_settings().get("llm")
+    return d if isinstance(d, dict) else {}
+
+
+def presets() -> dict:
+    d = _llm_settings().get("presets")
+    return d if isinstance(d, dict) else {}
+
+
+def last_model() -> str:
+    return str(_llm_settings().get("last_model") or "")
+
+
+def preset_for(model_path: str) -> dict:
+    """The remembered flags for one model, filled in from the defaults."""
+    merged = dict(DEFAULT_PRESET)
+    merged["port"] = default_port()
+    saved = presets().get(model_path)
+    if isinstance(saved, dict):
+        merged.update({k: v for k, v in saved.items() if k in _PRESET_KEYS})
+    return merged
+
+
+def remember_preset(model_path: str, cfg: dict) -> None:
+    """Record how this model was last started, so next time is one click.
+
+    Best-effort: failing to save a preference must never stop a server that is
+    otherwise ready to launch.
+    """
+    try:
+        settings = config.load_settings()
+        block = settings.get("llm")
+        block = dict(block) if isinstance(block, dict) else {}
+        saved = dict(block.get("presets") or {})
+        saved[model_path] = {k: v for k, v in cfg.items() if k in _PRESET_KEYS}
+        block["presets"], block["last_model"] = saved, model_path
+        settings["llm"] = block
+        config.save_settings(settings)
+    except (OSError, ValueError):
+        pass
+
+
 # --- status ----------------------------------------------------------------
 def _health(port: int) -> bool:
     try:
         with urllib.request.urlopen(
-            f"http://{HOST}:{port}/health", timeout=2
+            f"http://{host()}:{port}/health", timeout=2
         ) as r:
             return r.status == 200
     except Exception:
@@ -109,7 +199,7 @@ def _health(port: int) -> bool:
 def _props(port: int) -> dict:
     try:
         with urllib.request.urlopen(
-            f"http://{HOST}:{port}/props", timeout=2
+            f"http://{host()}:{port}/props", timeout=2
         ) as r:
             import json
 
@@ -136,7 +226,7 @@ def status() -> dict:
     with _lock:
         p = _proc
     managed_alive = bool(p and p.popen.poll() is None)
-    port = p.port if p else DEFAULT_PORT
+    port = p.port if p else default_port()
     healthy = _health(port)
 
     model_name = None
@@ -167,13 +257,13 @@ def status() -> dict:
         "healthy": healthy,
         "managed": managed_alive,
         "port": port,
-        "host": HOST,
+        "host": host(),
         "model": model_name,
         "ctx": ctx,
         "pid": (p.popen.pid if managed_alive else (_port_pids(port)[:1] or [None])[0]),
         "uptime_seconds": int(time.time() - p.started_at) if managed_alive else None,
         "server_bin": server_bin(),
-        "url": f"http://{HOST}:{port}",
+        "url": f"http://{host()}:{port}",
     }
 
 
@@ -185,7 +275,7 @@ def log_file() -> Path:
 
 def start(
     model_path: str,
-    port: int = DEFAULT_PORT,
+    port: int = 0,
     ctx: int = 131072,
     ngl: int = 99,
     jinja: bool = True,
@@ -203,6 +293,7 @@ def start(
     cache_type_v: str = "q8_0",
 ) -> dict:
     global _proc
+    port = port or default_port()
     bin_ = server_bin()
     if not bin_:
         return {"ok": False, "message": "llama-server binary not found."}
@@ -235,7 +326,7 @@ def start(
     cmd = [
         bin_,
         "-m", model_path,
-        "--host", HOST,
+        "--host", host(),
         "--port", str(port),
         "-c", str(ctx),
         "-ngl", str(ngl),
@@ -300,7 +391,7 @@ def stop() -> dict:
     global _proc
     with _lock:
         p = _proc
-    port = p.port if p else DEFAULT_PORT
+    port = p.port if p else default_port()
 
     killed = False
     if p and p.popen.poll() is None:

@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.4] — 2026-08-26
+
+### Added
+- **GSO-1 can get you a local model from nothing.** With llama.cpp missing, the
+  Local LLM tab now shows the install command for your package manager and, on
+  a machine with Homebrew, offers to run it and streams the output. With no
+  `.gguf` files, it offers a short list of tool-capable models sized against
+  your actual RAM, resolved against Hugging Face so the sizes are real, and
+  downloads one into the folder it already scans. Downloads resume after an
+  interruption. Both are explicit button presses behind a confirmation; nothing
+  installs or downloads because you opened a tab.
+- **The Local LLM tab remembers how each model was started.** Context window,
+  reasoning format, sampling, cache type: every flag is saved per model and
+  restored when you pick it, so loading a model is one click instead of
+  fifteen fields. **Start again** repeats the last launch verbatim.
+- **A "Where things live" section on the Local LLM tab** for the
+  `llama-server` binary and the folders scanned for `.gguf` files. Changes
+  apply to the next scan with no restart.
+- **Settings names the file that pinned a value.** A setting locked by an
+  exported variable now reads "set in ~/run_manager.sh" rather than "set by
+  your environment", because the old wording told you to unset something
+  without telling you where it was set.
+
+### Fixed
+- **The Ops Room header claimed a model was connected when nothing was
+  running.** It read `GLM-4.7 · local` from a hardcoded string, and both status
+  dots were painted green unconditionally. It now reports the model that is
+  actually loaded, or says so when there is none.
+- **The Library search box was partly covered by the filter chips.** The chip
+  row bled upward 22px into a 16px gap, and painted over the bottom of the
+  input. Search, chips and the column header are now one flush sticky stack, so
+  the search box also stays put instead of scrolling away in a long list.
+- **The Site tab said "not found at ." when nothing was configured.** Unset and
+  set-but-missing are now different messages, and both link to the setting
+  instead of asking you to restart.
+- **Model folders you never chose were listed as if you had.** The built-in
+  guesses are labelled as guesses, and folders that do not exist say so.
+
+### Changed
+- **The Ops Room agent follows the running server.** `OPSROOM_LLAMA_URL` and
+  `OPSROOM_MODEL` default to the endpoint and model GSO-1 has loaded, instead
+  of being two fields to keep in sync with the Local LLM tab by hand. Export
+  either one to point the agent somewhere else.
+
+### Removed
+- **The Settings → Local LLM tab.** Everything in it moved to the Local LLM
+  tab, which now owns the model end to end.
+- **The Chat tab.** It duplicated the Ops Room, which is docked on every view,
+  talks to llama-server directly rather than through the Anthropic shim, and
+  already knows your project roots. Existing `chats.json` is left on disk.
+- **The Archived nav item**, a placeholder for a concept that does not exist.
+
 ## [0.1.3] — 2026-08-26
 
 ### Changed
