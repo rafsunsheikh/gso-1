@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.2] — 2026-08-26
+
+GSO-1 can now be set up entirely from the application. Nothing in this release
+requires a terminal.
+
+### Added
+- **Settings**, with five tabs: project folders, Telegram, Local LLM, phone
+  access, and the rest. Values are saved to `settings.json` and injected into
+  the environment at startup, which is the only way a GUI can configure things
+  that are read from `os.environ` at import time. A real environment variable
+  still wins and is shown as read-only rather than accepting an edit that would
+  never take effect.
+- **Add and remove project folders** from the app. The Library could previously
+  only ever show the folders chosen at first run; adding another meant setting
+  `MANAGER_PROJECTS_DIRS` and restarting, which a packaged install has no
+  obvious way to do.
+- **A Telegram test button.** Configuring a bot is four steps across two apps
+  and the usual failure is silent: a good token with the wrong chat id, and
+  nothing ever arrives.
+- **Restart from the app**, since saved settings are read at startup. The
+  restart re-execs in place and keeps the pid, so a supervisor or LaunchAgent
+  watching the process does not see it die.
+
+### Security
+- `settings.json` is written `0600`. It holds the bot token, the phone access
+  token and any API keys set in Settings, and the mode is applied before the
+  rename so there is no instant where a complete file of secrets is
+  world-readable.
+- Secrets are write-only from the browser: the server reports whether one is
+  set, never what it is.
+
+### Documentation
+- The macOS install instructions described a route Apple removed in macOS 15.
+  Right-click and Open no longer works; the dialog offers only Done and Move to
+  Bin. Every instruction now describes Privacy & Security → **Open Anyway**.
+- A page for [the Ops Room](https://rafsunsheikh.github.io/gso-1/ops-room.html):
+  all ten agent tools, the sandbox model, and how to connect a local model.
+- The git and GitHub answer, which is that there is nothing to connect: GSO-1
+  uses the `git` already on your machine and stores no credentials of its own.
+
 ## [0.1.1] — 2026-08-26
 
 Both of these were found by downloading the v0.1.0 installer and running it,
@@ -108,6 +148,7 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.2
 [0.1.1]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.1
 [0.1.0]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.0
