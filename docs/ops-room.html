@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Ops Room — GSO-1</title>
+<meta name="description" content="GSO-1's agent runs on your own hardware, inside a sandbox it cannot write outside of, and asks before it changes anything. What it can do, and how to point it at your local model.">
+<meta property="og:title" content="The Ops Room — GSO-1">
+<meta property="og:description" content="An agent with the run of your machine, on a short leash. Local model, hard sandbox, human approval.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
+<style>
+:root{
+  --bg:#07070c; --bg-2:#0b0b13; --panel:#11111c; --panel-2:#161624;
+  --line:#23233a; --line-2:#2e2e4a;
+  --ink:#eef0f6; --dim:#9ea6bd; --faint:#6b7390;
+  --accent:#6f6af8; --accent-2:#9b97ff;
+  --ok:#3ddc97; --warn:#f5b642; --bad:#ff6b6b;
+  --grid:rgba(111,106,248,.075);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  --maxw:1060px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+.topbar{position:fixed;inset:0 0 auto 0;z-index:50;height:52px;display:flex;align-items:center;
+  background:rgba(7,7,12,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;justify-content:space-between;width:100%}
+.brand{display:flex;align-items:center;gap:9px;font-weight:650;color:var(--ink)}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.topnav{display:flex;gap:22px;font-size:.85rem}
+.topnav a{color:var(--dim)}
+.topnav a:hover{color:var(--ink);text-decoration:none}
+@media(max-width:720px){.topnav{display:none}}
+
+header.hero{position:relative;padding:132px 0 64px;overflow:hidden}
+header.hero::before{content:"";position:absolute;inset:-50%;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse 55% 50% at 30% 30%,#000 30%,transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse 55% 50% at 30% 30%,#000 30%,transparent 70%)}
+.eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);
+  font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
+  border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:24px;
+  background:rgba(17,17,28,.6)}
+h1{position:relative;font-size:clamp(2.3rem,6vw,3.4rem);line-height:1.05;margin:0 0 18px;
+  letter-spacing:-.03em;font-weight:700;text-wrap:balance}
+.lede{position:relative;font-size:1.15rem;color:var(--dim);margin:0;max-width:56ch}
+
+section{padding:70px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(1.5rem,3.4vw,2rem);letter-spacing:-.02em;margin:0 0 14px;font-weight:680;text-wrap:balance}
+h2 .num{font-family:var(--mono);font-size:.7rem;color:var(--accent-2);letter-spacing:.16em;
+  display:block;margin-bottom:10px;font-weight:500}
+h3{font-size:1.05rem;margin:32px 0 10px;font-weight:650}
+p{margin:0 0 18px;color:var(--dim);max-width:68ch}
+p strong{color:var(--ink)}
+ul{margin:0 0 18px;padding-left:1.15em;color:var(--dim);max-width:68ch}
+li{margin-bottom:8px}
+li::marker{color:var(--faint)}
+code{font-family:var(--mono);font-size:.86em;background:var(--panel-2);padding:.12em .38em;
+  border-radius:4px;color:var(--accent-2)}
+pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+  overflow-x:auto;font-size:.83rem;font-family:var(--mono);color:var(--dim);margin:0 0 20px;line-height:1.65}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+pre .c{color:var(--faint)}
+
+.tools{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));margin:28px 0 8px}
+.tool{border:1px solid var(--line);border-radius:13px;padding:18px 20px;background:var(--panel)}
+.tool h4{margin:0 0 6px;font-size:.92rem;font-family:var(--mono);color:var(--accent-2);font-weight:600}
+.tool p{margin:0;font-size:.86rem;color:var(--dim)}
+
+.tw{overflow-x:auto;margin:0 0 20px}
+table{width:100%;border-collapse:collapse;font-size:.88rem;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--panel);color:var(--faint);font-family:var(--mono);font-size:.7rem;
+  letter-spacing:.13em;text-transform:uppercase;font-weight:500}
+tr:last-child td{border-bottom:0}
+td code{font-size:.84rem}
+
+.rings{border:1px solid var(--line);border-left:2px solid var(--accent);border-radius:13px;
+  padding:20px 24px;background:var(--panel);margin:0 0 20px}
+.rings dt{font-family:var(--mono);font-size:.78rem;color:var(--accent-2);letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:5px}
+.rings dd{margin:0 0 16px;color:var(--dim);font-size:.9rem}
+.rings dd:last-child{margin-bottom:0}
+
+.warn{border:1px solid var(--line);border-left:2px solid var(--warn);border-radius:13px;
+  padding:18px 22px;background:var(--panel);margin:0 0 20px}
+.warn strong{display:block;margin-bottom:6px;color:var(--ink);font-size:.95rem}
+.warn p{margin:0;font-size:.88rem}
+
+footer{border-top:1px solid var(--line);padding:42px 0 60px;text-align:center;color:var(--faint);font-size:.86rem}
+footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="dot"></span> GSO-1</a>
+    <nav class="topnav">
+      <a href="./#idea">The idea</a>
+      <a href="./#does">What it does</a>
+      <a href="./ops-room.html">Ops Room</a>
+      <a href="./#install">Install</a>
+      <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Ops Room</span>
+    <h1>An agent with the run of your machine, on a short leash.</h1>
+    <p class="lede">The Ops Room is where you ask GSO-1 questions about your own machine and let it
+      act on the answers. It runs on a model you host, inside a directory it cannot write outside
+      of, and it asks before it changes anything.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2><span class="num">01 / What it is</span>A staff officer you can talk to</h2>
+    <p>The rest of GSO-1 is a dashboard: it shows you the situation and gives you buttons. The Ops
+      Room is the part you can ask. <strong>"Which repos have uncommitted changes?"</strong> is a
+      question the dashboard answers by making you look. The Ops Room answers it by looking for
+      you, across every project root, and telling you which ones and how many files.</p>
+    <p>It is not a general-purpose chatbot bolted onto a dashboard. It has a specific, small set of
+      tools, all of them about the machine it runs on, and no ability to do anything outside them.
+      That narrowness is the point: an agent that can only do ten things can be trusted with those
+      ten things.</p>
+
+    <h3>The tools it actually has</h3>
+    <div class="tools">
+      <div class="tool"><h4>list_apps</h4><p>Every project across your roots, with its detected kind and whether it is running.</p></div>
+      <div class="tool"><h4>git_status</h4><p>Branch, dirty file count, ahead/behind and last commit for one repository.</p></div>
+      <div class="tool"><h4>git_dirty_sweep</h4><p>The same across every repo at once. This is the one that answers "what have I left unfinished".</p></div>
+      <div class="tool"><h4>uptime_info</h4><p>What is running, on which ports, and for how long.</p></div>
+      <div class="tool"><h4>build_release</h4><p>Snapshot the current working tree into a versioned release.</p></div>
+      <div class="tool"><h4>verify_release</h4><p>Health-check a release before anything depends on it.</p></div>
+      <div class="tool"><h4>promote_release</h4><p>Point <code>var/current</code> at a verified release.</p></div>
+      <div class="tool"><h4>rollback_release</h4><p>Go back to the previous one when a promotion turns out badly.</p></div>
+      <div class="tool"><h4>release_status</h4><p>Which release is live, which are on disk, what changed.</p></div>
+      <div class="tool"><h4>web_search</h4><p>Look something up. Disabled entirely unless <code>TAVILY_API_KEY</code> is set.</p></div>
+    </div>
+    <p style="margin-top:20px">Plus reading and writing files, which is where the sandbox below
+      matters.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span class="num">02 / The leash</span>Three rings, and a human at the gate</h2>
+    <p>An agent that can start processes and edit files on your machine is a real capability, so
+      the limits are structural rather than a promise in a prompt.</p>
+
+    <dl class="rings">
+      <dt>Sandbox root</dt>
+      <dd>The only directory the agent may <strong>write</strong> to. It resolves from the
+        install location, so it is wherever GSO-1 actually lives. Override with
+        <code>OPSROOM_SANDBOX_ROOT</code>.</dd>
+
+      <dt>Read roots</dt>
+      <dd>What it may read, search and list: the sandbox plus your configured project folders.
+        Override with <code>OPSROOM_READ_ROOTS</code>.</dd>
+
+      <dt>Immutable</dt>
+      <dd>Never writable, even inside the sandbox: the supervisor, <code>var/</code>, and the
+        launcher. The supervisor is what rolls back a bad self-edit, so the agent must never be
+        able to touch it.</dd>
+    </dl>
+
+    <p>Every check resolves symlinks and <code>..</code> before deciding, so
+      <code>sandbox/../../etc/passwd</code> and a symlink pointing outside both fail closed rather
+      than open.</p>
+
+    <h3>Approval</h3>
+    <p>Anything that writes a file or runs a command stops and asks. The request goes to the same
+      Allow / Deny gate GSO-1 already uses for Claude Code sessions, so there is one approval
+      mechanism on the machine rather than two, and it can reach you on Telegram when you are not
+      at the desk. Read-only tools run without asking, because stopping you to approve a
+      <code>git status</code> would train you to approve everything.</p>
+
+    <div class="warn">
+      <strong>The honest version</strong>
+      <p>GSO-1 starts processes and runs commands as you, and the Ops Room is that capability with
+        a language model driving. The defaults are conservative and the sandbox is enforced in
+        code, but this is a tool that does things to your machine. Read the
+        <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">security policy</a>
+        before you open it up to anything beyond loopback.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span class="num">03 / The model</span>Connect your local LLM</h2>
+    <p>The Ops Room talks to an OpenAI-compatible endpoint. In practice that means
+      <strong>llama.cpp's <code>llama-server</code></strong> running on your own hardware, so no
+      part of a session leaves the machine and there is no per-token cost to think about.</p>
+
+    <h3>1. Start a model</h3>
+    <p>Any tool-capable GGUF will do. Tool use is the requirement that actually matters: a model
+      that cannot call tools reliably will hold a nice conversation and do nothing.</p>
+<pre><code><span class="c"># --jinja is not optional: it is what makes tool calling work</span>
+llama-server \
+  --model ~/models/your-model.gguf \
+  --host 127.0.0.1 --port 8080 \
+  --ctx-size 65536 \
+  --jinja</code></pre>
+    <p>Or start it from the dashboard: the <strong>Local LLM</strong> tab lists the models on
+      disk, loads one, and shows tokens per second, context use and memory while it runs.</p>
+
+    <h3>2. Point the Ops Room at it</h3>
+<pre><code><span class="c"># defaults, override in .env if yours differ</span>
+OPSROOM_LLAMA_URL=http://127.0.0.1:8080/v1
+OPSROOM_MODEL=glm-4.7-flash
+OPSROOM_CTX=65536
+OPSROOM_MAX_TOKENS=4096</code></pre>
+
+    <div class="tw">
+      <table>
+        <tr><th>Variable</th><th>Default</th><th>What it controls</th></tr>
+        <tr><td><code>OPSROOM_LLAMA_URL</code></td><td><code>http://127.0.0.1:8080/v1</code></td><td>The OpenAI-compatible endpoint to talk to.</td></tr>
+        <tr><td><code>OPSROOM_MODEL</code></td><td><code>glm-4.7-flash</code></td><td>Model id, as the server reports it.</td></tr>
+        <tr><td><code>OPSROOM_CTX</code></td><td><code>65536</code></td><td>Context window. The tool schemas alone cost roughly 1,300 tokens, and a full dirty-repo sweep can return several thousand, so a small window runs out fast.</td></tr>
+        <tr><td><code>OPSROOM_MAX_TOKENS</code></td><td><code>4096</code></td><td>Cap on a single reply.</td></tr>
+        <tr><td><code>OPSROOM_SANDBOX_ROOT</code></td><td>the install directory</td><td>The one writable root.</td></tr>
+        <tr><td><code>OPSROOM_READ_ROOTS</code></td><td>sandbox + your project folders</td><td>Comma-separated readable roots.</td></tr>
+        <tr><td><code>TAVILY_API_KEY</code></td><td>unset</td><td>Enables <code>web_search</code>. Without it the tool disappears rather than failing.</td></tr>
+      </table>
+    </div>
+
+    <h3>3. Ask it something</h3>
+<pre><code><span class="c"># from the dashboard: the Ops Room panel, or Cmd+J</span>
+<span class="c"># from a terminal:</span>
+./ops "which repos have uncommitted changes?"
+./ops "is anything holding port 3000?"
+./ops "build a release and verify it, but do not promote"</code></pre>
+
+    <h3>A note on model size</h3>
+    <p>Local tool-use reliability varies enormously between models, far more than chat quality
+      does. A model that writes beautifully may still call a tool with the wrong argument shape and
+      then confidently summarise a result it never received. If the Ops Room is behaving oddly,
+      the model is the first thing to change, not the prompt.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span class="num">04 / Self-updating</span>Why it edits code it is not running</h2>
+    <p>The Ops Room can change GSO-1 itself, which is a genuinely dangerous thing to let an agent
+      do, because a bad edit can kill the process making it before anything notices.</p>
+    <p>So the running agent executes from the <strong>promoted release</strong> while it edits the
+      <strong>working tree</strong>. Those are different directories on purpose. An in-progress
+      edit cannot touch the code currently executing; new code only takes effect once a release is
+      built, verified and promoted, and a promotion that fails its health check rolls back.</p>
+    <p>This is not hypothetical caution. A broken self-edit killed the agent mid-task during
+      development, before verification could refuse it. The separation is what came out of that.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="./">Home</a>
+      <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/releases">Releases</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/rafsunsheikh/gso-1/blob/main/LICENSE">Apache 2.0</a>
+    </div>
+    <p>Copyright © 2026 Md Rafsun Sheikh</p>
+  </div>
+</footer>
+</body>
+</html>
