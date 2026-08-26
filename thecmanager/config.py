@@ -193,14 +193,29 @@ def _parse_roots() -> list[tuple[str, Path]]:
 
 
 def needs_onboarding() -> bool:
-    """True when nobody has told GSO-1 where the projects live.
+    """True until somebody has actually told GSO-1 where the projects live.
 
-    Only asked on a fresh install: an environment override, a saved choice, or
-    an existing ~/Projects all count as an answer.
+    Only an environment override or a saved choice counts as an answer. The
+    existence of ~/Projects deliberately does not: plenty of people have that
+    folder and keep their code somewhere else entirely, and silently adopting
+    it means a new install shows a list the user never asked for and cannot
+    obviously change. Asking once costs a click; guessing wrong costs trust in
+    everything else on the screen.
     """
-    if _env_roots() or _saved_roots():
-        return False
-    return not (Path.home() / "Projects").is_dir()
+    return not (_env_roots() or _saved_roots())
+
+
+def suggested_root() -> Path | None:
+    """A sensible pre-fill for the first-run picker, if one is obvious.
+
+    A suggestion, not a decision: the picker opens here so the common case is
+    one click, and the user can still browse anywhere.
+    """
+    for name in ("Projects", "projects", "Code", "code", "dev", "Developer", "src"):
+        p = Path.home() / name
+        if p.is_dir():
+            return p
+    return None
 
 
 def _apply_roots(roots: list[tuple[str, Path]]) -> None:
