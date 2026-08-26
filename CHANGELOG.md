@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.1] — 2026-08-26
+
+Both of these were found by downloading the v0.1.0 installer and running it,
+which is the only test that would have caught either.
+
+### Fixed
+- **macOS builds reported themselves as damaged.** electron-builder copies the
+  frozen backend in after Electron's own code signature is applied, which
+  invalidates it, and with no signing identity nothing put it back. An invalid
+  signature is worse than no signature: macOS refuses the app outright rather
+  than offering the usual unidentified-developer prompt, and right-clicking to
+  Open cannot get past it. Builds are now ad-hoc signed after packing, and the
+  hook verifies its own work and fails the build rather than shipping a
+  signature that does not validate.
+- **Application state was written into Electron's browser profile.** The
+  packaged app pointed `MANAGER_DATA_DIR` at Electron's `userData` directory,
+  so the registry, event log and job state sat interleaved with Chromium's
+  cookies, caches and lock files. State now lives in a `data` subdirectory,
+  where clearing a cache cannot take the registry with it.
+
+### Changed
+- The install instructions describe what actually happens on macOS: right-click
+  and Open rather than double-click, and what "damaged" means if it appears.
+
 ## [0.1.0], 2026-08-25
 
 The first public release: a dashboard that finds every app in your projects
@@ -84,5 +108,6 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.1
 [0.1.0]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.0
