@@ -254,12 +254,35 @@ cd desktop && npm install && npm start
 
 ### Configuration
 
-Everything is environment-driven and documented in
-[`.env.example`](.env.example). The one setting most people touch:
+**Everything is configurable from the app.** Open **Settings** in the sidebar:
+
+| Tab | What you set there |
+|---|---|
+| **Project folders** | Which folders GSO-1 scans. Add or remove them without restarting. |
+| **Telegram** | Bot token and allowed chat ids, with a **Send a test message** button so a wrong chat id fails on the screen where you typed it rather than silently later. |
+| **Local LLM** | Where `llama-server` is, which folders hold your models, and the endpoint the Ops Room agent talks to. |
+| **Phone access** | The token required for any access from another device, and the bind address. |
+| **Other** | Jekyll checkout for the Site tab, Tavily key for agent web search. |
+
+Settings are written to `settings.json` in GSO-1's data folder, `0600`, and take
+effect after a restart, which the app offers as a button.
+
+<details>
+<summary>Precedence, and configuring from a terminal instead</summary>
+
+A real environment variable always wins, then Settings, then `.env`. Settings
+beats `.env` because it is the more recent explicit act. Anything exported in
+your environment shows as read-only in the app rather than accepting an edit
+that would never take effect.
+
+Every variable is still documented in [`.env.example`](.env.example) if you
+would rather script it. The one most people touch:
 
 ```bash
 MANAGER_PROJECTS_DIRS="Personal:~/Projects,Work:~/work/repos"
 ```
+
+</details>
 
 ---
 
