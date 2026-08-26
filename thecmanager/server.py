@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import atexit
+import os
+import sys
+import threading
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -865,6 +869,111 @@ def set_roots(body: RootsBody) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e))
     scanner.invalidate()
     return JSONResponse(_roots_payload())
+
+
+# ----------------------------------------------------------------- settings
+#
+# Everything GSO-1 can be configured with, editable from the app rather than a
+# terminal. Values are written to settings.json and injected into the
+# environment at startup, which is why saving one needs a restart: the modules
+# that consume them read os.environ once, at import.
+
+# name -> (secret?, label). Secrets are never sent back to the browser in full;
+# the client is told whether one is set, not what it is.
+SETTING_KEYS: dict[str, tuple[bool, str]] = {
+    "MANAGER_TELEGRAM_TOKEN":   (True,  "Bot token"),
+    "MANAGER_TELEGRAM_ALLOWED": (False, "Allowed chat ids"),
+    "MANAGER_APPROVAL_CHAT":    (False, "Approval chat id"),
+    "MANAGER_MOBILE_TOKEN":     (True,  "Phone access token"),
+    "MANAGER_HOST":             (False, "Bind address"),
+    "MANAGER_PORT":             (False, "Port"),
+    "LLAMA_HOST":               (False, "llama-server host"),
+    "LLAMA_PORT":               (False, "llama-server port"),
+    "LLAMA_SERVER_BIN":         (False, "llama-server binary"),
+    "MANAGER_MODEL_DIRS":       (False, "Model folders"),
+    "OPSROOM_LLAMA_URL":        (False, "Ops Room endpoint"),
+    "OPSROOM_MODEL":            (False, "Ops Room model"),
+    "MANAGER_SITE_DIR":         (False, "Jekyll checkout"),
+    "TAVILY_API_KEY":           (True,  "Tavily API key"),
+}
+
+
+class SettingsPatch(BaseModel):
+    values: dict[str, str]
+
+
+def _settings_payload() -> dict:
+    saved = (config.load_settings().get("env") or {})
+    out = {}
+    for key, (secret, label) in SETTING_KEYS.items():
+        live = os.environ.get(key, "")
+        out[key] = {
+            "label": label,
+            "secret": secret,
+            # A secret's value never leaves the process; the UI shows presence.
+            "value": "" if secret else live,
+            "is_set": bool(live),
+            "saved_here": key in saved,
+            "locked_by_env": config.set_by_environment(key),
+        }
+    return {"settings": out, "restart_required": _RESTART_REQUIRED}
+
+
+_RESTART_REQUIRED = False
+
+
+@app.get("/api/settings")
+def get_settings() -> JSONResponse:
+    return JSONResponse(_settings_payload())
+
+
+@app.post("/api/settings")
+def patch_settings(body: SettingsPatch) -> JSONResponse:
+    """Save settings. An empty string clears one rather than storing a blank."""
+    global _RESTART_REQUIRED
+    saved = config.load_settings()
+    env = dict(saved.get("env") or {})
+    rejected = []
+    for key, value in body.values.items():
+        if key not in SETTING_KEYS:
+            rejected.append(key)
+            continue
+        if config.set_by_environment(key):
+            rejected.append(key)
+            continue
+        if value == "":
+            env.pop(key, None)
+        else:
+            env[key] = value
+    saved["env"] = env
+    config.save_settings(saved)
+    _RESTART_REQUIRED = True
+    payload = _settings_payload()
+    payload["rejected"] = rejected
+    return JSONResponse(payload)
+
+
+@app.post("/api/settings/restart")
+def restart_app() -> JSONResponse:
+    """Re-exec so the new settings are picked up.
+
+    os.execv keeps the pid and the environment, so a supervisor or LaunchAgent
+    watching this process does not see it die. The response goes out first,
+    otherwise the browser gets a dropped connection instead of an answer.
+    """
+    def _go() -> None:
+        time.sleep(0.4)
+        os.execv(sys.executable, [sys.executable, "-m", "thecmanager", *sys.argv[1:]])
+
+    threading.Thread(target=_go, daemon=True).start()
+    return JSONResponse({"restarting": True})
+
+
+@app.post("/api/settings/telegram/test")
+def telegram_test() -> JSONResponse:
+    """Send a message to the configured chat, so the user finds out here rather
+    than by wondering why nothing arrives later."""
+    return JSONResponse(telegrambot.send_test())
 
 
 @app.get("/api/settings/browse")

@@ -9,6 +9,17 @@ from pathlib import Path
 # checkout keeps using ./data so existing installs are undisturbed.
 PACKAGED = bool(getattr(sys, "frozen", False))
 
+# Which variables were genuinely exported before we loaded anything. Everything
+# below writes into os.environ, so without this snapshot there is no way to tell
+# a real export from something we injected, and the settings screen cannot
+# honestly say which values it is not allowed to change.
+_REAL_ENV: frozenset[str] = frozenset(os.environ)
+
+
+def set_by_environment(key: str) -> bool:
+    """True when `key` came from the real environment rather than a file."""
+    return key in _REAL_ENV
+
 # Where GSO-1 itself lives (this package's parent of parent).
 APP_DIR = Path(__file__).resolve().parent.parent
 
@@ -46,8 +57,6 @@ def _load_env_file() -> None:
             os.environ[key] = value
 
 
-_load_env_file()
-
 # ---------------------------------------------------------------- data dir
 
 def _default_data_dir() -> Path:
@@ -71,6 +80,33 @@ def _resolve_data_dir() -> Path:
     return _default_data_dir() if PACKAGED else APP_DIR / "data"
 
 
+def _apply_saved_env() -> None:
+    """Inject settings chosen in the app into the environment.
+
+    Order is deliberate: a real environment variable always wins, then what the
+    user chose in Settings, then the .env file. Settings beats .env because it
+    is the more recent explicit act; the other way round, saving a value in the
+    app would silently do nothing on any machine that happens to have a .env.
+
+    This runs before every other module imports, which is the only reason a GUI
+    can configure things that are read from os.environ at import time.
+    """
+    try:
+        saved = json.loads((_resolve_data_dir() / "settings.json").read_text())
+    except (OSError, ValueError):
+        return
+    for key, value in (saved.get("env") or {}).items():
+        if key in _REAL_ENV:
+            continue
+        if value is None or value == "":
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = str(value)
+
+
+_apply_saved_env()
+_load_env_file()
+
 DATA_DIR = _resolve_data_dir()
 LOG_DIR = DATA_DIR / "logs"
 REGISTRY_FILE = DATA_DIR / "registry.json"
@@ -87,11 +123,22 @@ def load_settings() -> dict:
 
 
 def save_settings(data: dict) -> None:
-    """Write settings atomically: a half-written file would lose the user's
-    project roots and send them back through onboarding."""
+    """Write settings atomically, owner-readable only.
+
+    Atomically because a half-written file would lose the user's project roots
+    and send them back through onboarding. Owner-only because this file holds
+    the bot token, the phone access token and any API keys set in Settings, in
+    plain text, the same way a .env does. The mode is set on the temp file
+    before the rename so there is no instant where a complete file with secrets
+    in it is world-readable.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, indent=2))
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass  # filesystems without POSIX modes, e.g. some Windows mounts
     tmp.replace(SETTINGS_FILE)
 
 

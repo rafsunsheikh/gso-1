@@ -49,6 +49,37 @@ def configured() -> bool:
     return bool(TOKEN)
 
 
+def send_test() -> dict:
+    """Send one message to every allowed chat and report what happened.
+
+    Configuring a bot is four steps across two apps, and the usual failure is
+    silent: the token is fine, the chat id is wrong, and nothing ever arrives.
+    Better to find that out on the screen where you typed them.
+    """
+    if not TOKEN:
+        return {"ok": False, "error": "No bot token set. Add one and restart."}
+    if not ALLOWED:
+        return {
+            "ok": False,
+            "error": "No chat id set. Message your bot once, then use the id it reports.",
+        }
+    sent, failed = [], []
+    for chat in sorted(ALLOWED):
+        try:
+            r = _call("sendMessage", {
+                "chat_id": chat,
+                "text": "GSO-1 is connected. This is a test message from Settings.",
+            })
+            (sent if r.get("ok") else failed).append(chat)
+        except Exception as e:  # network, bad token, chat not found
+            failed.append(f"{chat} ({e})")
+    if sent and not failed:
+        return {"ok": True, "detail": f"Sent to {', '.join(sent)}."}
+    if sent:
+        return {"ok": True, "detail": f"Sent to {', '.join(sent)}; failed for {', '.join(failed)}."}
+    return {"ok": False, "error": f"Could not send to {', '.join(failed)}."}
+
+
 # --------------------------------------------------------------------------
 # Telegram HTTP
 # --------------------------------------------------------------------------

@@ -846,6 +846,7 @@
           { id: "llm",     label: "Local LLM", dot: LLM && LLM.healthy ? "live" : null, n: null },
           { id: "chat",    label: "Chat", n: null },
           { id: "site",    label: "Site", n: null },
+          { id: "settings", label: "Settings", n: null },
         ]},
       ];
     }
@@ -856,6 +857,9 @@
     ];
 
     const APP_LIST_VIEWS = new Set(["library", "favourites", "uncommitted", "failed", "vscode"]);
+    // Settings is a form, so the auto-refresh must not redraw it under the
+    // user's cursor mid-edit.
+    const NO_AUTOREFRESH_VIEWS = new Set(["settings"]);
 
     function syncChrome() {
       const row = $("#search-row");
@@ -907,7 +911,7 @@
       const map = { opsroom: "Ops Room", library: "Library", vscode: "In VSCode",
                     uncommitted: "Uncommitted", failed: "Failed runs",
                     favourites: "Favourites", planner: "Planner", llm: "Local LLM",
-                    chat: "Chat", site: "Site" };
+                    chat: "Chat", site: "Site", settings: "Settings" };
       if (activeView.startsWith("root:")) return activeView.slice(5);
       return map[activeView] || "Library";
     }
@@ -958,6 +962,7 @@
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
+      if (activeView === "settings") return renderSettings();
       if (activeView === "chat") return renderChat();
       if (activeView === "site") return renderSite();
 
@@ -2714,6 +2719,238 @@
       };
     }
 
+    // ---- settings ---------------------------------------------------------
+    //
+    // Everything GSO-1 can be configured with, in one place, so that setting up
+    // Telegram or a local model is not an exercise in editing a file you have
+    // to be told about. Secrets are write-only from here: the server reports
+    // whether one is set, never what it is.
+
+    let SETTINGS = null;
+    let SETTINGS_TAB = "folders";
+    let SETTINGS_DIRTY = {};
+
+    const SETTINGS_TABS = [
+      { id: "folders",  label: "Project folders" },
+      { id: "telegram", label: "Telegram" },
+      { id: "llm",      label: "Local LLM" },
+      { id: "remote",   label: "Phone access" },
+      { id: "other",    label: "Other" },
+    ];
+
+    const SETTINGS_FIELDS = {
+      telegram: [
+        { key: "MANAGER_TELEGRAM_TOKEN", hint: "From @BotFather. Message your new bot once so it can see you." },
+        { key: "MANAGER_TELEGRAM_ALLOWED", hint: "Chat ids allowed to drive the bot, comma separated. Only these can control GSO-1." },
+        { key: "MANAGER_APPROVAL_CHAT", hint: "Where Allow / Deny prompts are sent. Usually the same id." },
+      ],
+      llm: [
+        { key: "LLAMA_HOST", hint: "Where llama-server listens. Default 127.0.0.1." },
+        { key: "LLAMA_PORT", hint: "Default 8080." },
+        { key: "LLAMA_SERVER_BIN", hint: "Full path to the llama-server binary, if it is not on PATH." },
+        { key: "MANAGER_MODEL_DIRS", hint: "Folders scanned for .gguf models, colon separated." },
+        { key: "OPSROOM_LLAMA_URL", hint: "OpenAI-compatible endpoint the Ops Room agent talks to." },
+        { key: "OPSROOM_MODEL", hint: "Model id as the server reports it." },
+      ],
+      remote: [
+        { key: "MANAGER_MOBILE_TOKEN", hint: "Required for any access from another device. Without one, remote requests are refused outright." },
+        { key: "MANAGER_HOST", hint: "127.0.0.1 keeps GSO-1 off the network. Only change this if you have set a token above." },
+        { key: "MANAGER_PORT", hint: "Default 8420." },
+      ],
+      other: [
+        { key: "MANAGER_SITE_DIR", hint: "A Jekyll checkout to edit from the Site tab. Leave empty to keep it switched off." },
+        { key: "TAVILY_API_KEY", hint: "Enables web search for the Ops Room agent. Without it the tool disappears rather than failing." },
+      ],
+    };
+
+    function settingsField(f) {
+      const meta = (SETTINGS && SETTINGS.settings[f.key]) || {};
+      const locked = meta.locked_by_env;
+      const val = SETTINGS_DIRTY[f.key] !== undefined
+        ? SETTINGS_DIRTY[f.key]
+        : (meta.secret ? "" : (meta.value || ""));
+      const ph = meta.secret
+        ? (meta.is_set ? "••••••  (set, leave blank to keep)" : "not set")
+        : "not set";
+      return `
+        <div style="margin-bottom:20px">
+          <label for="set-${f.key}" style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px">
+            ${escapeHtml(meta.label || f.key)}
+            ${locked ? `<span style="font-weight:400;color:var(--text-dim)"> &middot; set by your environment, read-only here</span>` : ""}
+          </label>
+          <input id="set-${f.key}" data-key="${f.key}" type="${meta.secret ? "password" : "text"}"
+                 value="${escapeHtml(val)}" placeholder="${escapeHtml(ph)}" ${locked ? "disabled" : ""}
+                 autocomplete="off" spellcheck="false"
+                 style="width:100%;padding:8px 11px;font-size:.85rem;border-radius:8px;
+                        font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                        background:var(--bg);color:var(--text);border:1px solid var(--line);
+                        opacity:${locked ? ".55" : "1"}" />
+          <div style="font-size:.75rem;color:var(--text-dim);margin-top:4px">${escapeHtml(f.hint)}</div>
+        </div>`;
+    }
+
+    function settingsFoldersPane() {
+      const roots = (SETTINGS && SETTINGS.roots) || [];
+      const locked = SETTINGS && SETTINGS.roots_locked;
+      return `
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0 0 16px">
+          GSO-1 scans every folder listed here.
+        </p>
+        ${roots.map(r => `
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;margin-bottom:8px;
+                      border:1px solid var(--line);border-radius:10px">
+            <strong style="font-size:.86rem">${escapeHtml(r.label)}</strong>
+            <code style="font-size:.78rem;color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.path)}</code>
+            ${r.exists ? "" : `<span style="font-size:.72rem;color:var(--danger,#f87171)">missing</span>`}
+          </div>`).join("") || `<div style="font-size:.82rem;color:var(--text-dim)">No folders yet.</div>`}
+        ${locked
+          ? `<div style="font-size:.78rem;color:var(--text-dim);margin-top:12px">
+               Set by MANAGER_PROJECTS_DIRS in your environment, so they cannot be changed here.</div>`
+          : `<button id="set-editroots" style="margin-top:10px;padding:8px 14px;font-size:.85rem;
+                    font-weight:600;border:0;border-radius:8px;background:var(--accent,#6366f1);
+                    color:#fff;cursor:pointer">Add or remove folders</button>`}`;
+    }
+
+    async function renderSettings() {
+      // resetGrid clears the list-view classes and inline styles the other
+      // views leave behind; without it Settings inherits a grid layout.
+      const main = resetGrid();
+      $("#subtitle").textContent = "Connect and configure GSO-1";
+      if (!SETTINGS) {
+        main.innerHTML = `<div style="padding:22px;color:var(--text-dim)">Loading settings…</div>`;
+        try {
+          const [cfg, roots] = await Promise.all([
+            api("/api/settings"), api("/api/settings/roots"),
+          ]);
+          SETTINGS = cfg;
+          SETTINGS.roots = roots.roots;
+          SETTINGS.roots_locked = roots.locked_by_env;
+        } catch (e) {
+          main.innerHTML = `<div style="padding:22px;color:var(--text-dim)">Could not load settings.</div>`;
+          return;
+        }
+      }
+
+      const pane = SETTINGS_TAB === "folders"
+        ? settingsFoldersPane()
+        : (SETTINGS_FIELDS[SETTINGS_TAB] || []).map(settingsField).join("");
+
+      const pending = Object.keys(SETTINGS_DIRTY).length;
+
+      main.innerHTML = `
+        <div style="max-width:640px">
+          <div role="tablist" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:22px;
+                      border-bottom:1px solid var(--line);padding-bottom:10px">
+            ${SETTINGS_TABS.map(t => `
+              <button role="tab" data-tab="${t.id}" aria-selected="${t.id === SETTINGS_TAB}"
+                style="padding:7px 13px;font-size:.84rem;border-radius:8px;cursor:pointer;
+                       border:1px solid ${t.id === SETTINGS_TAB ? "var(--line)" : "transparent"};
+                       background:${t.id === SETTINGS_TAB ? "var(--surface)" : "transparent"};
+                       color:${t.id === SETTINGS_TAB ? "var(--text)" : "var(--text-dim)"};
+                       font-weight:${t.id === SETTINGS_TAB ? "600" : "400"}">${escapeHtml(t.label)}</button>`).join("")}
+          </div>
+
+          ${SETTINGS.restart_required ? `
+            <div style="padding:12px 16px;margin-bottom:20px;border-radius:10px;
+                        border:1px solid var(--line);border-left:2px solid var(--warn,#f5b642)">
+              <div style="font-size:.85rem;font-weight:600;margin-bottom:3px">Restart to apply</div>
+              <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:10px">
+                Saved settings are read when GSO-1 starts, so they take effect after a restart.</div>
+              <button id="set-restart" style="padding:7px 13px;font-size:.82rem;font-weight:600;
+                      border:0;border-radius:8px;background:var(--accent,#6366f1);color:#fff;
+                      cursor:pointer">Restart GSO-1</button>
+            </div>` : ""}
+
+          <div id="settings-pane">${pane}</div>
+
+          ${SETTINGS_TAB === "telegram" ? `
+            <button id="set-tgtest" style="padding:8px 14px;font-size:.85rem;margin-right:8px;
+                    border:1px solid var(--line);border-radius:8px;background:transparent;
+                    color:var(--text);cursor:pointer">Send a test message</button>` : ""}
+
+          ${SETTINGS_TAB !== "folders" ? `
+            <div style="display:flex;align-items:center;gap:12px;margin-top:18px">
+              <button id="set-save" ${pending ? "" : "disabled"}
+                style="padding:9px 18px;font-size:.87rem;font-weight:600;border:0;border-radius:8px;
+                       background:var(--accent,#6366f1);color:#fff;cursor:pointer;
+                       opacity:${pending ? "1" : ".45"}">Save</button>
+              <span style="font-size:.78rem;color:var(--text-dim)">
+                ${pending ? `${pending} unsaved change${pending > 1 ? "s" : ""}` : "No changes"}</span>
+            </div>
+            <p style="font-size:.75rem;color:var(--text-dim);margin-top:20px;line-height:1.55">
+              Saved to <code>settings.json</code> in GSO-1's data folder, in plain text, the same way
+              a <code>.env</code> file would be. Anything already exported in your environment wins
+              over what you set here and is shown as read-only.</p>` : ""}
+        </div>`;
+
+      main.querySelectorAll("[data-tab]").forEach(b => {
+        b.onclick = () => { SETTINGS_TAB = b.dataset.tab; renderSettings(); };
+      });
+      main.querySelectorAll("#settings-pane input[data-key]").forEach(inp => {
+        inp.oninput = () => {
+          SETTINGS_DIRTY[inp.dataset.key] = inp.value;
+          const save = $("#set-save");
+          if (save) { save.disabled = false; save.style.opacity = "1"; }
+        };
+      });
+
+      const edit = $("#set-editroots");
+      if (edit) edit.onclick = openRootManager;
+
+      const save = $("#set-save");
+      if (save) save.onclick = async () => {
+        try {
+          const res = await api("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ values: SETTINGS_DIRTY }),
+          });
+          const n = Object.keys(SETTINGS_DIRTY).length;
+          SETTINGS = Object.assign(res, { roots: SETTINGS.roots, roots_locked: SETTINGS.roots_locked });
+          SETTINGS_DIRTY = {};
+          renderSettings();
+          toast(`Saved ${n} setting${n > 1 ? "s" : ""}, restart to apply`, "success");
+        } catch (e) {
+          toast(e.message || "Could not save", "error");
+        }
+      };
+
+      const restart = $("#set-restart");
+      if (restart) restart.onclick = async () => {
+        restart.disabled = true;
+        restart.textContent = "Restarting…";
+        try { await api("/api/settings/restart", { method: "POST" }); } catch (e) {}
+        // The server re-execs, so wait for it to answer again rather than
+        // guessing how long a restart takes.
+        for (let i = 0; i < 40; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            await api("/api/llm/status", { timeoutMs: 2000 });
+            location.reload();
+            return;
+          } catch (e) { /* still down */ }
+        }
+        restart.disabled = false;
+        restart.textContent = "Restart GSO-1";
+        toast("GSO-1 did not come back. Start it again yourself.", "error");
+      };
+
+      const tg = $("#set-tgtest");
+      if (tg) tg.onclick = async () => {
+        tg.disabled = true;
+        const original = tg.textContent;
+        tg.textContent = "Sending…";
+        try {
+          const r = await api("/api/settings/telegram/test", { method: "POST" });
+          toast(r.ok ? (r.detail || "Sent") : (r.error || "Failed"), r.ok ? "success" : "error");
+        } catch (e) {
+          toast(e.message || "Could not send", "error");
+        }
+        tg.disabled = false;
+        tg.textContent = original;
+      };
+    }
+
     /**
      * Manage project roots after setup.
      *
@@ -2788,7 +3025,7 @@
         // Nothing to scan until the first-run picker has an answer.
         || $("#setup-modal").style.display !== "none"
         || activeView === "llm" || activeView === "planner" || activeView === "chat"
-        || activeView === "site";
+        || activeView === "site" || NO_AUTOREFRESH_VIEWS.has(activeView);
       if (!busy) load();
     }, 8000);
   </script>
