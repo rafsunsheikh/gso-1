@@ -8,6 +8,7 @@
 <p align="center">
   <a href="#why-it-is-called-gso-1">The idea</a> ·
   <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a> ·
+  <a href="#the-ops-room">Ops Room</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="RUNBOOK.md">Runbook</a> ·
@@ -174,15 +175,29 @@ Open it, and on first run GSO-1 asks which folder holds your projects. Pick it.
 That is the whole setup, no Python, no terminal, no config file.
 
 <details>
-<summary><strong>macOS: "unidentified developer" on first open</strong></summary>
+<summary><strong>macOS: "Apple could not verify GSO-1 is free of malware"</strong></summary>
 
-The builds are signed ad-hoc rather than with a paid Apple Developer ID, so
-macOS warns you once. Right-click (or Control-click) **GSO-1.app** and choose
-**Open**, then **Open** again in the dialog. Double-clicking will not offer that
-choice; the right-click is what does it.
+GSO-1 is signed ad-hoc rather than with a paid Apple Developer ID, so macOS
+asks you to approve it once. On **macOS 15 and later this is the only route**:
+right-click and Open no longer works, and the first dialog you see offers only
+*Done* and *Move to Bin*. Neither of those is the answer.
 
-If macOS instead says the app is **damaged**, the download did not complete
-cleanly. Verify it against `SHA256SUMS.txt` from the release and download again.
+1. Drag **GSO-1** into **Applications** first, then try to open it once.
+   The dialog appears. Click **Done**.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll to the **Security** section near the bottom. You will see:
+
+   > **"GSO-1" was blocked to protect your Mac.**  &nbsp; **[Open Anyway]**
+
+4. Click **Open Anyway**, authenticate with Touch ID or your password, then
+   click **Open** in the confirmation.
+
+That is Apple's sanctioned route and it only happens once. If the button is not
+there, it has expired: try opening GSO-1 again to make it reappear.
+
+<sub>If you would rather not use the GUI, `xattr -dr com.apple.quarantine
+/Applications/GSO-1.app` removes the quarantine flag your browser attached.
+Verify the download against `SHA256SUMS.txt` first.</sub>
 
 </details>
 
@@ -245,6 +260,85 @@ Everything is environment-driven and documented in
 ```bash
 MANAGER_PROJECTS_DIRS="Personal:~/Projects,Work:~/work/repos"
 ```
+
+---
+
+## The Ops Room
+
+The dashboard shows you the situation. The Ops Room is the part you can **ask**.
+
+> **"Which repos have uncommitted changes?"** is a question the dashboard answers
+> by making you look. The Ops Room answers it by looking for you, across every
+> project root, and telling you which ones and how many files.
+
+It runs on a model **you** host, has ten tools rather than general-purpose
+freedom, and asks before it changes anything.
+
+| Ring | What it means |
+|---|---|
+| **Sandbox root** | The only directory it may *write* to. Resolved from the install location; override with `OPSROOM_SANDBOX_ROOT`. |
+| **Read roots** | What it may read and search: the sandbox plus your project folders. |
+| **Immutable** | Never writable, even inside the sandbox: the supervisor, `var/`, the launcher. The supervisor is what rolls back a bad self-edit. |
+
+Every path check resolves symlinks and `..` first, so `sandbox/../../etc/passwd`
+fails closed. Anything that writes a file or runs a command stops for an explicit
+Allow or Deny; read-only tools run without asking, because prompting you to
+approve a `git status` would train you to approve everything.
+
+Point it at a local model in two lines:
+
+```bash
+llama-server --model ~/models/your-model.gguf --port 8080 --ctx-size 65536 --jinja
+# then, in .env:
+OPSROOM_LLAMA_URL=http://127.0.0.1:8080/v1
+```
+
+```bash
+./ops "which repos have uncommitted changes?"
+```
+
+📖 **[Full Ops Room documentation](https://rafsunsheikh.github.io/gso-1/ops-room.html)** —
+every tool, the sandbox model, all configuration variables, and why it edits code
+it is not running.
+
+---
+
+## Git and GitHub
+
+**There is no GitHub account to connect, and that is deliberate.**
+
+GSO-1 shells out to the `git` already installed on your machine, so it inherits
+whatever credentials you already use. If `git pull` works in your terminal for a
+repository, it works in GSO-1 for that repository. If it does not, GSO-1 will
+report the same failure your terminal would.
+
+That means:
+
+- **SSH keys** already in your agent keep working, including passphrase-protected
+  ones your agent has unlocked.
+- **A credential helper** (macOS Keychain, `gh auth login`, Windows Credential
+  Manager) keeps working.
+- **Nothing new is stored.** GSO-1 holds no tokens, asks for no OAuth scopes, and
+  has no account of its own to compromise.
+
+The read-only parts, branch, dirty count, ahead/behind, last commit, need no
+credentials at all. Only **Update** (`git pull --ff-only`) and pushing from the
+site CMS reach the network, and those use your existing setup.
+
+<details>
+<summary>If a repository will not update</summary>
+
+Check the same thing you would check anywhere else:
+
+```bash
+cd ~/Projects/the-repo && git pull --ff-only
+```
+
+Whatever that prints is what GSO-1 is seeing. The usual causes are an SSH key
+the agent has not loaded, a repository cloned over HTTPS with no helper
+configured, or local commits that make a fast-forward impossible.
+
+</details>
 
 ---
 
