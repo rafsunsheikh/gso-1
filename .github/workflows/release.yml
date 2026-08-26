@@ -156,8 +156,14 @@ jobs:
             On first run GSO-1 asks which folder holds your projects. Nothing
             leaves your machine.
 
-            > These builds are **unsigned**. macOS will ask you to allow the app
-            > in System Settings → Privacy & Security; Windows SmartScreen needs
-            > "More info" → "Run anyway".
+            > These builds are signed ad-hoc rather than with a paid developer
+            > certificate, so each platform warns you once.
+            >
+            > **macOS:** right-click (or Control-click) `GSO-1.app` and choose
+            > **Open**, then **Open** again. Double-clicking does not offer that
+            > choice. If macOS says the app is *damaged*, the download was
+            > incomplete: check it against `SHA256SUMS.txt` and fetch it again.
+            >
+            > **Windows:** SmartScreen needs "More info" then "Run anyway".
 
             Verify a download against `SHA256SUMS.txt`.

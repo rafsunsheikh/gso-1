@@ -173,6 +173,19 @@ Grab the installer for your platform from the
 Open it, and on first run GSO-1 asks which folder holds your projects. Pick it.
 That is the whole setup, no Python, no terminal, no config file.
 
+<details>
+<summary><strong>macOS: "unidentified developer" on first open</strong></summary>
+
+The builds are signed ad-hoc rather than with a paid Apple Developer ID, so
+macOS warns you once. Right-click (or Control-click) **GSO-1.app** and choose
+**Open**, then **Open** again in the dialog. Double-clicking will not offer that
+choice; the right-click is what does it.
+
+If macOS instead says the app is **damaged**, the download did not complete
+cleanly. Verify it against `SHA256SUMS.txt` from the release and download again.
+
+</details>
+
 ### I want to run it from source
 
 **Requirements:** Python 3.11+, git.

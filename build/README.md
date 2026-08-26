@@ -42,8 +42,16 @@ you only need to test that the shell finds the server.
 
 ## Signing
 
-Unsigned builds work but trip Gatekeeper on macOS and SmartScreen on Windows;
-users see a warning and must explicitly allow the app.
+macOS builds are ad-hoc signed by `desktop/afterPack.js`. This is not cosmetic:
+electron-builder copies the frozen backend in after Electron's own signature is
+applied, which invalidates it, and an invalid signature makes macOS call the app
+*damaged* rather than merely unidentified. A damaged app cannot be opened at all,
+not even by right-clicking. Ad-hoc re-signing restores a signature that
+validates, so the user gets the ordinary unidentified-developer prompt and can
+right-click to Open. The hook verifies its own work and fails the build if the
+signature does not validate.
+
+A real Developer ID still supersedes it and removes the prompt entirely.
 
 To sign macOS builds, set `CSC_LINK` and `CSC_KEY_PASSWORD` (and
 `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` to notarize).

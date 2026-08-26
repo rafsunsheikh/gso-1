@@ -105,7 +105,12 @@ function startBundledServer() {
       MANAGER_NO_BROWSER: "1",
       MANAGER_HOST: HOST,
       MANAGER_PORT: String(PORT),
-      MANAGER_DATA_DIR: process.env.MANAGER_DATA_DIR || app.getPath("userData"),
+      // A "data" subdirectory, not userData itself: Electron keeps its own
+      // Chromium profile there (Cookies, GPUCache, SingletonLock, and twenty
+      // more), and interleaving the registry and logs with it makes the folder
+      // unreadable and puts app state one cache-clear away from deletion.
+      MANAGER_DATA_DIR:
+        process.env.MANAGER_DATA_DIR || path.join(app.getPath("userData"), "data"),
     },
     stdio: "ignore",
     // Own process group, so quitting can signal the whole tree at once.
