@@ -15,17 +15,17 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import __version__
 from . import (
-    claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage, planner,
-    remoteauth, runner, scanner, sysmon, telegrambot, vscode,
+    claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage,
+    modelsetup, planner, remoteauth, runner, scanner, sysmon, telegrambot, vscode,
 )
-from . import chat as chat_agent
 from . import scheduler
 from . import opsroom as opsroom_bridge
 from . import overview as overview_mod
 from . import site as site_cms
 
-app = FastAPI(title="GSO-1", version="0.1.0")
+app = FastAPI(title="GSO-1", version=__version__)
 # Loopback is untouched; anything arriving from another device needs the token.
 app.add_middleware(remoteauth.RemoteAuthMiddleware)
 
@@ -38,7 +38,6 @@ atexit.register(llm.stop_if_managed)
 @app.on_event("startup")
 def _start_telegram() -> None:
     telegrambot.start()  # no-op unless MANAGER_TELEGRAM_TOKEN is set
-    chat_agent.register_web_handlers()  # web Chat tab's bridge routing
     scheduler.start()  # recurring reports; jobs live in data/schedule.json
     events.record("run", "gso-1", f"dashboard up on :{config.PORT}")
 
@@ -404,13 +403,113 @@ def llm_status() -> JSONResponse:
 
 @app.get("/api/llm/models")
 def llm_models() -> JSONResponse:
+    """Models on disk, each with the flags it was last started with.
+
+    The presets ride along with the listing rather than sitting behind their own
+    endpoint: the UI needs both to draw a single row, and one round trip cannot
+    show a model with somebody else's settings attached.
+    """
+    models = llm.list_models()
+    saved = llm.presets()
     return JSONResponse(
         {
             "server_bin": llm.server_bin(),
-            "default_port": llm.DEFAULT_PORT,
-            "models": llm.list_models(),
+            "server_bin_set": os.environ.get("LLAMA_SERVER_BIN", ""),
+            "server_bin_locked": config.set_by_environment("LLAMA_SERVER_BIN"),
+            "model_dirs": [
+                {"path": d, "exists": Path(d).expanduser().is_dir()}
+                for d in llm.model_dirs()
+            ],
+            "model_dirs_default": not os.environ.get("MANAGER_MODEL_DIRS", "").strip(),
+            "model_dirs_locked": config.set_by_environment("MANAGER_MODEL_DIRS"),
+            "default_port": llm.default_port(),
+            "defaults": llm.DEFAULT_PRESET,
+            "last_model": llm.last_model(),
+            "models": [
+                dict(m, preset=llm.preset_for(m["path"]), has_preset=m["path"] in saved)
+                for m in models
+            ],
         }
     )
+
+
+# ---- getting a model in the first place
+#
+# Installing software and downloading gigabytes are both explicit acts, so
+# every one of these is a POST the user has to press, never something a page
+# load triggers.
+
+@app.get("/api/llm/setup")
+def llm_setup() -> JSONResponse:
+    """Whether llama.cpp is missing, and which models could be fetched."""
+    ram = sysmon.total_memory()
+    return JSONResponse({
+        "install": modelsetup.install_plan(),
+        "catalog": modelsetup.catalog(ram),
+        "download": modelsetup.status(),
+        "ram_bytes": ram,
+    })
+
+
+@app.get("/api/llm/install")
+def llm_install():
+    """SSE stream of the install command's output. GET so EventSource works."""
+    def gen():
+        for line in modelsetup.install_llama():
+            for part in str(line).split("\n"):
+                yield f"data: {part}\n"
+            yield "\n"
+        yield "event: done\ndata: \n\n"
+    return StreamingResponse(
+        gen(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+class LlmDownloadBody(BaseModel):
+    id: str
+
+
+@app.post("/api/llm/download")
+def llm_download(body: LlmDownloadBody) -> JSONResponse:
+    result = modelsetup.start(body.id, sysmon.total_memory())
+    if result["ok"]:
+        events.record("llm", "model download", result["message"][:110])
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.get("/api/llm/download")
+def llm_download_status() -> JSONResponse:
+    return JSONResponse(modelsetup.status())
+
+
+@app.post("/api/llm/download/cancel")
+def llm_download_cancel() -> JSONResponse:
+    return JSONResponse({"cancelled": modelsetup.cancel()})
+
+
+class LlmPathsBody(BaseModel):
+    server_bin: str | None = None
+    model_dirs: list[str] | None = None
+
+
+@app.post("/api/llm/paths")
+def llm_paths(body: LlmPathsBody) -> JSONResponse:
+    """Where the binary and the models live. Takes effect without a restart."""
+    rejected = []
+    if body.server_bin is not None:
+        if not config.save_env_setting("LLAMA_SERVER_BIN", body.server_bin.strip()):
+            rejected.append("LLAMA_SERVER_BIN")
+    if body.model_dirs is not None:
+        dirs = ":".join(d.strip() for d in body.model_dirs if d.strip())
+        if not config.save_env_setting("MANAGER_MODEL_DIRS", dirs):
+            rejected.append("MANAGER_MODEL_DIRS")
+    if rejected:
+        raise HTTPException(
+            status_code=409,
+            detail=_env_locked_message(rejected[0]),
+        )
+    return llm_models()
 
 
 class LlmStartBody(BaseModel):
@@ -435,9 +534,10 @@ class LlmStartBody(BaseModel):
 
 @app.post("/api/llm/start")
 def llm_start(body: LlmStartBody) -> JSONResponse:
+    port = body.port or llm.default_port()
     result = llm.start(
         model_path=body.model_path,
-        port=body.port or llm.DEFAULT_PORT,
+        port=port,
         ctx=body.ctx,
         ngl=body.ngl,
         jinja=body.jinja,
@@ -455,8 +555,11 @@ def llm_start(body: LlmStartBody) -> JSONResponse:
         cache_type_v=body.cache_type_v,
     )
     if result["ok"]:
+        # Remember on success only: flags that failed to start a server are not
+        # the ones to greet you with next time.
+        llm.remember_preset(body.model_path, dict(body.model_dump(), port=port))
         events.record("llm", "llama-server",
-                      f"started on :{body.port or llm.DEFAULT_PORT} · ctx {body.ctx:,}")
+                      f"started on :{port} · ctx {body.ctx:,}")
     else:
         events.record("fail", "llama-server", result.get("message", "failed to start")[:110])
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
@@ -729,38 +832,6 @@ def chat(name: str, msg: ChatMessage) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------
-# Computer assistant chat (tool-using agent on the local LLM)
-# --------------------------------------------------------------------------
-class ChatSend(BaseModel):
-    message: str
-
-
-class ChatApprove(BaseModel):
-    id: str
-    approve: bool
-
-
-@app.get("/api/chat")
-def chat_get() -> JSONResponse:
-    return JSONResponse(chat_agent.history())
-
-
-@app.post("/api/chat/send")
-def chat_send(body: ChatSend) -> JSONResponse:
-    return JSONResponse(chat_agent.send(body.message))
-
-
-@app.post("/api/chat/approve")
-def chat_approve(body: ChatApprove) -> JSONResponse:
-    return JSONResponse(chat_agent.approve(body.id, body.approve))
-
-
-@app.post("/api/chat/reset")
-def chat_reset() -> JSONResponse:
-    return JSONResponse(chat_agent.reset())
-
-
-# --------------------------------------------------------------------------
 # Site CMS, edit the Jekyll website and publish to GitHub
 # --------------------------------------------------------------------------
 class SiteSave(BaseModel):
@@ -843,14 +914,38 @@ def _roots_payload() -> dict:
         # Where the first-run picker should open. A suggestion, not a choice.
         "suggested": str(suggested) if suggested else None,
         # Roots forced by the environment cannot be changed from the UI; say so
-        # rather than letting the user save into a void.
+        # rather than letting the user save into a void, and name the file that
+        # did it when we can find one: "unset MANAGER_PROJECTS_DIRS" is only
+        # actionable if you know where it was set.
         "locked_by_env": bool(config._env_roots()),
+        "locked_by_file": config.env_origin("MANAGER_PROJECTS_DIRS")
+        or config.env_origin("MANAGER_PROJECTS_DIR"),
         "home": str(Path.home()),
         "roots": [
             {"label": label, "path": str(path), "exists": path.is_dir()}
             for label, path in config.PROJECT_ROOTS
         ],
     }
+
+
+def _env_locked_message(key: str) -> str:
+    """Why one setting cannot be saved, naming the culprit file when known."""
+    where = config.env_origin(key)
+    return (f"{key} is set in {where}; remove that line and restart GSO-1 to "
+            "change it here.") if where else (
+        f"{key} is set in the environment GSO-1 was started with; unset it to "
+        "change it here.")
+
+
+def _roots_locked_message() -> str:
+    """Why the folders cannot be edited, naming the culprit file when known."""
+    where = config.env_origin("MANAGER_PROJECTS_DIRS") or config.env_origin(
+        "MANAGER_PROJECTS_DIR")
+    if where:
+        return (f"Project folders are set by MANAGER_PROJECTS_DIRS in {where}. "
+                "Remove that line and restart GSO-1 to choose folders here.")
+    return ("Project folders are set by MANAGER_PROJECTS_DIRS in the environment "
+            "GSO-1 was started with; unset it to choose folders from the app.")
 
 
 @app.get("/api/settings/roots")
@@ -863,8 +958,7 @@ def set_roots(body: RootsBody) -> JSONResponse:
     if config._env_roots():
         raise HTTPException(
             status_code=409,
-            detail="Project roots are set by MANAGER_PROJECTS_DIRS; unset it to "
-            "choose folders from the app.",
+            detail=_roots_locked_message(),
         )
     try:
         config.set_project_roots([r.model_dump() for r in body.roots])
@@ -890,12 +984,6 @@ SETTING_KEYS: dict[str, tuple[bool, str]] = {
     "MANAGER_MOBILE_TOKEN":     (True,  "Phone access token"),
     "MANAGER_HOST":             (False, "Bind address"),
     "MANAGER_PORT":             (False, "Port"),
-    "LLAMA_HOST":               (False, "llama-server host"),
-    "LLAMA_PORT":               (False, "llama-server port"),
-    "LLAMA_SERVER_BIN":         (False, "llama-server binary"),
-    "MANAGER_MODEL_DIRS":       (False, "Model folders"),
-    "OPSROOM_LLAMA_URL":        (False, "Ops Room endpoint"),
-    "OPSROOM_MODEL":            (False, "Ops Room model"),
     "MANAGER_SITE_DIR":         (False, "Jekyll checkout"),
     "TAVILY_API_KEY":           (True,  "Tavily API key"),
 }
@@ -918,6 +1006,7 @@ def _settings_payload() -> dict:
             "is_set": bool(live),
             "saved_here": key in saved,
             "locked_by_env": config.set_by_environment(key),
+            "locked_by_file": config.env_origin(key),
         }
     return {"settings": out, "restart_required": _RESTART_REQUIRED}
 

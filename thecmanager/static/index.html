@@ -120,13 +120,13 @@
           </button>
           <button id="ops-open" class="gso-dock-btn" aria-pressed="false" aria-controls="ops-panel"
             title="Toggle Ops Room (Cmd+J)">
-            <span class="gso-dot" data-state="live" aria-hidden="true"></span>Ops Room</button>
+            <span id="ops-btn-dot" class="gso-dot" data-state="" aria-hidden="true"></span>Ops Room</button>
         </div>
       </header>
 
       <div class="gso-body">
         <!-- Search + filter row -->
-        <div id="search-row" class="flex items-center gap-3 mb-4">
+        <div id="search-row" class="flex items-center gap-3">
         <input id="search" type="search" placeholder="Search apps…" aria-label="Search apps"
           class="gso-search" />
           <div id="filters" role="group" aria-label="Filter by type"
@@ -153,7 +153,7 @@
 
     <aside id="ops-panel" aria-label="Ops Room" role="complementary" class="gso-dock" data-open="0">
   <div class="gso-dock-head">
-    <span class="gso-dot gso-pulse" data-state="live" aria-hidden="true"></span>
+    <span id="ops-dock-dot" class="gso-dot gso-pulse" data-state="" aria-hidden="true"></span>
     <div style="flex:1;min-width:0">
       <div class="gso-dock-title">Ops Room</div>
     </div>
@@ -427,9 +427,6 @@
     let SYS = null;                 // latest sysmon snapshot (CPU/RAM)
     let libPage = 0;                // Library table pagination (40/page)
     const libSel = new Set();       // names ticked for bulk actions
-    let CHAT = null;                // chat state (Claude Code on local LLM)
-    let chatBusy = false;           // (legacy) immediate-send flag
-    let chatPolling = false;        // polling while a turn streams
     let SITE = null;                // site CMS overview (collections + status)
     let siteColl = null;            // selected collection id
     let siteItems = [];             // items in the selected collection
@@ -439,6 +436,10 @@
     let VSCODE = [];                // folders open in VS Code
     let LLM = {};                   // llama.cpp server status
     let MODELS = [];                // available GGUF models
+    let LLM_META = {};              // model dirs, binary, defaults, last model
+    let LLM_FORM = null;            // flags currently in the Start form
+    let LLM_SETUP = null;           // install plan, model catalog, download state
+    let dlPoll = null;              // interval while a download runs
     let PLANNER = {boards: []};     // kanban boards + tasks
     let activeBoardId = null;       // currently shown board
     let activeType = "all";
@@ -822,7 +823,8 @@
       }));
       return [
         { label: "Workspace", items: [
-          { id: "opsroom", label: "Ops Room", dot: "live", pulse: true, n: liveCount, action: "dock" },
+          { id: "opsroom", label: "Ops Room", n: liveCount, action: "dock",
+            dot: LLM && LLM.healthy ? "live" : null, pulse: !!(LLM && LLM.healthy) },
           { id: "library",  label: "Library",  dot: "brand", n: ALL.length },
         ]},
         { label: "Attention", items: [
@@ -838,14 +840,12 @@
           { id: "favourites", label: "Favourites", n: favCount() },
           ...rootItems,
           { id: "addroot", label: "Add a folder\u2026", n: null },
-          { id: "archived", label: "Archived", n: null, disabled: "No archive concept yet" },
         ]},
         { label: "Tools", items: [
           { id: "planner", label: "Planner",
             n: PLANNER.boards ? PLANNER.boards.reduce((t, b) => t + b.tasks.length, 0) : null },
           { id: "llm",     label: "Local LLM", dot: LLM && LLM.healthy ? "live" : null, n: null },
-          { id: "chat",    label: "Chat", n: null },
-          { id: "site",    label: "Site", n: null },
+              { id: "site",    label: "Site", n: null },
           { id: "settings", label: "Settings", n: null },
         ]},
       ];
@@ -865,7 +865,22 @@
       const row = $("#search-row");
       const isList = APP_LIST_VIEWS.has(activeView) || activeView.startsWith("root:");
       if (row) row.style.display = isList ? "flex" : "none";
+      const body = document.querySelector(".gso-body");
+      if (body) body.dataset.list = isList ? "1" : "0";
+      syncStickyTop();
     }
+
+    /** Park the sticky list block directly under the search row.
+        Measured, because the search row's height depends on the font and the
+        window, and every guess at it so far has been wrong in a way that put
+        the filter chips on top of the search box. */
+    function syncStickyTop() {
+      const row = $("#search-row");
+      const h = (row && row.style.display !== "none")
+        ? Math.round(row.getBoundingClientRect().height) : 0;
+      document.documentElement.style.setProperty("--lib-sticky-top", h + "px");
+    }
+    addEventListener("resize", syncStickyTop);
 
     function renderViews() {
       const nav = $("#side-nav");
@@ -911,7 +926,7 @@
       const map = { opsroom: "Ops Room", library: "Library", vscode: "In VSCode",
                     uncommitted: "Uncommitted", failed: "Failed runs",
                     favourites: "Favourites", planner: "Planner", llm: "Local LLM",
-                    chat: "Chat", site: "Site", settings: "Settings" };
+                    site: "Site", settings: "Settings" };
       if (activeView.startsWith("root:")) return activeView.slice(5);
       return map[activeView] || "Library";
     }
@@ -963,7 +978,6 @@
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
       if (activeView === "settings") return renderSettings();
-      if (activeView === "chat") return renderChat();
       if (activeView === "site") return renderSite();
 
       const gridEl = resetGrid();
@@ -1055,7 +1069,7 @@
         </div>` : "";
 
       const body = pageApps.length
-        ? `<div class="lib-table">${header}${pageApps.map(rowFor).join("")}${skeleton}</div>`
+        ? `<div class="lib-table">${pageApps.map(rowFor).join("")}${skeleton}</div>`
         : `<div style="text-align:center;padding:40px">
              <div style="font:600 14px 'Readex Pro',sans-serif;color:var(--text)">Nothing in ${escapeHtml(viewTitle())}</div>
              <div style="font-size:12px;color:var(--text-3);margin:6px 0 14px">No repos match this collection yet. Clear the filter to see all ${ALL.length}.</div>
@@ -1071,7 +1085,12 @@
 
       $("#subtitle").textContent =
         `${apps.length} shown · ${viewTitle()}${activeType !== "all" ? ` · ${activeType}` : ""}`;
-      gridEl.innerHTML = chipRow + bulk + body + foot;
+      // One sticky block: chips, bulk actions and the column header travel
+      // together, so they can never be laid on top of one another.
+      gridEl.innerHTML =
+        `<div class="lib-sticky">${chipRow}${bulk}${pageApps.length ? header : ""}</div>`
+        + body + foot;
+      syncStickyTop();
 
       // ---- wiring
       gridEl.querySelectorAll("[data-goto]").forEach(b =>
@@ -1123,108 +1142,6 @@
       gridEl.querySelectorAll("[data-cfg]").forEach(b =>
         b.onclick = (e) => { e.stopPropagation(); openDrawer(b.dataset.cfg); });
       syncChrome();
-    }
-
-    function chatBubble(m) {
-      if (m.role === "user")
-        return `<div class="ops-bubble" data-who="user">${escapeHtml(m.text)}</div>`;
-      if (m.role === "assistant")
-        return `<div class="ops-bubble" data-who="agent">${escapeHtml(m.text)}</div>`;
-      if (m.role === "action")
-        return `<div class="ops-tool">▸ ${escapeHtml(m.text)}</div>`;
-      if (m.role === "meta")
-        return `<div class="ops-tool" style="opacity:.7">${escapeHtml(m.text)}</div>`;
-      if (m.role === "error")
-        return `<div class="ops-err">${escapeHtml(m.text)}</div>`;
-      if (m.role === "result")
-        return `<details class="chat-details"><summary style="cursor:pointer">tool output</summary>
-          <pre>${escapeHtml(m.text)}</pre></details>`;
-      return "";
-    }
-
-    function chatTick() {
-      api("/api/chat").then(d => {
-        CHAT = d;
-        if (activeView === "chat") render();
-        if (activeView === "chat" && d && d.busy) setTimeout(chatTick, 1200);
-        else chatPolling = false;
-      }).catch(() => { chatPolling = false; });
-    }
-    function startChatPoll() { if (!chatPolling) { chatPolling = true; setTimeout(chatTick, 800); } }
-
-    async function renderChat() {
-      if (!CHAT) {
-        try { CHAT = await api("/api/chat"); }
-        catch { CHAT = {messages:[], status:"done", llm:{state:"stopped"}}; }
-      }
-      const st = CHAT.llm || {};
-      const llmDown = st.state !== "running";
-      const busy = !!CHAT.busy;
-      const items = CHAT.messages || [];
-      const bubbles = items.map(chatBubble).join("") ||
-        `<div class="ops-hint">Claude Code running on your local model, working in
-          <span class="mono">${escapeHtml(CHAT.dir || "~")}</span>.
-          Ask anything about this computer, "what's using my disk?", "summarise this folder".
-          Read-only tools run automatically; commands ask first.</div>`;
-      const banner = llmDown ? `<div class="chat-banner">
-          <span class="gso-dot" data-state="" aria-hidden="true"></span>
-          <span style="flex:1">The local LLM isn't running.</span>
-          <button id="chat-goto-llm" class="lib-act" data-tone="neutral">Open Local LLM</button></div>` : "";
-      const errBox = CHAT.error ? `<div class="ops-err">${escapeHtml(CHAT.error)}</div>` : "";
-      let approval = "";
-      if (CHAT.action) {
-        approval = `<div class="chat-approve">
-          <div class="chat-approve-t">Allow Claude to run ${escapeHtml(CHAT.action.tool || "this tool")}?</div>
-          <div class="chat-cmd">${escapeHtml(CHAT.action.command)}</div>
-          <div style="display:flex;gap:8px">
-            <button id="chat-allow" class="lib-act" data-tone="publish">Allow</button>
-            <button id="chat-deny" class="lib-act" data-tone="neutral">Deny</button>
-          </div></div>`;
-      }
-      const disabled = busy || llmDown;
-      const gridEl = resetGrid();
-      $("#view-title").textContent = "Chat";
-      $("#subtitle").textContent = `Claude Code on the local model · working in ${CHAT.dir || "~"}`;
-
-      gridEl.innerHTML = `
-        <div class="chat-col">
-          ${banner}
-          <div id="chat-log" class="chat-log">${bubbles}${errBox}${approval}
-            ${busy && !CHAT.action ? `<div class="ops-tool">working…</div>` : ""}</div>
-          <div class="chat-foot">
-            <textarea id="chat-input" rows="1" ${disabled ? "disabled" : ""}
-              class="chat-input" placeholder="Ask Claude about your computer…"></textarea>
-            <button id="chat-send" ${disabled ? "disabled" : ""} class="lib-act"
-              style="height:36px">${busy ? "…" : "Send"}</button>
-            <button id="chat-clear" class="lib-act" data-tone="neutral" style="height:36px">Clear</button>
-          </div>
-        </div>`;
-      const goto = $("#chat-goto-llm"); if (goto) goto.onclick = () => { activeView="llm"; renderViews(); render(); };
-      const clr = $("#chat-clear"); if (clr) clr.onclick = async () => { CHAT = await api("/api/chat/reset",{method:"POST"}); render(); };
-      const allow = $("#chat-allow"); if (allow) allow.onclick = () => chatApprove(true);
-      const deny = $("#chat-deny"); if (deny) deny.onclick = () => chatApprove(false);
-      const send = $("#chat-send"); if (send) send.onclick = () => chatSend();
-      const input = $("#chat-input");
-      if (input && !disabled) {
-        input.focus();
-        input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend(); } };
-      }
-      const log = $("#chat-log"); if (log) log.scrollTop = log.scrollHeight;
-    }
-
-    async function chatSend() {
-      const input = $("#chat-input"); if (!input) return;
-      const text = input.value.trim(); if (!text || (CHAT && CHAT.busy)) return;
-      try { CHAT = await api("/api/chat/send", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({message:text})}); }
-      catch (e) { CHAT = {...(CHAT||{messages:[]}), error:String(e)}; }
-      render(); startChatPoll();
-    }
-
-    async function chatApprove(ok) {
-      if (!CHAT || !CHAT.action) return;
-      try { CHAT = await api("/api/chat/approve", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id: CHAT.action.id, approve: ok})}); }
-      catch (e) { CHAT = {...(CHAT||{messages:[]}), error:String(e)}; }
-      render(); startChatPoll();
     }
 
     // ---- Site CMS (edit the Jekyll website) ----
@@ -1306,9 +1223,25 @@
         }
       }
       if (!SITE.configured) {
-        $("#grid").innerHTML = `<div class="col-span-full text-slate-400 text-sm">
-          Site repo not found at <span class="mono">${escapeHtml(SITE.dir||'')}</span>.
-          Clone it there, or set <span class="mono">MANAGER_SITE_DIR</span> and restart GSO-1.</div>`;
+        // Two different situations that used to render the same sentence, one
+        // of them with an empty path in it: nothing is set yet, versus a path
+        // is set and there is no Jekyll checkout at it.
+        $("#grid").innerHTML = SITE.dir
+          ? `<div class="col-span-full text-slate-400 text-sm">
+              No Jekyll checkout at <span class="mono">${escapeHtml(SITE.dir)}</span>.
+              Clone one there, or point <span class="mono">MANAGER_SITE_DIR</span> somewhere else in
+              <button class="lnk-inline" data-goto-settings="other">Settings → Other</button>.</div>`
+          : `<div class="col-span-full text-slate-400 text-sm">
+              The Site tab edits a Jekyll website from here: its posts and pages as forms, with one
+              button to commit and push. It stays switched off until you name a checkout.<br/><br/>
+              Set <span class="mono">MANAGER_SITE_DIR</span> in
+              <button class="lnk-inline" data-goto-settings="other">Settings → Other</button>
+              to switch it on.</div>`;
+        const go = $("[data-goto-settings]");
+        if (go) go.onclick = () => {
+          SETTINGS_TAB = go.dataset.gotoSettings;
+          activeView = "settings"; renderViews(); render();
+        };
         return;
       }
       const cols = SITE.collections || [];
@@ -1464,11 +1397,14 @@
         return;
       }
 
-      // Same row language as the Library table, one column narrower.
-      gridEl.innerHTML = `<div class="lib-table">
+      // Same row language as the Library table, one column narrower, and the
+      // same sticky wrapper so the header behaves the same way here.
+      gridEl.innerHTML = `<div class="lib-sticky">
         <div class="lib-row lib-head" style="grid-template-columns:1fr 140px 108px">
           <span>Folder</span><span>Where</span><span style="justify-self:end">Action</span>
         </div>
+      </div>
+      <div class="lib-table">
         ${folders.map(f => `<div class="lib-row lib-body-row" data-vf="${escapeHtml(f.path)}"
             tabindex="0" role="button" style="grid-template-columns:1fr 140px 108px">
           <span class="lib-cell-name"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(shortPath(f.path, 3))}</span></span>
@@ -1476,6 +1412,7 @@
           <button class="lib-act" data-tone="neutral">Focus</button>
         </div>`).join("")}
       </div>`;
+      syncStickyTop();
 
       gridEl.querySelectorAll("[data-vf]").forEach(row => {
         const go = () => focusVscode(row.dataset.vf);
@@ -1492,10 +1429,111 @@
     }
 
     // -------- "Local LLM" view --------
+    //
+    // This view owns the local model end to end: where the binary and the
+    // models live, what flags each model wants, and whether a server is up.
+    // It used to share that job with a Settings tab, which meant the port you
+    // started a server on and the port the rest of the app looked for were two
+    // separate fields nobody kept in sync.
+
+    /** Model list plus each model's remembered flags, in one round trip. */
+    async function loadModels() {
+      try {
+        const d = await api("/api/llm/models");
+        MODELS = d.models || [];
+        LLM_META = d;
+        // Open on the model you used last, with the flags you used last: the
+        // common case is starting the same model again.
+        if (!LLM_FORM) {
+          const pick = MODELS.find(m => m.path === d.last_model) || MODELS[0];
+          LLM_FORM = pick ? { ...pick.preset, model_path: pick.path }
+                          : { ...(d.defaults || {}), model_path: "" };
+        }
+      } catch (e) { /* the view renders an empty list and says so */ }
+      renderLlm();
+      loadSetup();
+    }
+
+    /** Is llama.cpp missing, and what could we fetch? Resolved against Hugging
+        Face server-side, so it is slower than the rest of the view and loads
+        after it rather than holding it up. */
+    async function loadSetup() {
+      try { LLM_SETUP = await api("/api/llm/setup", { timeoutMs: 30000 }); }
+      catch (e) { LLM_SETUP = { install: {}, catalog: { models: [], reachable: false } }; }
+      if (activeView === "llm") renderLlm();
+      if (LLM_SETUP.download && LLM_SETUP.download.state === "running") watchDownload();
+    }
+
+    function watchDownload() {
+      if (dlPoll) return;
+      dlPoll = setInterval(async () => {
+        let d;
+        try { d = await api("/api/llm/download"); } catch (e) { return; }
+        if (LLM_SETUP) LLM_SETUP.download = d;
+        if (d.state !== "running") {
+          clearInterval(dlPoll); dlPoll = null;
+          if (d.state === "done") { modelsLoaded = false; loadModels(); }
+          flash(d.message || "", d.state === "done");
+        }
+        if (activeView === "llm") renderLlm();
+      }, 1000);
+    }
+
+    function fmtGb(n) { return (Number(n || 0) / 1e9).toFixed(1) + " GB"; }
+
+    /** Swap the form over to another model's remembered flags. */
+    function useModelPreset(path) {
+      const m = MODELS.find(x => x.path === path);
+      LLM_FORM = m ? { ...m.preset, model_path: m.path } : LLM_FORM;
+      renderLlm();
+    }
+
+    /** Read the Start form back out, so a value survives a re-render. */
+    function readLlmForm() {
+      const intOrNull = (sel) => { const el = $(sel); if (!el) return null;
+        const v = parseInt(el.value); return isNaN(v) ? null : v; };
+      const numOrNull = (sel) => { const el = $(sel); if (!el) return null;
+        const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+      const val = (sel, d) => { const el = $(sel); return el ? el.value : d; };
+      const chk = (sel, d) => { const el = $(sel); return el ? el.checked : d; };
+      const f = LLM_FORM || {};
+      return {
+        model_path: val("#llm-model", f.model_path || ""),
+        ctx: intOrNull("#llm-ctx") || 131072,
+        ngl: intOrNull("#llm-ngl") || 99,
+        port: intOrNull("#llm-port") || (LLM_META.default_port || 8080),
+        jinja: chk("#llm-jinja", true),
+        alias: val("#llm-alias", "").trim(),
+        threads: intOrNull("#llm-threads"),
+        batch: intOrNull("#llm-batch"),
+        parallel: intOrNull("#llm-parallel"),
+        reasoning_format: val("#llm-reasoning", ""),
+        temp: numOrNull("#llm-temp"),
+        top_p: numOrNull("#llm-topp"),
+        top_k: intOrNull("#llm-topk"),
+        context_shift: chk("#llm-ctxshift", true),
+        cache_type_k: val("#llm-cachetype", "q8_0"),
+        cache_type_v: val("#llm-cachetype", "q8_0"),
+      };
+    }
+
+    async function startLlm(body, btn) {
+      if (!body.model_path) return flash("Pick a model first", false);
+      if (btn) { btn.textContent = "Starting…"; btn.disabled = true; }
+      LLM_FORM = { ...body };
+      const r = await api(`/api/llm/start`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      flash(r.message, r.ok);
+      if (r.ok) { modelsLoaded = false; showLlmLog(); watchLlm(); }
+      else if (btn) { btn.textContent = "Start server"; btn.disabled = false; }
+    }
+
     function renderLlm() {
       if (!modelsLoaded) {
         modelsLoaded = true;
-        api("/api/llm/models").then(d => { MODELS = d.models || []; renderLlm(); });
+        loadModels();
       }
       if (!usageLoaded) {
         usageLoaded = true;
@@ -1503,8 +1541,11 @@
       }
       const s = LLM || {};
       const busy = s.state === "running" || s.state === "loading";
+      const f = LLM_FORM || (LLM_META.defaults || {});
       const opts = MODELS.map(m =>
-        `<option value="${m.path}">${m.name} · ${m.size_gb}GB</option>`).join("");
+        `<option value="${m.path}" ${m.path === f.model_path ? "selected" : ""}
+          >${m.name} · ${m.size_gb}GB</option>`).join("");
+      const num = (v) => (v === null || v === undefined || v === "") ? "" : v;
 
       const gridEl = resetGrid();
       $("#view-title").textContent = "Local LLM";
@@ -1529,7 +1570,12 @@
           <span class="gso-dot${busy ? " gso-pulse" : ""}" data-state="${busy ? "live" : ""}" aria-hidden="true"></span>
           <span class="llm-name">llama-server</span>
           <span class="llm-port">${busy ? `:${s.port}` : "stopped"}</span>
-          ${busy ? `<button id="llm-stop" class="lib-act" data-tone="stop" style="margin-left:auto">Stop server</button>` : ""}
+          ${busy
+            ? `<button id="llm-stop" class="lib-act" data-tone="stop" style="margin-left:auto">Stop server</button>`
+            : (LLM_META.last_model
+              ? `<button id="llm-again" class="lib-act" data-tone="start" style="margin-left:auto"
+                   title="${escapeHtml(shortPath(LLM_META.last_model))}">Start again</button>`
+              : "")}
         </div>
         <div class="llm-model">${escapeHtml(s.model || "No model loaded")}${
           s.pid ? ` · pid ${s.pid}` : ""}${s.managed ? " · managed" : busy ? " · external" : ""}</div>
@@ -1557,11 +1603,17 @@
 
       // ---- models on disk
       const loadedPath = (s.model_path || "").trim();
+      // Only models actually started before carry a preset worth advertising;
+      // the rest render the shared defaults and saying so would be noise.
+      const remembered = new Set(MODELS.filter(m => m.has_preset).map(m => m.path));
       const totalGb = MODELS.reduce((n, m) => n + (m.size_gb || 0), 0);
       const modelRows = MODELS.map(m => {
         const isLoaded = busy && (m.path === loadedPath || m.name === s.model);
         return `<div class="llm-row">
-          <span class="llm-row-name"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(shortPath(m.path))}</span></span>
+          <span class="llm-row-name"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(shortPath(m.path))}${
+            remembered.has(m.path) ? ` · remembered: ctx ${(m.preset.ctx || 0).toLocaleString()}${
+              m.preset.reasoning_format ? `, ${escapeHtml(m.preset.reasoning_format)}` : ""}` : ""
+          }</span></span>
           <span class="llm-mono">${m.size_gb} GB</span>
           <span class="llm-mono">${escapeHtml(quantOf(m.name))}</span>
           <span class="llm-pill" data-s="${isLoaded ? "loaded" : "disk"}">${isLoaded ? "loaded" : "on disk"}</span>
@@ -1572,14 +1624,81 @@
         </div>`;
       }).join("") || `<div class="llm-row"><span class="lib-muted">No GGUF models found in your model directories.</span></div>`;
 
+      // ---- llama.cpp is missing: say how to get it, and offer to do it
+      const plan = (LLM_SETUP && LLM_SETUP.install) || {};
+      const installCard = !plan.needed ? "" : `
+        <section>
+          <div class="sec-rule">llama.cpp is not installed<span class="sec-note">nothing can run without it</span></div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px">
+            <p class="text-xs text-slate-500 mb-3">GSO-1 runs models through <span class="mono">llama-server</span>,
+              part of llama.cpp. ${escapeHtml(plan.note || "")}</p>
+            <pre class="mono" style="background:var(--bg);border:1px solid var(--line);border-radius:9px;
+                 padding:10px 12px;font-size:12px;color:var(--text-2);overflow:auto;margin-bottom:12px"
+              >${escapeHtml(plan.command || "")}</pre>
+            <div style="display:flex;gap:8px;align-items:center">
+              ${plan.can_run
+                ? `<button id="llm-install" class="lib-act">Run it</button>` : ""}
+              <button id="llm-copycmd" class="lib-act" data-tone="neutral">Copy command</button>
+              ${plan.can_run ? `<span class="text-[11px] text-slate-500">Installs with ${
+                escapeHtml(plan.manager || "your package manager")}; takes a few minutes.</span>` : ""}
+            </div>
+            <pre id="llm-installlog" class="hidden mono" style="background:var(--bg);border:1px solid var(--line);
+                 border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--text-2);
+                 overflow:auto;max-height:240px;white-space:pre-wrap;margin-top:12px"></pre>
+          </div>
+        </section>`;
+
+      // ---- somewhere to get a model, sized to this machine
+      const cat = (LLM_SETUP && LLM_SETUP.catalog) || {};
+      const dl = (LLM_SETUP && LLM_SETUP.download) || {};
+      const dlRunning = dl.state === "running";
+      const catRows = (cat.models || []).map(m => {
+        const busyThis = dlRunning && dl.id === m.id;
+        const pct = busyThis && dl.total ? Math.round((dl.done / dl.total) * 100) : 0;
+        return `<div class="llm-row" style="grid-template-columns:1fr 96px 130px 104px">
+          <span class="llm-row-name"><b>${escapeHtml(m.label)}</b><span>${escapeHtml(m.note)}</span></span>
+          <span class="llm-mono">${m.size_gb} GB</span>
+          <span class="llm-mono" style="opacity:.75">${
+            m.on_disk ? "already here" : m.fits ? escapeHtml(m.quant) : "too big for this Mac"}</span>
+          ${m.on_disk
+            ? `<span class="llm-pill" data-s="disk">on disk</span>`
+            : busyThis
+              ? `<button class="lib-act" data-tone="stop" id="llm-dlcancel">${pct}% · Stop</button>`
+              : `<button class="lib-act" data-tone="start" data-get="${escapeHtml(m.id)}"
+                   ${dlRunning || !m.fits ? "disabled" : ""}>Download</button>`}
+        </div>`;
+      }).join("");
+      const getModelCard = (!LLM_SETUP || (!MODELS.length && !cat.reachable) || catRows) ? `
+        <section>
+          <div class="sec-rule">Get a model<span class="sec-note">${
+            cat.dest ? "saves to " + escapeHtml(shortPath(cat.dest)) : "checking…"}</span></div>
+          ${!LLM_SETUP ? `<div class="lib-muted" style="padding:12px 2px">Checking what is available…</div>`
+            : !cat.reachable ? `<div class="lib-muted" style="padding:12px 2px">
+                Could not reach Hugging Face. Put a <span class="mono">.gguf</span> file in
+                ${escapeHtml(shortPath(cat.dest || ""))} and it will appear above.</div>`
+            : `<div class="llm-rows">${catRows}</div>
+               ${dlRunning ? `<div style="margin-top:10px">
+                 <div style="height:6px;border-radius:99px;background:var(--card-2);overflow:hidden">
+                   <div style="height:100%;width:${dl.total ? (dl.done / dl.total) * 100 : 0}%;
+                        background:var(--primary);transition:width .4s"></div></div>
+                 <div class="llm-hour-foot" style="margin-top:6px">${escapeHtml(dl.label || "")} ·
+                   ${fmtGb(dl.done)} of ${fmtGb(dl.total)}</div></div>` : ""}
+               <p class="text-[11px] text-slate-500 mt-3">Quantised GGUF builds, chosen for tool-calling.
+                 Downloads resume if interrupted.</p>`}
+        </section>` : "";
+
       gridEl.innerHTML = `
       <div class="llm-wrap">
         <div class="llm-toprow">${serverCard}${hourCard}</div>
+
+        ${installCard}
 
         <section>
           <div class="sec-rule">Models on disk<span class="sec-note">${MODELS.length} · ${totalGb.toFixed(1)} GB</span></div>
           <div class="llm-rows">${modelRows}</div>
         </section>
+
+        ${getModelCard}
 
         <section>
           <div class="sec-rule">System load<span class="sec-note">sampled every 3s</span></div>
@@ -1604,24 +1723,24 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Resources</div>
               <div class="grid grid-cols-3 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Context <span class="mono text-slate-500">-c</span></span>
-                  <input id="llm-ctx" type="number" value="131072" class="f-in mono"/>
+                  <input id="llm-ctx" type="number" value="${num(f.ctx)}" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Context window in tokens. Larger holds more history but uses more memory (≈42 KB/token at q8_0).</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">GPU layers <span class="mono text-slate-500">-ngl</span></span>
-                  <input id="llm-ngl" type="number" value="99" class="f-in mono"/>
+                  <input id="llm-ngl" type="number" value="${num(f.ngl)}" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Layers offloaded to the GPU. 99 puts the whole model on GPU.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Port <span class="mono text-slate-500">--port</span></span>
-                  <input id="llm-port" type="number" value="${s.port||8080}" class="f-in mono"/>
+                  <input id="llm-port" type="number" value="${num(f.port) || s.port || 8080}" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">TCP port the server listens on.</span></label>
               </div>
               <div class="grid grid-cols-3 gap-3 mt-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Threads <span class="mono text-slate-500">-t</span></span>
-                  <input id="llm-threads" type="number" placeholder="auto" class="f-in mono"/>
+                  <input id="llm-threads" type="number" value="${num(f.threads)}" placeholder="auto" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">CPU threads for generation. Blank = auto-detect.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Batch size <span class="mono text-slate-500">-b</span></span>
-                  <input id="llm-batch" type="number" placeholder="2048" class="f-in mono"/>
+                  <input id="llm-batch" type="number" value="${num(f.batch)}" placeholder="2048" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Prompt-processing batch size. Higher speeds long prompts, costs memory.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Parallel slots <span class="mono text-slate-500">-np</span></span>
-                  <input id="llm-parallel" type="number" placeholder="1" class="f-in mono"/>
+                  <input id="llm-parallel" type="number" value="${num(f.parallel)}" placeholder="1" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Concurrent request slots. Blank = 1, so a single Claude Code client gets the whole context window.</span></label>
               </div>
             </div>
@@ -1630,13 +1749,13 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Generation defaults</div>
               <div class="grid grid-cols-3 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Temperature <span class="mono text-slate-500">--temp</span></span>
-                  <input id="llm-temp" type="number" step="0.05" placeholder="model default" class="f-in mono"/>
+                  <input id="llm-temp" type="number" step="0.05" value="${num(f.temp)}" placeholder="model default" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Sampling randomness. Lower (≈0.2) gives steadier output & tool calls.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">top-p <span class="mono text-slate-500">--top-p</span></span>
-                  <input id="llm-topp" type="number" step="0.05" placeholder="0.8" class="f-in mono"/>
+                  <input id="llm-topp" type="number" step="0.05" value="${num(f.top_p)}" placeholder="0.95" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Nucleus sampling: keep tokens within this cumulative probability.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">top-k <span class="mono text-slate-500">--top-k</span></span>
-                  <input id="llm-topk" type="number" placeholder="20" class="f-in mono"/>
+                  <input id="llm-topk" type="number" value="${num(f.top_k)}" placeholder="20" class="f-in mono"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Sample only from the K most-likely tokens.</span></label>
               </div>
               <span class="block text-[11px] text-slate-500 mt-2">These set the server's defaults; a client request (e.g. Claude Code) can still override them per call.</span>
@@ -1646,32 +1765,32 @@
               <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Behavior</div>
               <div class="grid grid-cols-2 gap-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Reasoning format <span class="mono text-slate-500">--reasoning-format</span></span>
-                  <select id="llm-reasoning" class="f-in">
-                    <option value="">Server default</option>
-                    <option value="auto">auto</option>
-                    <option value="deepseek">deepseek (separate think field)</option>
-                    <option value="none">none (inline think tags)</option>
-                  </select>
+                  <select id="llm-reasoning" class="f-in">${
+                    [["", "Server default"], ["auto", "auto"],
+                     ["deepseek", "deepseek (separate think field)"],
+                     ["none", "none (inline think tags)"]].map(([v, t]) =>
+                      `<option value="${v}" ${(f.reasoning_format || "") === v ? "selected" : ""}>${t}</option>`).join("")
+                  }</select>
                   <span class="block text-[11px] text-slate-500 mt-1">For thinking models: where &lt;think&gt; tokens go. "deepseek" keeps them out of the reply & tool calls.</span></label>
                 <label class="block"><span class="text-slate-300 text-xs font-medium">Alias <span class="mono text-slate-500">--alias</span></span>
-                  <input id="llm-alias" type="text" placeholder="optional" class="f-in"/>
+                  <input id="llm-alias" type="text" value="${escapeHtml(f.alias || "")}" placeholder="optional" class="f-in"/>
                   <span class="block text-[11px] text-slate-500 mt-1">Model name reported to API clients.</span></label>
               </div>
               <div class="grid grid-cols-2 gap-3 mt-3">
                 <label class="block"><span class="text-slate-300 text-xs font-medium">KV cache type <span class="mono text-slate-500">-ctk/-ctv</span></span>
-                  <select id="llm-cachetype" class="f-in">
-                    <option value="q8_0" selected>q8_0 (half memory, recommended)</option>
-                    <option value="f16">f16 (full precision)</option>
-                    <option value="">Server default</option>
-                  </select>
+                  <select id="llm-cachetype" class="f-in">${
+                    [["q8_0", "q8_0 (half memory, recommended)"], ["f16", "f16 (full precision)"],
+                     ["", "Server default"]].map(([v, t]) =>
+                      `<option value="${v}" ${(f.cache_type_k ?? "q8_0") === v ? "selected" : ""}>${t}</option>`).join("")
+                  }</select>
                   <span class="block text-[11px] text-slate-500 mt-1">Quantizes the KV cache. q8_0 roughly halves its memory so a large context fits.</span></label>
               </div>
               <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
-                <input id="llm-ctxshift" type="checkbox" checked class="mt-0.5"/>
+                <input id="llm-ctxshift" type="checkbox" ${f.context_shift === false ? "" : "checked"} class="mt-0.5"/>
                 <span>Use <span class="mono">--context-shift</span>
                   <span class="block text-[11px] text-slate-500">Evicts the oldest tokens when the window fills instead of erroring. Keep on for long Claude Code sessions.</span></span></label>
               <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
-                <input id="llm-jinja" type="checkbox" checked class="mt-0.5"/>
+                <input id="llm-jinja" type="checkbox" ${f.jinja === false ? "" : "checked"} class="mt-0.5"/>
                 <span>Use <span class="mono">--jinja</span> (model chat template)
                   <span class="block text-[11px] text-slate-500">Applies the model's own template, required for function/tool calling. Leave on unless debugging.</span></span></label>
             </div>
@@ -1681,6 +1800,48 @@
         </div>
 
       </div>
+        </section>
+
+        <section>
+          <div class="sec-rule">Where things live<span class="sec-note">takes effect immediately</span></div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px">
+            <p class="text-xs text-slate-500 mb-4">GSO-1 looks here for llama-server and for .gguf files.
+              Changes apply to the next scan, no restart.</p>
+            <label class="block" style="margin-bottom:14px">
+              <span class="text-slate-300 text-xs font-medium">llama-server binary</span>
+              <input id="llm-bin" type="text" class="f-in mono"
+                value="${escapeHtml(LLM_META.server_bin_set || "")}"
+                placeholder="${escapeHtml(LLM_META.server_bin || "not found, set a full path")}"
+                ${LLM_META.server_bin_locked ? "disabled" : ""}/>
+              <span class="block text-[11px] text-slate-500 mt-1">${LLM_META.server_bin_locked
+                ? "Set by LLAMA_SERVER_BIN in your environment, read-only here."
+                : "Leave blank to use the usual build locations."}</span>
+            </label>
+            <label class="block">
+              <span class="text-slate-300 text-xs font-medium">Model folders</span>
+              <div id="llm-dirs">${(LLM_META.model_dirs || []).map((d, i) => `
+                <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+                  <input type="text" class="f-in mono llm-dir" value="${escapeHtml(d.path)}"
+                         ${LLM_META.model_dirs_locked ? "disabled" : ""}/>
+                  ${d.exists ? "" : `<span style="font-size:11px;color:var(--text-dim);white-space:nowrap"
+                     title="Nothing is scanned here until this folder exists">no such folder</span>`}
+                  ${LLM_META.model_dirs_locked ? "" :
+                    `<button class="lib-act" data-tone="neutral" data-rmdir="${i}"
+                       aria-label="Remove this folder">Remove</button>`}
+                </div>`).join("")}</div>
+              <span class="block text-[11px] text-slate-500 mt-1">${LLM_META.model_dirs_locked
+                ? "Set by MANAGER_MODEL_DIRS in your environment, read-only here."
+                : LLM_META.model_dirs_default
+                  ? "These are the places models usually live, not folders you chose. Scanned recursively for .gguf files over 300 MB; edit the list to point it at yours."
+                  : "Scanned recursively for .gguf files over 300 MB."}</span>
+            </label>
+            ${LLM_META.model_dirs_locked && LLM_META.server_bin_locked ? "" : `
+              <div style="display:flex;gap:8px;margin-top:12px">
+                ${LLM_META.model_dirs_locked ? "" :
+                  `<button id="llm-adddir" class="lib-act" data-tone="neutral">Add folder</button>`}
+                <button id="llm-savepaths" class="lib-act">Save and rescan</button>
+              </div>`}
+          </div>
         </section>
 
         <section>
@@ -1702,34 +1863,24 @@
         await refreshLlm();
       };
       const startBtn = $("#llm-start");
-      if (startBtn) startBtn.onclick = async () => {
-        const intOrNull = (sel) => { const v = parseInt($(sel).value); return isNaN(v) ? null : v; };
-        const numOrNull = (sel) => { const v = parseFloat($(sel).value); return isNaN(v) ? null : v; };
-        const body = {
-          model_path: $("#llm-model").value,
-          ctx: parseInt($("#llm-ctx").value)||131072,
-          ngl: parseInt($("#llm-ngl").value)||99,
-          port: parseInt($("#llm-port").value)||8080,
-          jinja: $("#llm-jinja").checked,
-          alias: $("#llm-alias").value.trim(),
-          threads: intOrNull("#llm-threads"),
-          batch: intOrNull("#llm-batch"),
-          parallel: intOrNull("#llm-parallel"),
-          reasoning_format: $("#llm-reasoning").value,
-          temp: numOrNull("#llm-temp"),
-          top_p: numOrNull("#llm-topp"),
-          top_k: intOrNull("#llm-topk"),
-          context_shift: $("#llm-ctxshift").checked,
-          cache_type_k: $("#llm-cachetype").value,
-          cache_type_v: $("#llm-cachetype").value,
-        };
-        startBtn.textContent = "Starting…"; startBtn.disabled = true;
-        const r = await api(`/api/llm/start`, {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify(body)});
-        flash(r.message, r.ok);
-        if (r.ok) { showLlmLog(); watchLlm(); }
-        else { startBtn.textContent = "Start server"; startBtn.disabled = false; }
+      if (startBtn) startBtn.onclick = () => startLlm(readLlmForm(), startBtn);
+
+      // "Start again" repeats the last successful launch verbatim, ignoring
+      // whatever is currently typed in the form: the same model with the same
+      // flags is the overwhelmingly common case, and it should not cost a
+      // scroll past fifteen fields.
+      const againBtn = $("#llm-again");
+      if (againBtn) againBtn.onclick = () => {
+        const m = MODELS.find(x => x.path === LLM_META.last_model);
+        if (m) startLlm({ ...m.preset, model_path: m.path }, againBtn);
+      };
+
+      // Changing the model swaps in that model's own remembered flags: a 30B
+      // and a 4B do not want the same context window.
+      const modelSel = $("#llm-model");
+      if (modelSel) modelSel.onchange = () => {
+        LLM_FORM = readLlmForm();          // keep edits to the other fields
+        useModelPreset(modelSel.value);
       };
       const logBtn = $("#llm-logbtn");
       if (logBtn) logBtn.onclick = showLlmLog;
@@ -1737,14 +1888,107 @@
       const stop2 = $("#llm-stop-2");
       if (stop2) stop2.onclick = () => { const b = $("#llm-stop"); if (b) b.click(); };
 
-      // "Load" from a model row starts the server on that file with the form's
-      // current settings, so the row is a shortcut, not a second code path.
+      // "Load" from a model row starts that model on its own remembered flags,
+      // not on whatever happens to be typed in the form below. The row is a
+      // shortcut for "run this one the way it wants to be run".
       $$("[data-load]").forEach(b => b.onclick = () => {
-        const sel = $("#llm-model");
-        if (sel) sel.value = b.dataset.load;
-        const start = $("#llm-start");
-        if (start) { start.scrollIntoView({ block: "center", behavior: "smooth" }); start.click(); }
+        const m = MODELS.find(x => x.path === b.dataset.load);
+        if (!m) return;
+        LLM_FORM = { ...m.preset, model_path: m.path };
+        startLlm({ ...LLM_FORM }, b);
       });
+
+      // ---- install llama.cpp
+      const copyBtn = $("#llm-copycmd");
+      if (copyBtn) copyBtn.onclick = async () => {
+        try { await navigator.clipboard.writeText(plan.command || ""); flash("Command copied", true); }
+        catch (e) { flash("Could not copy; select it by hand", false); }
+      };
+      const instBtn = $("#llm-install");
+      if (instBtn) instBtn.onclick = () => {
+        // Installing software is the user's call every time, never a
+        // consequence of having opened the tab.
+        if (!confirm(`Run "${plan.command}"?\n\nThis installs software on your Mac.`)) return;
+        const out = $("#llm-installlog");
+        instBtn.textContent = "Installing…"; instBtn.disabled = true;
+        out.classList.remove("hidden"); out.textContent = "";
+        const es = new EventSource("/api/llm/install");
+        es.onmessage = (e) => {
+          out.textContent += e.data + "\n"; out.scrollTop = out.scrollHeight;
+        };
+        es.addEventListener("done", () => {
+          es.close();
+          instBtn.textContent = "Run it"; instBtn.disabled = false;
+          loadSetup(); modelsLoaded = false; loadModels();
+        });
+        es.onerror = () => { es.close(); instBtn.textContent = "Run it"; instBtn.disabled = false; };
+      };
+
+      // ---- download a model
+      $$("[data-get]").forEach(b => b.onclick = async () => {
+        const m = (cat.models || []).find(x => x.id === b.dataset.get);
+        if (!m) return;
+        if (!confirm(`Download ${m.label}?\n\n${m.size_gb} GB into ${cat.dest}.`)) return;
+        b.textContent = "Starting…"; b.disabled = true;
+        try {
+          const r = await api("/api/llm/download", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: m.id }),
+          });
+          flash(r.message, r.ok);
+          if (LLM_SETUP) LLM_SETUP.download = { state: "running", id: m.id, label: m.label,
+                                                done: 0, total: m.size_bytes };
+          watchDownload(); renderLlm();
+        } catch (e) {
+          flash(String(e && e.message || e), false);
+          b.textContent = "Download"; b.disabled = false;
+        }
+      });
+      const dlStop = $("#llm-dlcancel");
+      if (dlStop) dlStop.onclick = async () => {
+        dlStop.textContent = "Stopping…"; dlStop.disabled = true;
+        await api("/api/llm/download/cancel", { method: "POST" }).catch(() => {});
+      };
+
+      // ---- where things live
+      const addDir = $("#llm-adddir");
+      if (addDir) addDir.onclick = () => {
+        const wrap = $("#llm-dirs"); if (!wrap) return;
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;gap:8px;margin-top:6px";
+        row.innerHTML = `<input type="text" class="f-in mono llm-dir" placeholder="/path/to/models"/>
+          <button class="lib-act" data-tone="neutral" data-rmdir="new" aria-label="Remove this folder">Remove</button>`;
+        wrap.appendChild(row);
+        row.querySelector("[data-rmdir]").onclick = () => row.remove();
+        row.querySelector("input").focus();
+      };
+      $$("[data-rmdir]").forEach(b => b.onclick = () => b.parentElement.remove());
+
+      const savePaths = $("#llm-savepaths");
+      if (savePaths) savePaths.onclick = async () => {
+        const body = {};
+        const bin = $("#llm-bin");
+        if (bin && !bin.disabled) body.server_bin = bin.value;
+        if (!LLM_META.model_dirs_locked) {
+          body.model_dirs = $$(".llm-dir").map(i => i.value).filter(v => v.trim());
+        }
+        savePaths.textContent = "Saving…"; savePaths.disabled = true;
+        try {
+          const d = await api("/api/llm/paths", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          MODELS = d.models || [];
+          LLM_META = d;
+          const n = (d.model_dirs || []).filter(x => x.exists).length;
+          flash(`Scanning ${n} folder${n === 1 ? "" : "s"} · ${MODELS.length} model${
+            MODELS.length === 1 ? "" : "s"} found`, true);
+          renderLlm();
+        } catch (e) {
+          flash(String(e && e.message || e), false);
+          savePaths.textContent = "Save and rescan"; savePaths.disabled = false;
+        }
+      };
 
       startMetrics();
     }
@@ -2733,7 +2977,6 @@
     const SETTINGS_TABS = [
       { id: "folders",  label: "Project folders" },
       { id: "telegram", label: "Telegram" },
-      { id: "llm",      label: "Local LLM" },
       { id: "remote",   label: "Phone access" },
       { id: "other",    label: "Other" },
     ];
@@ -2743,14 +2986,6 @@
         { key: "MANAGER_TELEGRAM_TOKEN", hint: "From @BotFather. Message your new bot once so it can see you." },
         { key: "MANAGER_TELEGRAM_ALLOWED", hint: "Chat ids allowed to drive the bot, comma separated. Only these can control GSO-1." },
         { key: "MANAGER_APPROVAL_CHAT", hint: "Where Allow / Deny prompts are sent. Usually the same id." },
-      ],
-      llm: [
-        { key: "LLAMA_HOST", hint: "Where llama-server listens. Default 127.0.0.1." },
-        { key: "LLAMA_PORT", hint: "Default 8080." },
-        { key: "LLAMA_SERVER_BIN", hint: "Full path to the llama-server binary, if it is not on PATH." },
-        { key: "MANAGER_MODEL_DIRS", hint: "Folders scanned for .gguf models, colon separated." },
-        { key: "OPSROOM_LLAMA_URL", hint: "OpenAI-compatible endpoint the Ops Room agent talks to." },
-        { key: "OPSROOM_MODEL", hint: "Model id as the server reports it." },
       ],
       remote: [
         { key: "MANAGER_MOBILE_TOKEN", hint: "Required for any access from another device. Without one, remote requests are refused outright." },
@@ -2776,7 +3011,9 @@
         <div style="margin-bottom:20px">
           <label for="set-${f.key}" style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px">
             ${escapeHtml(meta.label || f.key)}
-            ${locked ? `<span style="font-weight:400;color:var(--text-dim)"> &middot; set by your environment, read-only here</span>` : ""}
+            ${locked ? `<span style="font-weight:400;color:var(--text-dim)"> &middot; set ${
+              meta.locked_by_file ? `in ${escapeHtml(meta.locked_by_file)}` : "by your environment"
+            }, read-only here</span>` : ""}
           </label>
           <input id="set-${f.key}" data-key="${f.key}" type="${meta.secret ? "password" : "text"}"
                  value="${escapeHtml(val)}" placeholder="${escapeHtml(ph)}" ${locked ? "disabled" : ""}
@@ -2805,7 +3042,9 @@
           </div>`).join("") || `<div style="font-size:.82rem;color:var(--text-dim)">No folders yet.</div>`}
         ${locked
           ? `<div style="font-size:.78rem;color:var(--text-dim);margin-top:12px">
-               Set by MANAGER_PROJECTS_DIRS in your environment, so they cannot be changed here.</div>`
+               ${escapeHtml(rootsLockedText({
+                 locked_by_env: true, locked_by_file: SETTINGS && SETTINGS.roots_locked_file,
+               }))}</div>`
           : `<button id="set-editroots" style="margin-top:10px;padding:8px 14px;font-size:.85rem;
                     font-weight:600;border:0;border-radius:8px;background:var(--accent,#6366f1);
                     color:#fff;cursor:pointer">Add or remove folders</button>`}`;
@@ -2825,6 +3064,7 @@
           SETTINGS = cfg;
           SETTINGS.roots = roots.roots;
           SETTINGS.roots_locked = roots.locked_by_env;
+          SETTINGS.roots_locked_file = roots.locked_by_file;
         } catch (e) {
           main.innerHTML = `<div style="padding:22px;color:var(--text-dim)">Could not load settings.</div>`;
           return;
@@ -2959,6 +3199,18 @@
      * would be a second thing to keep working. The only differences are that
      * the roots you already have are pre-loaded, and it can be dismissed.
      */
+    /* One sentence for "you cannot change the folders here", naming the file
+       that pinned them when the server managed to find one. Without the file
+       the advice is unfollowable: the variable is exported by something the
+       user never sees, and hunting for it is the whole problem. */
+    function rootsLockedText(st) {
+      return st.locked_by_file
+        ? `Folders are set by MANAGER_PROJECTS_DIRS in ${st.locked_by_file} \u2014 `
+          + `remove that line and restart GSO-1 to choose them here.`
+        : `Folders are set by MANAGER_PROJECTS_DIRS in the environment GSO-1 was `
+          + `started with; unset it to choose them here.`;
+    }
+
     async function openRootManager() {
       let st;
       try {
@@ -2967,7 +3219,7 @@
         return toast("Could not read your folders", "error");
       }
       if (st.locked_by_env) {
-        return toast("Folders are set by MANAGER_PROJECTS_DIRS; unset it to edit them here", "error");
+        return toast(rootsLockedText(st), "error");
       }
       SETUP_CHOSEN = (st.roots || []).map(r => ({ label: r.label, path: r.path }));
       HOME_DIR = st.home || HOME_DIR;
@@ -3031,7 +3283,7 @@
         || !$("#task-modal").classList.contains("hidden")
         // Nothing to scan until the first-run picker has an answer.
         || $("#setup-modal").style.display !== "none"
-        || activeView === "llm" || activeView === "planner" || activeView === "chat"
+        || activeView === "llm" || activeView === "planner"
         || activeView === "site" || NO_AUTOREFRESH_VIEWS.has(activeView);
       if (!busy) load();
     }, 8000);
@@ -3071,6 +3323,13 @@
     if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'j') { e.preventDefault(); setOpen(!open); }
   });
 
+  /** A model name short enough for the dock header. */
+  function shortModel(name) {
+    var m = String(name).replace(/-(GGUF|gguf)$/, '');
+    var parts = m.split('-');
+    return parts.length > 2 ? parts.slice(0, 2).join('-') : m;
+  }
+
   /** One chat row. `who` is user | agent | tool | err. */
   function add(who, text) {
     var d = document.createElement('div');
@@ -3084,9 +3343,25 @@
 
   function refreshStatus() {
     fetch('/api/opsroom/status').then(function (r) { return r.json(); }).then(function (d) {
-      statusEl.textContent = !d.available ? 'launcher not found' : (d.busy ? 'working…' : 'GLM-4.7 · local');
-      statusEl.style.color = d.available ? '' : 'var(--err-text)';
-    }).catch(function () { statusEl.textContent = 'offline'; statusEl.style.color = 'var(--err-text)'; });
+      var down = !d.available || d.llm_state !== 'running';
+      statusEl.textContent =
+        !d.available ? 'launcher not found'
+        : d.busy ? 'working…'
+        : d.llm_state === 'loading' ? 'model loading…'
+        : d.llm_state !== 'running' ? 'no model running'
+        : (d.model ? shortModel(d.model) + ' · local' : 'local');
+      statusEl.style.color = down ? 'var(--err-text)' : '';
+      ['#ops-dock-dot', '#ops-btn-dot'].forEach(function (sel) {
+        var dot = document.querySelector(sel);
+        if (dot) dot.setAttribute('data-state', down ? '' : 'live');
+      });
+    }).catch(function () {
+      statusEl.textContent = 'offline'; statusEl.style.color = 'var(--err-text)';
+      ['#ops-dock-dot', '#ops-btn-dot'].forEach(function (sel) {
+        var dot = document.querySelector(sel);
+        if (dot) dot.setAttribute('data-state', '');
+      });
+    });
   }
 
   function finish() {

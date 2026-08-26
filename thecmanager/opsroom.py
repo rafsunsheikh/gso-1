@@ -27,13 +27,34 @@ import time
 from pathlib import Path
 from typing import Iterator, Optional
 
-from . import config
+from . import config, llm
 
 MAX_PROMPT_CHARS = 4000
 IDLE_TIMEOUT = 900  # a stuck run must not hold the lock forever
 
 _lock = threading.Lock()
 _current: Optional[subprocess.Popen] = None
+
+
+def _agent_env() -> dict:
+    """Environment for `./ops`, pointed at the server GSO-1 is actually running.
+
+    The sidecar reads OPSROOM_LLAMA_URL and OPSROOM_MODEL. Asking somebody to
+    type those is asking them to keep two screens in sync by hand: change the
+    port in the Local LLM tab and the Ops Room breaks with a "model mismatch"
+    that names a variable they never set. So we fill both from live status and
+    let an explicit export still win, for the case where the agent really is
+    meant to talk to some other endpoint.
+    """
+    env = {**os.environ, "OPSROOM_NO_COLOR": "1"}
+    st = llm.status()
+    if not os.environ.get("OPSROOM_LLAMA_URL"):
+        env["OPSROOM_LLAMA_URL"] = f"{st['url']}/v1"
+    # Only when a model is loaded: an empty value would fail the sidecar's
+    # own mismatch check more confusingly than its default does.
+    if not os.environ.get("OPSROOM_MODEL") and st.get("model"):
+        env["OPSROOM_MODEL"] = st["model"]
+    return env
 
 
 def repo_root() -> Path:
@@ -53,11 +74,22 @@ def launcher() -> Path:
 
 
 def available() -> dict:
+    """Whether the Ops Room can actually answer, and on what.
+
+    Reports the model that is loaded rather than a name picked at build time.
+    A dock that says "GLM-4.7 · local" while llama-server is stopped is worse
+    than one that says nothing: it is a green light on a dead circuit, and the
+    first thing you learn from it is not to trust the header.
+    """
     ops = launcher()
+    st = llm.status()
     return {
         "available": ops.is_file() and os.access(ops, os.X_OK),
         "launcher": str(ops),
         "busy": busy(),
+        "llm_state": st.get("state"),
+        "model": st.get("model"),
+        "endpoint": os.environ.get("OPSROOM_LLAMA_URL") or f"{st['url']}/v1",
     }
 
 
@@ -119,7 +151,7 @@ def ask_stream(prompt: str) -> Iterator[str]:
             text=True,
             bufsize=1,
             start_new_session=True,  # own group, so cancel kills the whole tree
-            env={**os.environ, "OPSROOM_NO_COLOR": "1"},
+            env=_agent_env(),
         )
         _current = proc
 

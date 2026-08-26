@@ -215,6 +215,15 @@ def sample(llm_pid: Optional[int]) -> dict:
     return _collect()
 
 
+def total_memory() -> int:
+    """Physical RAM in bytes, read once at import. 0 if sysctl was unavailable.
+
+    Separate from the sampler because callers that only need the machine's size
+    should not have to wait for the first three-second sample to land.
+    """
+    return _TOTAL_MEM
+
+
 def get_snapshot(llm_pid: Optional[int]) -> Optional[dict]:
     """Return the latest cached snapshot (None while the first sample warms up).
 

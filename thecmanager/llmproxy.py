@@ -23,8 +23,8 @@ _STOP_MAP = {"stop": "end_turn", "length": "max_tokens", "tool_calls": "tool_use
 
 def _llama_base() -> str:
     st = llm.status()
-    port = st.get("port") or llm.DEFAULT_PORT
-    return f"http://{llm.HOST}:{port}"
+    port = st.get("port") or llm.default_port()
+    return f"http://{llm.host()}:{port}"
 
 
 # --------------------------------------------------------------------------
