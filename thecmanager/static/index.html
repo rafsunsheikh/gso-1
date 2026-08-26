@@ -196,8 +196,8 @@
               align-items:center;justify-content:center;padding:24px">
     <div style="width:100%;max-width:640px;padding:28px;background:var(--surface);
                 border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)">
-      <h2 style="font-size:1.35rem;font-weight:650;margin:0 0 6px">Welcome to GSO-1 &#128194;</h2>
-      <p style="font-size:.875rem;color:var(--text-dim);margin:0 0 20px;line-height:1.5">
+      <h2 id="setup-title" style="font-size:1.35rem;font-weight:650;margin:0 0 6px">Welcome to GSO-1 &#128194;</h2>
+      <p id="setup-intro" style="font-size:.875rem;color:var(--text-dim);margin:0 0 20px;line-height:1.5">
         Pick the folder that holds your projects. GSO-1 lists everything inside it and
         works out how each one starts. Nothing leaves your machine.
       </p>
@@ -230,7 +230,11 @@
 
       <div id="setup-chosen" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
 
-      <div style="display:flex;justify-content:flex-end">
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button id="setup-cancel"
+                style="display:none;padding:9px 16px;font-size:.875rem;border:1px solid var(--line);
+                       border-radius:8px;background:transparent;color:var(--text);cursor:pointer">
+          Cancel</button>
         <button id="setup-start"
                 style="padding:9px 18px;font-size:.875rem;font-weight:600;border:0;
                        border-radius:8px;background:var(--accent,#6366f1);color:#fff;cursor:pointer">
@@ -833,6 +837,7 @@
         { label: "Collections", items: [
           { id: "favourites", label: "Favourites", n: favCount() },
           ...rootItems,
+          { id: "addroot", label: "Add a folder\u2026", n: null },
           { id: "archived", label: "Archived", n: null, disabled: "No archive concept yet" },
         ]},
         { label: "Tools", items: [
@@ -908,6 +913,8 @@
     }
 
     function selectView(id) {
+      // Not a view: opens the folder manager over whatever is on screen.
+      if (id === "addroot") return openRootManager();
       // Ops Room is a dock, not a page, until its own view lands.
       activeView = id;
       activeType = "all";
@@ -2570,9 +2577,13 @@
     // (no #drawer-bg: the Details dock is a column, not an overlay)
     document.addEventListener("keydown", e => {
       if (e.key !== "Escape") return;
-      // The first-run picker is not dismissible: without a folder there is
-      // no dashboard to go back to.
-      if ($("#setup-modal").style.display !== "none") return;
+      // The manager can be dismissed; the first-run picker cannot, because
+      // without a folder there is no dashboard to go back to.
+      const setup = $("#setup-modal");
+      if (setup.style.display !== "none") {
+        if (setup.dataset.mode === "manage") closeRootManager();
+        return;
+      }
       const modal = $("#task-modal");
       if (modal && !modal.classList.contains("hidden")) {
         modal.classList.add("hidden");
@@ -2666,6 +2677,7 @@
         });
         renderSetupChosen();
       };
+      $("#setup-cancel").onclick = closeRootManager;
       $("#setup-start").onclick = async () => {
         // Nothing explicitly chosen: take the folder they are looking at.
         const roots = SETUP_CHOSEN.length
@@ -2691,11 +2703,57 @@
           err.style.display = "block";
           return;
         }
-        $("#setup-modal").style.display = "none";
-        releaseFocus($("#setup-modal"));
+        const managing = $("#setup-modal").dataset.mode === "manage";
+        closeRootManager();
         await load();
-        toast("Projects folder set, scanning", "success");
+        await loadOverview(true);
+        renderViews(); render();
+        toast(managing
+          ? `Now scanning ${roots.length} folder${roots.length > 1 ? "s" : ""}`
+          : "Projects folder set, scanning", "success");
       };
+    }
+
+    /**
+     * Manage project roots after setup.
+     *
+     * Deliberately the same screen as first run: browsing for a folder is the
+     * same job whether it is your first or your fourth, and a second picker
+     * would be a second thing to keep working. The only differences are that
+     * the roots you already have are pre-loaded, and it can be dismissed.
+     */
+    async function openRootManager() {
+      let st;
+      try {
+        st = await api("/api/settings/roots");
+      } catch (e) {
+        return toast("Could not read your folders", "error");
+      }
+      if (st.locked_by_env) {
+        return toast("Folders are set by MANAGER_PROJECTS_DIRS; unset it to edit them here", "error");
+      }
+      SETUP_CHOSEN = (st.roots || []).map(r => ({ label: r.label, path: r.path }));
+      HOME_DIR = st.home || HOME_DIR;
+
+      const modal = $("#setup-modal");
+      modal.dataset.mode = "manage";
+      $("#setup-title").textContent = "Your project folders";
+      $("#setup-intro").textContent =
+        "GSO-1 scans every folder listed here. Add another, or remove one you no longer want scanned.";
+      $("#setup-start").textContent = "Save";
+      $("#setup-cancel").style.display = "";
+      modal.style.display = "flex";
+      wireSetup();
+      renderSetupChosen();
+      await setupBrowse(SETUP_CHOSEN.length ? SETUP_CHOSEN[0].path : (st.home || ""));
+      trapFocus(modal);
+    }
+
+    function closeRootManager() {
+      const modal = $("#setup-modal");
+      modal.style.display = "none";
+      modal.dataset.mode = "";
+      releaseFocus(modal);
     }
 
     /** Show the picker only on a genuinely fresh install. */
