@@ -297,6 +297,36 @@ def update_app(name: str) -> JSONResponse:
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
+@app.get("/api/summary/readiness")
+def summary_readiness() -> JSONResponse:
+    """Can this machine summarise repos, and what would it cost here?
+
+    Everything a fresh install needs to know in one call: whether a model is
+    running, whether it can actually be constrained to the schema, how long a
+    summary takes *on this machine* rather than on the developer's, and how
+    many repos still have none.
+    """
+    st = llm.status()
+    running = st.get("state") == "running"
+    names = scanner.list_app_names()
+    done = summarize.count_cached()
+    tp = summarize.throughput()
+    return JSONResponse({
+        "llm": st.get("state"),
+        "model": st.get("model"),
+        "capabilities": summarize.probe() if running else {"ok": False,
+                                                           "reason": "no model running"},
+        "throughput": tp,
+        "repos": len(names),
+        "summarised": done,
+        "remaining": max(0, len(names) - done),
+        # Estimated from measured samples on this machine, or unknown until
+        # there are any. Never a number carried over from somewhere else.
+        "estimate_seconds": (tp["median_seconds"] * max(0, len(names) - done)
+                             if tp.get("median_seconds") else None),
+    })
+
+
 @app.get("/api/apps/{name}/summary")
 def app_summary(name: str) -> JSONResponse:
     """The cached summary plus the measured signals, which need no model."""
