@@ -18,7 +18,8 @@ from pydantic import BaseModel
 from . import __version__
 from . import (
     claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage,
-    modelsetup, planner, remoteauth, runner, scanner, sysmon, telegrambot, vscode,
+    modelsetup, planner, remoteauth, runner, scanner, summarize, sysmon,
+    telegrambot, vscode,
 )
 from . import scheduler
 from . import opsroom as opsroom_bridge
@@ -294,6 +295,29 @@ def update_app(name: str) -> JSONResponse:
     events.record("git" if result["ok"] else "fail", name,
                   first[0][:110] if first else ("pulled" if result["ok"] else "pull failed"))
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.get("/api/apps/{name}/summary")
+def app_summary(name: str) -> JSONResponse:
+    """The cached summary plus the measured signals, which need no model."""
+    _require(name)
+    return JSONResponse({
+        "name": name,
+        "record": summarize.get(name),
+        "signals": summarize.signals(name),
+        "llm": llm.status().get("state"),
+    })
+
+
+class SummaryBody(BaseModel):
+    force: bool = False
+
+
+@app.post("/api/apps/{name}/summary")
+def make_summary(name: str, body: SummaryBody) -> JSONResponse:
+    _require(name)
+    result = summarize.generate(name, force=body.force)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
 
 @app.get("/api/apps/{name}/branches")
