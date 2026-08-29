@@ -209,6 +209,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
       <a href="#does">What it does</a>
       <a href="./ops-room.html">Ops Room</a>
       <a href="#install">Install</a>
+      <a href="./releases.html">Releases</a>
       <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a>
       <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
     </nav>
@@ -226,7 +227,8 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
     <p class="sub">Every project you own, running, healthy, and one click from started.
        Your computer is your garrison. You are its commander. This does the staff work.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/rafsunsheikh/gso-1/releases/latest">Download {{VERSION}}</a>
+      <a class="btn btn-primary" href="https://github.com/rafsunsheikh/gso-1/releases/latest">Download GSO-1 {{VERSION}}</a>
+      <a class="btn btn-ghost" href="./releases.html">What&rsquo;s new in {{VERSION}}</a>
       <a class="btn btn-ghost" href="https://github.com/rafsunsheikh/gso-1">View source</a>
     </div>
     <p class="plat">macOS · Windows · Linux: Apache 2.0, nothing leaves your machine</p>
@@ -352,12 +354,20 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
   <div class="wrap">
     <h2 class="rv"><span class="num">04 / Deployment</span>Install</h2>
     <table class="rv">
-      <tr><th>Platform</th><th>File</th></tr>
-      <tr><td>macOS (Apple Silicon)</td><td><code>GSO-1-*-arm64.dmg</code></td></tr>
-      <tr><td>macOS (Intel)</td><td><code>GSO-1-*.dmg</code></td></tr>
-      <tr><td>Windows</td><td><code>GSO-1-Setup-*.exe</code></td></tr>
-      <tr><td>Linux</td><td><code>GSO-1-*.AppImage</code> · <code>.deb</code></td></tr>
+      <tr><th>Platform</th><th>Download {{VERSION}}</th></tr>
+      <tr><td>macOS (Apple Silicon)</td><td>
+        <a href="{{DL}}/GSO-1-{{VER}}-arm64.dmg"><code>GSO-1-{{VER}}-arm64.dmg</code></a></td></tr>
+      <tr><td>macOS (Intel)</td><td>
+        <a href="{{DL}}/GSO-1-{{VER}}.dmg"><code>GSO-1-{{VER}}.dmg</code></a></td></tr>
+      <tr><td>Windows</td><td>
+        <a href="{{DL}}/GSO-1.Setup.{{VER}}.exe"><code>GSO-1.Setup.{{VER}}.exe</code></a></td></tr>
+      <tr><td>Linux</td><td>
+        <a href="{{DL}}/GSO-1-{{VER}}-x86_64.AppImage"><code>.AppImage</code></a> &middot;
+        <a href="{{DL}}/GSO-1-{{VER}}-amd64.deb"><code>.deb</code></a></td></tr>
     </table>
+    <p class="note rv">Checksums for every file are in
+      <a href="{{DL}}/SHA256SUMS.txt"><code>SHA256SUMS.txt</code></a>.
+      Older versions are on the <a href="./releases.html">releases page</a>.</p>
     <p class="note rv">On first run GSO-1 asks which folder holds your projects. That is the whole
       setup, no Python, no terminal, no config file.</p>
     <div class="callout rv">
