@@ -296,6 +296,37 @@ def update_app(name: str) -> JSONResponse:
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
+@app.get("/api/apps/{name}/branches")
+def app_branches(name: str) -> JSONResponse:
+    _require(name)
+    return JSONResponse(git_ops.branches(scanner.app_path(name)))
+
+
+class CheckoutBody(BaseModel):
+    branch: str
+
+
+@app.post("/api/apps/{name}/checkout")
+def checkout_app(name: str, body: CheckoutBody) -> JSONResponse:
+    _require(name)
+    result = git_ops.checkout(scanner.app_path(name), body.branch)
+    events.record("git" if result["ok"] else "fail", name,
+                  (f"switched to {body.branch}" if result["ok"]
+                   else f"switch to {body.branch} failed")[:110])
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.post("/api/apps/{name}/push")
+def push_app(name: str) -> JSONResponse:
+    """Push the current branch. The only thing here that leaves the machine."""
+    _require(name)
+    result = git_ops.push(scanner.app_path(name))
+    first = (result.get("output") or "").strip().splitlines()
+    events.record("git" if result["ok"] else "fail", name,
+                  first[-1][:110] if first else ("pushed" if result["ok"] else "push failed"))
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
 # --------------------------------------------------------------------------
 # Config / overrides
 # --------------------------------------------------------------------------

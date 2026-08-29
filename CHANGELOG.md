@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- **Finish a piece of work without leaving GSO-1.** A repo's drawer now shows
+  the branch it is on, exactly which files are uncommitted, and how many
+  commits are unpushed or unpulled, with **Commit**, **Commit & push**,
+  **Push** and **Pull** beside them. Git's own output is printed verbatim when
+  something refuses, because that text is the reason.
+- **The branches of a repo, in the drawer.** Local and remote-only branches,
+  newest first, with the current one pinned to the top. Picking a remote-only
+  one creates the local tracking branch for it.
+- **Unpushed and unpulled counts in the Library list**, next to the branch, so
+  a repo that needs attention says so without being opened.
+
+### Fixed
+- **Committing from GSO-1 failed on any machine that signs commits.** The app
+  is normally started by a LaunchAgent, whose `PATH` is four directories long,
+  so git could not find `gpg` and every commit died with "cannot run gpg" while
+  the identical commit worked in a terminal. Git now runs with a login-shell
+  `PATH`, and with `GIT_TERMINAL_PROMPT=0` so a credential prompt fails
+  readably instead of hanging on a terminal that is not there.
+- **The first changed file in every repo had its name truncated by one
+  character.** `git status --porcelain` marks an unstaged change with a leading
+  space, and the output was being stripped before parsing, so ` M .DS_Store`
+  became `M .DS_Store` and the path read as `DS_Store`. This also fed the Site
+  tab's list of changed files.
 
 ## [0.1.4] — 2026-08-26
 
