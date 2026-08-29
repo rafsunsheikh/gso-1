@@ -51,6 +51,20 @@ _CATALOG = [
         "note": "Smallest one worth using for tools. Fits comfortably on 16 GB.",
     },
     {
+        "id": "qwen3-8b",
+        "repo": "unsloth/Qwen3-8B-GGUF",
+        "quant": "Q4_K_M",
+        "label": "Qwen3 8B",
+        "note": "The middle of the range. Comfortable on 16 GB.",
+    },
+    {
+        "id": "qwen3-14b",
+        "repo": "unsloth/Qwen3-14B-GGUF",
+        "quant": "Q4_K_M",
+        "label": "Qwen3 14B",
+        "note": "Fuller answers than the small models, without needing 32 GB.",
+    },
+    {
         "id": "qwen3-30b",
         "repo": "unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF",
         "quant": "UD-Q4_K_XL",
