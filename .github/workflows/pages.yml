@@ -3,7 +3,13 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["docs/**", ".github/workflows/pages.yml", "README.md"]
+    paths:
+      - "docs/**"
+      - "CHANGELOG.md"
+      - "desktop/package.json"
+      - "scripts/build_docs.py"
+      - ".github/workflows/pages.yml"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -28,16 +34,18 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      - name: Stamp the latest release into the page
+      # The old step read `git tag | head -1` on a checkout that does not fetch
+      # tags, so it always hit its v0.1.0 fallback and the site advertised a
+      # version four releases old. The version now comes from a file that is
+      # committed and is the same one the installers are built from.
+      - name: Build the site
         run: |
-          TAG=$(git tag --sort=-v:refname | head -1)
-          [ -n "$TAG" ] || TAG="v0.1.0"
-          sed -i "s/{{VERSION}}/$TAG/g" docs/index.html
-          echo "stamped $TAG"
+          python3 scripts/build_docs.py --out _site
+          grep -o 'Download GSO-1 v[0-9.]*' _site/index.html | head -1
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
 
       - id: deployment
         uses: actions/deploy-pages@v4

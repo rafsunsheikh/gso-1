@@ -162,6 +162,53 @@ To prove unattended firing, set a job's `daily_at` a minute ahead and wait.
 
 ---
 
+## Cutting a release
+
+Every published release must leave the website telling the truth about it. CI
+enforces the parts it can; this is the order to do them in.
+
+```bash
+# 1. Version. These three must agree, CI fails the build if they do not.
+#    desktop/package.json   thecmanager/__init__.py   CHANGELOG.md heading
+#
+# 2. Close the changelog: rename "## [Unreleased]" to "## [X.Y.Z] — <date>"
+#    and open a fresh empty Unreleased above it.
+#
+# 3. Rebuild the website's release notes from it. Never hand-edit the page.
+python3 scripts/build_docs.py
+python3 scripts/build_docs.py --check     # what CI runs
+
+# 4. Snapshot, verify, promote the local release.
+./.venv/bin/python -m supervisor release create
+./.venv/bin/python -m supervisor verify latest
+./.venv/bin/python -m supervisor promote latest
+
+# 5. Commit, tag, push. The tag is what triggers the installer build.
+git commit -am "release: vX.Y.Z — <what changed>"
+git tag -a vX.Y.Z -m "GSO-1 vX.Y.Z"
+git push origin main && git push origin vX.Y.Z
+
+# 6. The Release workflow builds macOS/Windows/Linux installers and creates a
+#    DRAFT release. Nothing is public until a human publishes it:
+gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh release view vX.Y.Z            # check the assets and notes
+gh release edit vX.Y.Z --draft=false
+
+# 7. Pushing main also redeploys the site, which now advertises the new
+#    version and shows its notes. Confirm:
+curl -s https://rafsunsheikh.github.io/gso-1/ | grep -o 'Download GSO-1 v[0-9.]*'
+```
+
+**Why the site is generated, not edited.** The landing page used to be stamped
+with `git tag | head -1` in CI, on a checkout that does not fetch tags, so it
+fell back to `v0.1.0` and advertised a version four releases old to everyone who
+visited. `scripts/build_docs.py` derives everything from files that are
+committed, and `--check` in CI fails the build if `docs/releases.html` does not
+match `CHANGELOG.md`. Update the changelog and the website follows; forget to
+rebuild and the pull request tells you.
+
+---
+
 ## Gotchas
 
 - **A running GSO-1 does not pick up code changes.** Restart it, or build and
@@ -176,6 +223,11 @@ To prove unattended firing, set a job's `daily_at` a minute ahead and wait.
   `TAVILY_API_KEY`, `MANAGER_APPROVAL_CHAT`.
 - **Only one thing on 8420.** The desktop app adopts an existing server rather
   than fighting it.
+- **A tag push does not publish anything.** `release.yml` sets `draft: true`
+  on purpose; the installers exist but nobody can download them until
+  `gh release edit vX.Y.Z --draft=false`.
+- **Never hand-edit `docs/releases.html`.** It is generated from
+  `CHANGELOG.md`; your edit will be overwritten and CI will fail first.
 
 ## When something is wrong
 

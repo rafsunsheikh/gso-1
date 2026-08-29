@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release notes &middot; GSO-1</title>
+<meta name="description" content="Every GSO-1 release: what was added, what was fixed, what changed, and what was removed.">
+<meta property="og:title" content="GSO-1 release notes">
+<meta property="og:description" content="Every GSO-1 release, what changed in it, and where to download it.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128193;</text></svg>">
+<style>
+:root{
+  --bg:#07070c; --bg-2:#0b0b13; --panel:#11111c; --panel-2:#161624;
+  --line:#23233a; --line-2:#2e2e4a;
+  --ink:#eef0f6; --dim:#9ea6bd; --faint:#6b7390;
+  --accent:#6f6af8; --accent-2:#9b97ff;
+  --ok:#3ddc97; --warn:#f5b642; --bad:#ff6b6b;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  --maxw:820px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.87em;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#cfd3e6}
+
+.topbar{position:fixed;inset:0 0 auto 0;z-index:50;height:52px;display:flex;
+  align-items:center;justify-content:center;background:rgba(7,7,12,.72);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;justify-content:space-between;width:100%}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 0 4px rgba(61,220,151,.14)}
+.topnav{display:flex;gap:22px;font-size:.85rem;color:var(--dim)}
+.topnav a{color:var(--dim)}
+.topnav a:hover{color:var(--ink);text-decoration:none}
+.topnav a[aria-current]{color:var(--ink)}
+@media(max-width:720px){.topnav{display:none}}
+
+header.head{padding:118px 0 34px;border-bottom:1px solid var(--line)}
+.eyebrow{font:600 11px var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);display:block;margin-bottom:12px}
+h1{margin:0 0 10px;font-size:clamp(30px,5vw,42px);letter-spacing:-.02em}
+.lede{margin:0;color:var(--dim);max-width:60ch}
+
+main{padding:10px 0 90px}
+.rel{padding:36px 0;border-bottom:1px solid var(--line)}
+.rel:last-child{border-bottom:0}
+.rel-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.rel-v{margin:0;font-size:1.5rem;letter-spacing:-.02em}
+.rel-date{font:500 12px var(--mono);color:var(--faint)}
+.rel-tag{font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border-radius:999px;border:1px solid var(--line-2)}
+.rel-tag-now{color:var(--ok);border-color:rgba(61,220,151,.4);background:rgba(61,220,151,.1)}
+.rel-tag-soft{color:var(--faint)}
+.rel-dl{margin-left:auto;font-size:.85rem;white-space:nowrap}
+.rel-intro{color:var(--dim);margin:10px 0 0;max-width:70ch}
+.rel-s{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  margin:24px 0 8px;color:var(--accent-2)}
+.rel-s[data-tone="ok"]{color:var(--ok)}
+.rel-s[data-tone="warn"]{color:var(--warn)}
+.rel-s[data-tone="bad"]{color:var(--bad)}
+.rel-list{margin:0;padding-left:20px}
+.rel-list li{margin:0 0 9px;color:var(--dim);max-width:74ch}
+.rel-list li strong{color:var(--ink);font-weight:600}
+
+.foot{padding:30px 0 60px;color:var(--faint);font-size:.85rem;border-top:1px solid var(--line)}
+.foot a{color:var(--dim)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <span class="brand"><span class="dot"></span> GSO-1</span>
+    <nav class="topnav">
+      <a href="./index.html#idea">The idea</a>
+      <a href="./index.html#does">What it does</a>
+      <a href="./ops-room.html">Ops Room</a>
+      <a href="./index.html#install">Install</a>
+      <a href="./releases.html" aria-current="page">Releases</a>
+      <a href="https://github.com/rafsunsheikh/gso-1">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<header class="head">
+  <div class="wrap">
+    <span class="eyebrow">Change of orders</span>
+    <h1>Release notes</h1>
+    <p class="lede">Every version of GSO-1, what it added, what it fixed, and what it took
+      away. The newest release is <strong>v0.1.4</strong>,
+      <a href="https://github.com/rafsunsheikh/gso-1/releases/latest">available for macOS, Windows and Linux</a>.</p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+<article class="rel" id="v0.1.4">
+<div class="rel-head">
+<h2 class="rel-v">0.1.4</h2>
+<span class="rel-date">2026-08-26</span>
+<span class="rel-tag rel-tag-now">current</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.4">Downloads &rarr;</a>
+</div>
+<h3 class="rel-s" data-tone="ok">Added</h3>
+<ul class="rel-list">
+<li><strong>GSO-1 can get you a local model from nothing.</strong> With llama.cpp missing, the Local LLM tab now shows the install command for your package manager and, on a machine with Homebrew, offers to run it and streams the output. With no <code>.gguf</code> files, it offers a short list of tool-capable models sized against your actual RAM, resolved against Hugging Face so the sizes are real, and downloads one into the folder it already scans. Downloads resume after an interruption. Both are explicit button presses behind a confirmation; nothing installs or downloads because you opened a tab.</li>
+<li><strong>The Local LLM tab remembers how each model was started.</strong> Context window, reasoning format, sampling, cache type: every flag is saved per model and restored when you pick it, so loading a model is one click instead of fifteen fields. <strong>Start again</strong> repeats the last launch verbatim.</li>
+<li><strong>A "Where things live" section on the Local LLM tab</strong> for the <code>llama-server</code> binary and the folders scanned for <code>.gguf</code> files. Changes apply to the next scan with no restart.</li>
+<li><strong>Settings names the file that pinned a value.</strong> A setting locked by an exported variable now reads "set in ~/run_manager.sh" rather than "set by your environment", because the old wording told you to unset something without telling you where it was set.</li>
+</ul>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>The Ops Room header claimed a model was connected when nothing was running.</strong> It read <code>GLM-4.7 · local</code> from a hardcoded string, and both status dots were painted green unconditionally. It now reports the model that is actually loaded, or says so when there is none.</li>
+<li><strong>The Library search box was partly covered by the filter chips.</strong> The chip row bled upward 22px into a 16px gap, and painted over the bottom of the input. Search, chips and the column header are now one flush sticky stack, so the search box also stays put instead of scrolling away in a long list.</li>
+<li><strong>The Site tab said "not found at ." when nothing was configured.</strong> Unset and set-but-missing are now different messages, and both link to the setting instead of asking you to restart.</li>
+<li><strong>Model folders you never chose were listed as if you had.</strong> The built-in guesses are labelled as guesses, and folders that do not exist say so.</li>
+</ul>
+<h3 class="rel-s" data-tone="accent">Changed</h3>
+<ul class="rel-list">
+<li><strong>The Ops Room agent follows the running server.</strong> <code>OPSROOM_LLAMA_URL</code> and <code>OPSROOM_MODEL</code> default to the endpoint and model GSO-1 has loaded, instead of being two fields to keep in sync with the Local LLM tab by hand. Export either one to point the agent somewhere else.</li>
+</ul>
+<h3 class="rel-s" data-tone="bad">Removed</h3>
+<ul class="rel-list">
+<li><strong>The Settings → Local LLM tab.</strong> Everything in it moved to the Local LLM tab, which now owns the model end to end.</li>
+<li><strong>The Chat tab.</strong> It duplicated the Ops Room, which is docked on every view, talks to llama-server directly rather than through the Anthropic shim, and already knows your project roots. Existing <code>chats.json</code> is left on disk.</li>
+<li><strong>The Archived nav item</strong>, a placeholder for a concept that does not exist.</li>
+</ul>
+</article>
+
+<article class="rel" id="v0.1.3">
+<div class="rel-head">
+<h2 class="rel-v">0.1.3</h2>
+<span class="rel-date">2026-08-26</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.3">Downloads &rarr;</a>
+</div>
+<h3 class="rel-s" data-tone="accent">Changed</h3>
+<ul class="rel-list">
+<li><strong>First run always asks which folder holds your projects.</strong> It previously adopted <code>~/Projects</code> without asking whenever that folder happened to exist, which meant a new install could open on a list the user never chose and had no obvious way to change. The picker now opens on a suggested folder, so the common case is still one click, but it is a suggestion rather than a decision. Only an environment override or a saved choice counts as an answer.</li>
+</ul>
+</article>
+
+<article class="rel" id="v0.1.2">
+<div class="rel-head">
+<h2 class="rel-v">0.1.2</h2>
+<span class="rel-date">2026-08-26</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.2">Downloads &rarr;</a>
+</div>
+<p class="rel-intro">GSO-1 can now be set up entirely from the application. Nothing in this release requires a terminal.</p>
+<h3 class="rel-s" data-tone="ok">Added</h3>
+<ul class="rel-list">
+<li><strong>Settings</strong>, with five tabs: project folders, Telegram, Local LLM, phone access, and the rest. Values are saved to <code>settings.json</code> and injected into the environment at startup, which is the only way a GUI can configure things that are read from <code>os.environ</code> at import time. A real environment variable still wins and is shown as read-only rather than accepting an edit that would never take effect.</li>
+<li><strong>Add and remove project folders</strong> from the app. The Library could previously only ever show the folders chosen at first run; adding another meant setting <code>MANAGER_PROJECTS_DIRS</code> and restarting, which a packaged install has no obvious way to do.</li>
+<li><strong>A Telegram test button.</strong> Configuring a bot is four steps across two apps and the usual failure is silent: a good token with the wrong chat id, and nothing ever arrives.</li>
+<li><strong>Restart from the app</strong>, since saved settings are read at startup. The restart re-execs in place and keeps the pid, so a supervisor or LaunchAgent watching the process does not see it die.</li>
+</ul>
+<h3 class="rel-s" data-tone="ok">Security</h3>
+<ul class="rel-list">
+<li><code>settings.json</code> is written <code>0600</code>. It holds the bot token, the phone access token and any API keys set in Settings, and the mode is applied before the rename so there is no instant where a complete file of secrets is world-readable.</li>
+<li>Secrets are write-only from the browser: the server reports whether one is set, never what it is.</li>
+</ul>
+<h3 class="rel-s" data-tone="accent">Documentation</h3>
+<ul class="rel-list">
+<li>The macOS install instructions described a route Apple removed in macOS 15. Right-click and Open no longer works; the dialog offers only Done and Move to Bin. Every instruction now describes Privacy &amp; Security → <strong>Open Anyway</strong>.</li>
+<li>A page for <a href="https://rafsunsheikh.github.io/gso-1/ops-room.html">the Ops Room</a>: all ten agent tools, the sandbox model, and how to connect a local model.</li>
+<li>The git and GitHub answer, which is that there is nothing to connect: GSO-1 uses the <code>git</code> already on your machine and stores no credentials of its own.</li>
+</ul>
+</article>
+
+<article class="rel" id="v0.1.1">
+<div class="rel-head">
+<h2 class="rel-v">0.1.1</h2>
+<span class="rel-date">2026-08-26</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.1">Downloads &rarr;</a>
+</div>
+<p class="rel-intro">Both of these were found by downloading the v0.1.0 installer and running it, which is the only test that would have caught either.</p>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>macOS builds reported themselves as damaged.</strong> electron-builder copies the frozen backend in after Electron's own code signature is applied, which invalidates it, and with no signing identity nothing put it back. An invalid signature is worse than no signature: macOS refuses the app outright rather than offering the usual unidentified-developer prompt, and right-clicking to Open cannot get past it. Builds are now ad-hoc signed after packing, and the hook verifies its own work and fails the build rather than shipping a signature that does not validate.</li>
+<li><strong>Application state was written into Electron's browser profile.</strong> The packaged app pointed <code>MANAGER_DATA_DIR</code> at Electron's <code>userData</code> directory, so the registry, event log and job state sat interleaved with Chromium's cookies, caches and lock files. State now lives in a <code>data</code> subdirectory, where clearing a cache cannot take the registry with it.</li>
+</ul>
+<h3 class="rel-s" data-tone="accent">Changed</h3>
+<ul class="rel-list">
+<li>The install instructions describe what actually happens on macOS: right-click and Open rather than double-click, and what "damaged" means if it appears.</li>
+</ul>
+</article>
+
+<article class="rel" id="v0.1.0">
+<div class="rel-head">
+<h2 class="rel-v">0.1.0</h2>
+<span class="rel-date">2026-08-25</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.0">Downloads &rarr;</a>
+</div>
+<p class="rel-intro">The first public release: a dashboard that finds every app in your projects folder and runs it, on your machine, not just on the one it was written on.</p>
+<h3 class="rel-s" data-tone="accent">Packaging &amp; distribution</h3>
+<ul class="rel-list">
+<li>Installers for macOS (<code>.dmg</code>, Apple Silicon and Intel), Windows (NSIS), and Linux (AppImage, <code>.deb</code>). The Python backend is frozen with PyInstaller and bundled, so <strong>no Python is required</strong> to run GSO-1.</li>
+<li>First-run screen: pick the folder holding your projects, browse or type a path, add several roots. No config file, no terminal.</li>
+<li>State is stored per platform (<code>Application Support</code>, <code>%APPDATA%</code>, <code>XDG_DATA_HOME</code>) when packaged, and beside the code in a source checkout.</li>
+<li>Apache-2.0 license with <code>NOTICE</code>, plus <code>CONTRIBUTING.md</code>, <code>CODE_OF_CONDUCT.md</code>, <code>SECURITY.md</code>, and an <code>.env.example</code> documenting every configuration variable.</li>
+</ul>
+<h3 class="rel-s" data-tone="ok">Security</h3>
+<ul class="rel-list">
+<li>Remote-auth public paths are matched on a path boundary rather than as a bare string prefix. Previously a route named <code>/models</code> or <code>/metrics</code> would have been reachable from the network without a token; no such route existed, but the gate was one route name away from opening.</li>
+</ul>
+<h3 class="rel-s" data-tone="warn">Fixed, portability</h3>
+<ul class="rel-list">
+<li>The dashboard abbreviated paths against a hardcoded home directory; the server now reports the real one via <code>/api/apps</code>.</li>
+<li>The greeting, sidebar and avatars were hardcoded to one name; they now come from the OS account record.</li>
+<li>The Jekyll CMS defaulted to one specific personal repo; <code>MANAGER_SITE_DIR</code> now has no default and the CMS stays off until it names a real checkout.</li>
+<li>Ops Room's sandbox root, the only directory the agent may write to, defaulted to a fixed <code>~/Projects/…</code> path; it is now resolved from the sidecar's own install location.</li>
+<li>Ops Room's readable roots named a specific work folder; they now follow <code>MANAGER_PROJECTS_DIRS</code>.</li>
+</ul>
+<h3 class="rel-s" data-tone="accent">Registry &amp; launcher</h3>
+<ul class="rel-list">
+<li>Scans every top-level directory across one or more project roots.</li>
+<li>Start / stop any app in its own process group, with logs streaming to <code>data/logs/&lt;app&gt;.log</code>.</li>
+<li>Health tracking, probes the app's port and reports healthy, starting, crashed, or stopped.</li>
+<li>Port-conflict detection before launch.</li>
+<li>Auto-detected run and setup commands for explicit <code>run.sh</code> / <code>Makefile</code>, Node, Django, Streamlit, FastAPI, Flask, plain Python, Rust, Go, and static sites. Per-app overrides live in <code>data/registry.json</code> and are editable from the UI.</li>
+<li>Git panel per app: branch, dirty file count, ahead/behind, last commit, and remote, plus <code>git pull --ff-only</code> from the dashboard.</li>
+<li>Descriptions pulled from the README's first paragraph or <code>package.json</code>.</li>
+<li>Full UI rebuild against the redesign handoff: design tokens, light and dark themes, a sidebar shell, the Library view with a status strip, a Details dock, and per-view chrome.</li>
+<li>Ops Room as a dock column with its own overview endpoint.</li>
+<li>Works offline, keyboard-accessible, and honest about failure states.</li>
+<li>Ops Room: a pi-based agent sidecar with an HTTP bridge.</li>
+<li>Claude bridge with an MCP permission server, read-only tools run automatically, writes and commands require explicit Allow/Deny.</li>
+<li>Anthropic→llama proxy (<code>/v1/messages</code>) so agent sessions can run entirely on a local <code>llama-server</code>.</li>
+<li>Recurring scheduled jobs.</li>
+<li>Telegram approvals and an activity monitor with kanban boards.</li>
+<li>Supervisor with versioned release snapshots, a health gate, and rollback.</li>
+<li>Electron desktop shell that owns the window and child lifecycle, and leaves no orphaned processes on quit.</li>
+<li>iPhone companion at <code>/m</code>, gated behind a shared token for remote access.</li>
+<li>launchd integration for start-on-login and crash restart.</li>
+</ul>
+</article>
+  </div>
+</main>
+
+<div class="foot">
+  <div class="wrap">
+    Generated from <a href="https://github.com/rafsunsheikh/gso-1/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
+    &middot; <a href="./index.html">Back to the front page</a>
+  </div>
+</div>
+
+</body>
+</html>

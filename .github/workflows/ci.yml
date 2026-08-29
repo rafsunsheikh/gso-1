@@ -104,3 +104,23 @@ jobs:
             exit 1
           fi
           echo "clean"
+
+      # The website's release notes are generated from CHANGELOG.md. Checking
+      # them here is what turns "remember to update the site" into something
+      # that cannot be forgotten: change the changelog without rebuilding and
+      # the build says so, on the pull request, before it ships.
+      - name: Release notes page is up to date
+        run: |
+          python3 scripts/build_docs.py --check
+
+      - name: Shipped version matches the changelog
+        run: |
+          PKG=$(python3 -c "import json;print(json.load(open('desktop/package.json'))['version'])")
+          PY=$(python3 -c "import re;print(re.search(r'\"([^\"]+)\"',open('thecmanager/__init__.py').read().split('__version__ =')[1]).group(1))")
+          LOG=$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] ')
+          echo "package.json=$PKG  __init__=$PY  CHANGELOG=$LOG"
+          if [ "$PKG" != "$PY" ] || [ "$PKG" != "$LOG" ]; then
+            echo "::error::version mismatch; these three must agree"
+            exit 1
+          fi
+          echo "clean"
