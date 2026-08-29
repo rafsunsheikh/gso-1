@@ -517,19 +517,68 @@ def _complete(prompt: str, timeout: int) -> tuple[Optional[dict], str]:
 
 # -------------------------------------------------------------- the cache
 
-def _load() -> dict:
+# The file holds two different things: a summary per repo, and how fast each
+# model has proven to be here. They are separated because summaries are keyed
+# by repo and would erase the timing history every time somebody switched
+# models, which is precisely the evidence the recommendation needs.
+def _read_file() -> dict:
     try:
         d = json.loads(_FILE.read_text())
-        return d if isinstance(d, dict) else {}
     except (OSError, ValueError):
-        return {}
+        return {"version": 2, "repos": {}, "perf": {}}
+    if not isinstance(d, dict):
+        return {"version": 2, "repos": {}, "perf": {}}
+    if "repos" not in d:                     # the original flat {name: record}
+        # Timings already sitting in those records are real measurements of
+        # this machine; seed the per-model history from them rather than
+        # starting the recommendation blind.
+        perf: dict = {}
+        for rec in d.values():
+            if isinstance(rec, dict) and rec.get("model") and rec.get("seconds"):
+                perf.setdefault(rec["model"], []).append(rec["seconds"])
+        return {"version": 2, "repos": d, "perf": perf}
+    d.setdefault("repos", {})
+    d.setdefault("perf", {})
+    return d
 
 
-def _save(data: dict) -> None:
+def _write_file(data: dict) -> None:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = _FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, indent=1))
     tmp.replace(_FILE)
+
+
+def _load() -> dict:
+    return _read_file()["repos"]
+
+
+def _save(repos: dict) -> None:
+    data = _read_file()
+    data["repos"] = repos
+    _write_file(data)
+
+
+_PERF_KEEP = 25
+
+
+def record_perf(model: str, seconds: float) -> None:
+    """Remember how long this model took here, independently of any repo."""
+    if not model or seconds <= 0:
+        return
+    with _lock:
+        data = _read_file()
+        perf = data.setdefault("perf", {})
+        samples = list(perf.get(model) or [])
+        samples.append(round(seconds, 1))
+        perf[model] = samples[-_PERF_KEEP:]
+        _write_file(data)
+
+
+def perf_for(model: str) -> Optional[float]:
+    """Median seconds per summary for a model on this machine, if known."""
+    samples = sorted(_read_file().get("perf", {}).get(model) or [])
+    return samples[len(samples) // 2] if samples else None
 
 
 def _revision(name: str) -> str:
@@ -570,6 +619,176 @@ def throughput() -> dict:
     if not seen:
         return {"samples": 0, "median_seconds": None}
     return {"samples": len(seen), "median_seconds": round(seen[len(seen) // 2], 1)}
+
+
+# ------------------------------------------------------- which model to use
+#
+# A stranger installing GSO-1 cannot be expected to know that a 17.5 GB model
+# is a bad idea on their laptop. This works it out from their machine.
+#
+# Two different questions, deliberately kept apart:
+#
+#   * What can this machine run at all? That follows from total memory and is
+#     stable, so it is what the recommendation is based on.
+#   * What can it run *right now*? That depends on what else is open, and it is
+#     a warning rather than a different answer. On the machine this was written
+#     on, a 17.5 GB model fitted in 32 GB comfortably on paper and still drove
+#     swap from 2.6 GB to 15.2 GB, because a browser and an editor had already
+#     taken 33 GB.
+
+# Weights are not the whole cost: the KV cache, the runtime and the graph all
+# want memory too, and a machine that is exactly full is a machine that swaps.
+_KV_AND_OVERHEAD_GB = 1.5
+
+# These thresholds are calibrated against a measurement, not chosen for
+# roundness. A 17.5 GB model on a 34.4 GB machine is 51% of memory, and it drove
+# swap from 2.6 GB to 15.2 GB because a browser and an editor already held the
+# rest. So half the machine is the point at which a model stops being free and
+# starts competing, and 70% is where it wins the competition.
+_COMFORTABLE = 0.50
+_TIGHT = 0.70
+
+
+def _fit(size_gb: float, total_gb: float) -> str:
+    if not total_gb:
+        return "unknown"
+    need = size_gb + _KV_AND_OVERHEAD_GB
+    if need <= total_gb * _COMFORTABLE:
+        return "comfortable"
+    if need <= total_gb * _TIGHT:
+        return "tight"
+    return "too large"
+
+
+def recommend(repo_count: Optional[int] = None,
+              total_bytes: Optional[int] = None) -> dict:
+    """Which model to summarise with here, and what it would cost.
+
+    Prefers a model already on disk: asking somebody to download 17 GB before
+    they can find out whether they want the feature is not a recommendation,
+    it is a toll. Among the models that fit, it picks the largest, because the
+    difference between a 2.5 GB and a 17.5 GB model in testing was not speed,
+    it was whether `stack` and `entry_points` came back filled in at all.
+    """
+    from . import modelsetup, sysmon        # local: avoids an import cycle
+
+    total_b = total_bytes if total_bytes is not None else sysmon.total_memory()
+    total_gb = round(total_b / 1e9, 1) if total_b else 0.0
+    # get_snapshot returns nothing until the background sampler has warmed up,
+    # and a recommendation that silently reports 0 GB free would never warn.
+    snap = sysmon.get_snapshot(None)
+    if not snap:
+        try:
+            snap = sysmon.sample(None)
+        except Exception:      # noqa: BLE001
+            snap = {}
+    ram = (snap or {}).get("ram") or {}
+    free_b = ram.get("free_bytes") or 0
+    free_gb = round(free_b / 1e9, 1) if free_b else None
+
+    options: list[dict] = []
+    seen: set[str] = set()
+
+    for m in llm.list_models():
+        options.append({
+            "name": m["name"], "size_gb": m["size_gb"], "path": m["path"],
+            "source": "on disk",
+            "fit": _fit(m["size_gb"], total_gb) if total_gb else "unknown",
+            "measured_seconds": perf_for(m["name"]),
+        })
+        seen.add(m["name"])
+
+    if total_gb:
+        try:
+            for c in modelsetup.catalog(total_b).get("models", []):
+                if c.get("on_disk") or c["file"].rsplit(".", 1)[0] in seen:
+                    continue
+                options.append({
+                    "name": c["label"], "size_gb": c["size_gb"],
+                    "id": c["id"], "source": "download",
+                    "fit": _fit(c["size_gb"], total_gb),
+                    "measured_seconds": None,
+                })
+        except Exception:      # noqa: BLE001, an offline machine still gets a
+            pass               # recommendation from what it already has
+
+    # A measured model anchors the estimate for the unmeasured ones. Time does
+    # not scale linearly with size, so this is explicitly an estimate and is
+    # labelled as one wherever it is shown.
+    anchor = next(((o["size_gb"], o["measured_seconds"]) for o in options
+                   if o.get("measured_seconds")), None)
+    n = repo_count if repo_count is not None else len(scanner.list_app_names())
+    for o in options:
+        secs = o.get("measured_seconds")
+        if secs is None and anchor and anchor[0] > 0:
+            secs = anchor[1] * (o["size_gb"] / anchor[0]) ** 0.6
+            o["estimated"] = True
+        if secs:
+            o["minutes_for_all"] = round(secs * n / 60)
+
+    rank = {"comfortable": 0, "tight": 1, "unknown": 2, "too large": 3}
+
+    def by_size(group: list[dict]) -> list[dict]:
+        return sorted(group, key=lambda o: -o["size_gb"])
+
+    comfortable = by_size([o for o in options if o["fit"] == "comfortable"])
+    tight = by_size([o for o in options if o["fit"] == "tight"])
+
+    def best_of(group: list[dict]) -> Optional[dict]:
+        """Largest that fits, unless something already downloaded is close.
+
+        Sparing somebody a 9 GB download is worth a little capability, but not
+        much: an early version preferred anything on disk and ended up
+        recommending a 2.5 GB model on a 24 GB machine, where the small model
+        had already been measured returning an empty `stack` on every repo.
+        """
+        if not group:
+            return None
+        best = group[0]
+        on_disk = next((o for o in group if o["source"] == "on disk"), None)
+        if on_disk and on_disk["size_gb"] >= best["size_gb"] * 0.6:
+            return on_disk
+        return best
+
+    pick = best_of(comfortable) or best_of(tight)
+
+    # Bigger models did not summarise faster in testing, they summarised
+    # *fuller*: the 2.5 GB model returned an empty `stack` and no entry points
+    # on every repo the 17.5 GB one described properly. So when the safe choice
+    # is a small one, say what the trade is instead of hiding it.
+    alternative = None
+    # The smallest upgrade, not the biggest: this is already the risky column,
+    # so the least memory that buys fuller output is the honest suggestion.
+    bigger = sorted((o for o in tight if o["size_gb"] > pick["size_gb"] * 2),
+                    key=lambda o: o["size_gb"]) if pick else []
+    if pick and pick["size_gb"] < 8 and bigger:
+        alternative = dict(bigger[0], note=(
+            "Fuller summaries, but it will use most of the memory on this "
+            "machine while it runs."))
+
+    why = None
+    if pick:
+        where = "already on disk" if pick["source"] == "on disk" else "to download"
+        why = (f"{pick['size_gb']} GB {where}, which is "
+               f"{'a comfortable fit for' if pick['fit'] == 'comfortable' else 'a tight fit on'} "
+               f"{total_gb} GB of memory")
+    elif total_gb:
+        why = (f"Nothing available fits in {total_gb} GB. A smaller "
+               "quantisation would, or summarise a handful of repos at a time.")
+
+    warning = None
+    need = (pick["size_gb"] + _KV_AND_OVERHEAD_GB) if pick else 0
+    if pick and free_gb is not None and need > free_gb:
+        warning = (f"Only {free_gb} GB is free at the moment, so loading this "
+                   f"({need:.1f} GB) will push other applications into swap. It "
+                   "still works, just slowly; closing a few things first helps.")
+
+    return {
+        "total_gb": total_gb, "free_gb": free_gb, "repos": n,
+        "recommended": pick, "alternative": alternative,
+        "why": why, "warning": warning,
+        "options": sorted(options, key=lambda o: (rank[o["fit"]], -o["size_gb"])),
+    }
 
 
 def get(name: str) -> Optional[dict]:
@@ -637,6 +856,8 @@ def generate(name: str, force: bool = False) -> dict:
     summary, err = _complete(_prompt(ev), timeout_for(name))
     if summary is None:
         return {"ok": False, "message": err}
-    rec = put(name, summary, sha, ev_hash, time.time() - t0,
-              llm.status().get("model") or "")
+    took = time.time() - t0
+    model = llm.status().get("model") or ""
+    record_perf(model, took)
+    rec = put(name, summary, sha, ev_hash, took, model)
     return {"ok": True, "cached": False, "record": rec}

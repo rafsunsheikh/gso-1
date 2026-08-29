@@ -327,6 +327,17 @@ def summary_readiness() -> JSONResponse:
     })
 
 
+@app.get("/api/summary/models")
+def summary_models() -> JSONResponse:
+    """Which model to summarise with on this machine, and what it would cost.
+
+    Separate from readiness because it resolves the catalog against Hugging
+    Face, which is slow the first time and cached afterwards; readiness has to
+    stay quick enough to call whenever a drawer opens.
+    """
+    return JSONResponse(summarize.recommend())
+
+
 @app.get("/api/apps/{name}/summary")
 def app_summary(name: str) -> JSONResponse:
     """The cached summary plus the measured signals, which need no model."""
