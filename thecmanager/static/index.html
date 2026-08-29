@@ -1054,7 +1054,13 @@
           <span class="lib-state">${stateDot ? `<span class="gso-dot${a.running ? " gso-pulse" : ""}" data-state="${stateDot}" aria-hidden="true"></span>` : ""}${state}${a.port ? ` :${a.port}` : ""}</span>
           <span class="lib-git" data-dirty="${g && g.dirty ? "1" : "0"}">${
             !OVERVIEW ? `<span class="lib-skel-bar" style="width:70%"></span>`
-              : g ? `${g.dirty ? `${g.changed} changed` : "clean"} · ${escapeHtml(g.branch || "detached")}`
+              : g ? `${g.dirty ? `${g.changed} changed` : "clean"} · ${escapeHtml(g.branch || "detached")}${
+                  // Unpushed and unpulled commits are the other half of "is this
+                  // repo settled?", and the sweep already knows both.
+                  g.ahead ? `<span class="lib-sync" data-d="up" title="${g.ahead} commit${
+                    g.ahead === 1 ? "" : "s"} not pushed">&#8593;${g.ahead}</span>` : ""}${
+                  g.behind ? `<span class="lib-sync" data-d="down" title="${g.behind} commit${
+                    g.behind === 1 ? "" : "s"} not pulled">&#8595;${g.behind}</span>` : ""}`
               : `<span class="lib-muted">not a repo</span>`}</span>
           ${act}
         </div>`;
@@ -2643,18 +2649,52 @@
         </div>
       </div>`;
 
-      // 2, git.
+      // 2, git. The whole point of this card is that you can finish a piece of
+      // work from here: see the branch, see what is uncommitted, commit it,
+      // push it, or move to another branch, without a terminal.
+      const files = (g.changed_files || []);
       const git = `<div class="dk-card">
         <div class="dk-label">Git</div>
         ${g.is_repo ? `
-          <div class="dk-row">Branch<b>${escapeHtml(g.branch || "?")}</b></div>
+          <div class="dk-row">Branch<b>
+            <button id="d-branchbtn" class="dk-branch" aria-expanded="false"
+              title="Switch branch">${escapeHtml(g.branch || "?")} <span aria-hidden="true">&#9662;</span></button>
+          </b></div>
+          <div id="d-branches" class="dk-branches hidden"></div>
           <div class="dk-row">Status<b data-tone="${g.dirty ? "warn" : "live"}">${
-            g.dirty ? `${g.changed_count} changed` : "clean"}</b></div>
-          <div class="dk-row">Ahead / behind<b>${g.ahead} / ${g.behind}</b></div>
-          <div class="dk-div"></div>
+            g.dirty ? `${g.changed_count} uncommitted` : "clean"}</b></div>
+          <div class="dk-row">Ahead / behind<b data-tone="${g.ahead ? "warn" : ""}">${g.ahead} / ${g.behind}</b></div>
           <div class="dk-commit">${escapeHtml((g.last_commit || "").slice(0, 120))}</div>
-          <div class="dk-actions" style="margin-top:9px">
-            <button id="d-update" class="dk-btn" data-tone="outline" style="flex:1">Pull</button>
+
+          ${g.dirty ? `
+            <div class="dk-div"></div>
+            <button id="d-filesbtn" class="dk-link" aria-expanded="false">
+              Show the ${g.changed_count} file${g.changed_count === 1 ? "" : "s"} that would be committed</button>
+            <div id="d-files" class="dk-files hidden">${files.map(f => {
+              // Porcelain: two status columns, then the path.
+              const code = f.slice(0, 2).trim() || "??";
+              const name = f.slice(3);
+              return `<div class="dk-file"><span class="dk-file-x" data-x="${escapeHtml(code)}"
+                >${escapeHtml(code)}</span>${escapeHtml(name)}</div>`;
+            }).join("")}${g.changed_count > files.length
+              ? `<div class="dk-file" style="opacity:.6">and ${g.changed_count - files.length} more</div>` : ""}</div>
+            <input id="d-msg" class="dk-input" placeholder="Commit message"
+              value="" autocomplete="off" spellcheck="false"/>
+            <div class="dk-actions" style="margin-top:8px">
+              <button id="d-commit" class="dk-btn" style="flex:1">Commit</button>
+              <button id="d-commitpush" class="dk-btn" data-tone="outline" style="flex:1">Commit &amp; push</button>
+            </div>
+            <div class="dk-hint">Everything listed above is staged; GSO-1 does not commit a subset.</div>
+          ` : ""}
+
+          <div class="dk-div"></div>
+          <div class="dk-actions">
+            <button id="d-update" class="dk-btn" data-tone="outline" style="flex:1"
+              title="git pull --ff-only">Pull${g.behind ? ` ${g.behind}` : ""}</button>
+            <button id="d-push" class="dk-btn" data-tone="outline" style="flex:1"
+              ${g.ahead ? "" : "disabled"} title="${g.ahead
+                ? `Push ${g.ahead} commit${g.ahead === 1 ? "" : "s"} to ${escapeHtml(g.remote || "origin")}`
+                : "Nothing to push"}">Push${g.ahead ? ` ${g.ahead}` : ""}</button>
           </div>
           <div id="git-out"></div>`
         : `<div class="dk-row">Not a git repository.</div>`}
@@ -2762,12 +2802,134 @@
         failLog.textContent = lines || "No log output was captured.";
       }).catch(() => { failLog.textContent = "Could not read the log."; });
 
+      // ---- git: pull, push, commit, switch branch -----------------------
+      //
+      // Every one of these prints git's own output into the card rather than a
+      // tidied summary. When a pull refuses or a push is rejected, the reason
+      // is in that text, and paraphrasing it is how a user ends up in a
+      // terminal anyway.
+      const gitOut = (text, ok) => {
+        const box = $("#git-out");
+        if (!box) return;
+        box.innerHTML = `<pre class="dk-log" data-tone="${ok ? "" : "err"}">${
+          escapeHtml((text || "").trim() || "(no output)")}</pre>`;
+      };
+
       const upd = $("#d-update");
       if (upd) upd.onclick = async () => {
-        $("#d-update").textContent = "Pulling…";
-        const r = await api(`/api/apps/${enc}/update`, {method:"POST"});
-        flash(r.output ? r.output.split("\n")[0] : (r.ok?"Updated":"Failed"), r.ok);
-        openDrawer(name);
+        const label = upd.textContent;
+        upd.textContent = "Pulling…"; upd.disabled = true;
+        try {
+          const r = await api(`/api/apps/${enc}/update`, {method:"POST"});
+          gitOut(r.output, r.ok);
+          flash(r.output ? r.output.split("\n")[0] : (r.ok ? "Updated" : "Failed"), r.ok);
+          if (r.ok) return openDrawer(name);
+        } catch (e) { gitOut(String(e && e.message || e), false); }
+        upd.textContent = label; upd.disabled = false;
+      };
+
+      const pushBtn = $("#d-push");
+      if (pushBtn) pushBtn.onclick = async () => {
+        const label = pushBtn.textContent;
+        pushBtn.textContent = "Pushing…"; pushBtn.disabled = true;
+        try {
+          const r = await api(`/api/apps/${enc}/push`, {method:"POST"});
+          gitOut(r.output, r.ok);
+          flash(r.ok ? `Pushed ${name}` : "Push failed", r.ok);
+          if (r.ok) return openDrawer(name);
+        } catch (e) { gitOut(String(e && e.message || e), false); }
+        pushBtn.textContent = label; pushBtn.disabled = false;
+      };
+
+      async function doCommit(alsoPush, btn) {
+        const box = $("#d-msg");
+        const msg = (box && box.value || "").trim();
+        if (!msg) {
+          flash("Write a commit message first", false);
+          if (box) box.focus();
+          return;
+        }
+        const label = btn.textContent;
+        btn.textContent = "Committing…"; btn.disabled = true;
+        try {
+          const r = await api(`/api/apps/${enc}/commit`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({message: msg}),
+          });
+          gitOut(r.output, r.ok);
+          if (!r.ok) { flash("Commit failed", false); throw new Error("commit failed"); }
+          if (r.nochange) { flash("Nothing to commit", true); return openDrawer(name); }
+          if (!alsoPush) { flash(`Committed ${name}`, true); return openDrawer(name); }
+          btn.textContent = "Pushing…";
+          const p = await api(`/api/apps/${enc}/push`, {method: "POST"});
+          gitOut(`${r.output}\n\n${p.output}`, p.ok);
+          flash(p.ok ? `Committed and pushed ${name}` : "Committed, but the push failed", p.ok);
+          return openDrawer(name);
+        } catch (e) {
+          if (String(e && e.message) !== "commit failed") gitOut(String(e && e.message || e), false);
+          btn.textContent = label; btn.disabled = false;
+        }
+      }
+      const cBtn = $("#d-commit");
+      if (cBtn) cBtn.onclick = () => doCommit(false, cBtn);
+      const cpBtn = $("#d-commitpush");
+      if (cpBtn) cpBtn.onclick = () => doCommit(true, cpBtn);
+
+      const filesBtn = $("#d-filesbtn");
+      if (filesBtn) filesBtn.onclick = () => {
+        const box = $("#d-files");
+        const open = !box.classList.toggle("hidden");
+        filesBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        filesBtn.textContent = open
+          ? "Hide the file list"
+          : `Show the ${d.git.changed_count} file${d.git.changed_count === 1 ? "" : "s"} that would be committed`;
+      };
+
+      // Branches load on demand: listing them costs two `for-each-ref` calls
+      // per repo and most drawer opens never ask.
+      const brBtn = $("#d-branchbtn");
+      if (brBtn) brBtn.onclick = async () => {
+        const box = $("#d-branches");
+        if (!box.classList.contains("hidden")) {
+          box.classList.add("hidden");
+          brBtn.setAttribute("aria-expanded", "false");
+          return;
+        }
+        box.classList.remove("hidden");
+        brBtn.setAttribute("aria-expanded", "true");
+        box.innerHTML = `<div class="dk-branch-empty">Reading branches…</div>`;
+        let data;
+        try { data = await api(`/api/apps/${enc}/branches`); }
+        catch (e) { box.innerHTML = `<div class="dk-branch-empty">Could not read branches.</div>`; return; }
+        const list = data.branches || [];
+        if (!list.length) {
+          box.innerHTML = `<div class="dk-branch-empty">No branches.</div>`;
+          return;
+        }
+        box.innerHTML = list.map(b => `
+          <button class="dk-branch-row" data-switch="${escapeHtml(b.name)}"
+            ${b.current ? 'aria-current="true" disabled' : ""}>
+            <span class="dk-branch-n">${escapeHtml(b.name)}</span>
+            ${b.current ? `<span class="dk-branch-tag">on this</span>`
+              : b.remote_only ? `<span class="dk-branch-tag" data-t="remote">remote</span>` : ""}
+          </button>`).join("")
+          + (data.total > list.length
+            ? `<div class="dk-branch-empty">${data.total - list.length} more not shown</div>` : "");
+
+        box.querySelectorAll("[data-switch]").forEach(btn => btn.onclick = async () => {
+          const target = btn.dataset.switch;
+          btn.textContent = "Switching…"; btn.disabled = true;
+          try {
+            const r = await api(`/api/apps/${enc}/checkout`, {
+              method: "POST", headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({branch: target}),
+            });
+            gitOut(r.output, r.ok);
+            flash(r.ok ? `On ${target}` : `Could not switch to ${target}`, r.ok);
+            if (r.ok) { load(); return openDrawer(name); }
+          } catch (e) { gitOut(String(e && e.message || e), false); }
+          box.classList.add("hidden");
+        });
       };
       const editBtn = $("#edit-cfg");
       if (editBtn) editBtn.onclick = () => $("#cfg-edit").classList.toggle("hidden");

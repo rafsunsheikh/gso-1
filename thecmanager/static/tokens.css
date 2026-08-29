@@ -1139,6 +1139,66 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .dk-input:focus { outline: none; border-color: var(--primary); }
 .dk-link { all: unset; cursor: pointer; color: var(--primary-text); font-size: 11px; }
 
+/* Unpushed / unpulled counts in the library's Git column. */
+.lib-sync {
+  margin-left: 6px; padding: 0 5px; border-radius: 999px;
+  font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--chip); color: var(--text-3);
+}
+.lib-sync[data-d="up"]   { background: var(--warn-soft); color: var(--warn-text); }
+.lib-sync[data-d="down"] { background: var(--primary-soft); color: var(--primary-text); }
+
+/* Git in the drawer: the branch switcher, the list of what would be committed,
+   and git's own output when something refuses. */
+.dk-branch {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--primary-text); max-width: 190px;
+}
+.dk-branch:hover { text-decoration: underline; }
+.dk-branches {
+  margin: 7px 0 3px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card); max-height: 208px; overflow: auto;
+}
+.dk-branch-row {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+  width: 100%; cursor: pointer; padding: 7px 10px;
+  font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2);
+  border-bottom: 1px solid var(--line-2);
+}
+.dk-branch-row:last-child { border-bottom: 0; }
+.dk-branch-row:hover:not([disabled]) { background: var(--hover); color: var(--text); }
+.dk-branch-row[aria-current="true"] { color: var(--text); font-weight: 600; cursor: default; }
+.dk-branch-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-branch-tag {
+  margin-left: auto; flex: none; padding: 1px 7px; border-radius: 999px;
+  font: 600 9.5px "Readex Pro", system-ui, sans-serif; letter-spacing: .04em;
+  text-transform: uppercase; background: var(--live-soft); color: var(--live-text);
+}
+.dk-branch-tag[data-t="remote"] { background: var(--chip); color: var(--text-3); }
+.dk-branch-empty { padding: 9px 10px; font-size: 11px; color: var(--text-3); }
+
+.dk-files {
+  margin: 7px 0; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card); max-height: 168px; overflow: auto;
+}
+.dk-file {
+  display: flex; align-items: center; gap: 8px; padding: 5px 10px;
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-2); overflow-wrap: anywhere;
+}
+.dk-file-x {
+  flex: none; width: 20px; text-align: center; border-radius: 4px;
+  font-weight: 700; font-size: 9.5px; padding: 1px 0;
+  background: var(--chip); color: var(--text-3);
+}
+/* Untracked files are the ones people do not expect `add -A` to sweep up. */
+.dk-file-x[data-x="??"] { background: var(--warn-soft); color: var(--warn-text); }
+.dk-file-x[data-x="M"]  { background: var(--primary-soft); color: var(--primary-text); }
+.dk-file-x[data-x="D"]  { background: var(--err-soft); color: var(--err-text); }
+.dk-hint { margin-top: 6px; font-size: 10.5px; color: var(--text-3); }
+.dk-log[data-tone="err"] { border: 1px solid var(--err-line, var(--line)); color: var(--err-text); }
+
 /* 34×20 switch with a 16px knob. */
 .dk-switch {
   margin-left: auto; width: 34px; height: 20px; flex: none;

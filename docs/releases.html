@@ -102,6 +102,24 @@ main{padding:10px 0 90px}
 
 <main>
   <div class="wrap">
+<article class="rel" id="unreleased">
+<div class="rel-head">
+<h2 class="rel-v">Unreleased</h2>
+<span class="rel-tag rel-tag-soft">in progress</span>
+</div>
+<h3 class="rel-s" data-tone="ok">Added</h3>
+<ul class="rel-list">
+<li><strong>Finish a piece of work without leaving GSO-1.</strong> A repo's drawer now shows the branch it is on, exactly which files are uncommitted, and how many commits are unpushed or unpulled, with <strong>Commit</strong>, <strong>Commit &amp; push</strong>, <strong>Push</strong> and <strong>Pull</strong> beside them. Git's own output is printed verbatim when something refuses, because that text is the reason.</li>
+<li><strong>The branches of a repo, in the drawer.</strong> Local and remote-only branches, newest first, with the current one pinned to the top. Picking a remote-only one creates the local tracking branch for it.</li>
+<li><strong>Unpushed and unpulled counts in the Library list</strong>, next to the branch, so a repo that needs attention says so without being opened.</li>
+</ul>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>Committing from GSO-1 failed on any machine that signs commits.</strong> The app is normally started by a LaunchAgent, whose <code>PATH</code> is four directories long, so git could not find <code>gpg</code> and every commit died with "cannot run gpg" while the identical commit worked in a terminal. Git now runs with a login-shell <code>PATH</code>, and with <code>GIT_TERMINAL_PROMPT=0</code> so a credential prompt fails readably instead of hanging on a terminal that is not there.</li>
+<li><strong>The first changed file in every repo had its name truncated by one character.</strong> <code>git status --porcelain</code> marks an unstaged change with a leading space, and the output was being stripped before parsing, so <code> M .DS_Store</code> became <code>M .DS_Store</code> and the path read as <code>DS_Store</code>. This also fed the Site tab's list of changed files.</li>
+</ul>
+</article>
+
 <article class="rel" id="v0.1.4">
 <div class="rel-head">
 <h2 class="rel-v">0.1.4</h2>
