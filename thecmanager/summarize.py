@@ -861,3 +861,113 @@ def generate(name: str, force: bool = False) -> dict:
     record_perf(model, took)
     rec = put(name, summary, sha, ev_hash, took, model)
     return {"ok": True, "cached": False, "record": rec}
+
+
+# ------------------------------------------------------------- the bulk run
+#
+# Serial on purpose. llama-server is started with `-np 1` so a second request
+# does not run in parallel, it queues behind the first and fragments the KV
+# pool; issuing four at once makes the whole pass slower, not faster.
+#
+# The queue is deliberately not persisted. The *cache* is, so restarting the
+# app and pressing the button again skips everything already done and picks up
+# where it stopped. Persisting the queue as well would mean two sources of
+# truth that can disagree about what is finished.
+
+_bulk_lock = threading.Lock()
+_bulk: dict = {"state": "idle"}
+
+
+def bulk_status() -> dict:
+    with _bulk_lock:
+        st = dict(_bulk)
+    if st.get("state") == "running" and st.get("done") and st.get("started"):
+        per = (time.time() - st["started"]) / max(1, st["done"])
+        st["seconds_each"] = round(per, 1)
+        st["seconds_left"] = int(per * max(0, st.get("total", 0) - st["done"]))
+    return st
+
+
+def cancel_bulk() -> bool:
+    with _bulk_lock:
+        if _bulk.get("state") != "running":
+            return False
+        _bulk["cancel"] = True
+        return True
+
+
+def start_bulk(force: bool = False) -> dict:
+    """Summarise everything that has no current summary."""
+    with _bulk_lock:
+        if _bulk.get("state") == "running":
+            return {"ok": False, "message": "A run is already going."}
+
+    if llm.status().get("state") != "running":
+        return {"ok": False, "message": "Start the local model first."}
+    caps = probe()
+    if not caps.get("ok"):
+        return {"ok": False, "message": caps.get("reason") or "the model cannot be used"}
+
+    names = scanner.list_app_names()
+    if not force:
+        cached = _load()
+        names = [n for n in names
+                 if not (cached.get(n) or {}).get("template") == TEMPLATE_VERSION
+                 or (get(n) or {}).get("stale")]
+    if not names:
+        return {"ok": False, "message": "Every repo already has a current summary."}
+
+    # Most recently touched first, so the repos actually being worked on are
+    # described within the first minute rather than the last hour.
+    def recency(n: str) -> float:
+        try:
+            return scanner.app_path(n).stat().st_mtime
+        except OSError:
+            return 0.0
+    names.sort(key=recency, reverse=True)
+
+    with _bulk_lock:
+        _bulk.clear()
+        _bulk.update({"state": "running", "total": len(names), "done": 0,
+                      "ok": 0, "failed": 0, "current": None, "errors": [],
+                      "started": time.time(), "cancel": False,
+                      "model": llm.status().get("model")})
+    threading.Thread(target=_bulk_run, args=(names, force), daemon=True).start()
+    return {"ok": True, "message": f"Summarising {len(names)} repos.",
+            "total": len(names)}
+
+
+def _bulk_run(names: list[str], force: bool) -> None:
+    for name in names:
+        with _bulk_lock:
+            if _bulk.get("cancel"):
+                _bulk.update({"state": "cancelled",
+                              "message": f"Stopped after {_bulk['done']} of {_bulk['total']}."})
+                return
+            _bulk["current"] = name
+        try:
+            res = generate(name, force=force)
+        except Exception as exc:      # noqa: BLE001, one bad repo must not end the run
+            res = {"ok": False, "message": str(exc)}
+        with _bulk_lock:
+            _bulk["done"] += 1
+            if res.get("ok"):
+                _bulk["ok"] += 1
+            else:
+                _bulk["failed"] += 1
+                # Keep a few, not all: a systemic failure would otherwise grow
+                # an error list the length of the library.
+                if len(_bulk["errors"]) < 10:
+                    _bulk["errors"].append({"name": name,
+                                            "message": str(res.get("message"))[:200]})
+        # A model that has stopped answering will fail every remaining repo in
+        # turn. Give up rather than spending an hour proving it.
+        with _bulk_lock:
+            if _bulk["failed"] >= 5 and _bulk["ok"] == 0:
+                _bulk.update({"state": "error",
+                              "message": "Five repos failed in a row; stopping. "
+                                         "Check the local model."})
+                return
+    with _bulk_lock:
+        _bulk.update({"state": "done", "current": None,
+                      "message": f"{_bulk['ok']} summarised, {_bulk['failed']} failed."})

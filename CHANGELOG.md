@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GSO-1 can tell you what a repo is.** Half a typical library detects as
+  `unknown`, with no type, no language and often no README: the folder name is
+  everything you get. Open a repo and GSO-1 reads it, asks your local model
+  what it is for, and shows a headline, what it does, its stack, where to start
+  and anything worth knowing before you open it. Summaries follow a fixed
+  schema, constrained at sampling time, so they cannot drift into whatever
+  shape the model felt like.
+- **Facts are measured, not generated.** Tests, CI, lockfile, licence,
+  contributors, file count and last-commit age are counted by GSO-1 and shown
+  beneath the model's text. They are correct even when no model has ever run,
+  and the card renders them either way rather than waiting on one.
+- **A model recommended from your own memory.** GSO-1 works out which model
+  suits the machine it is on, prefers one already downloaded when the size is
+  comparable, warns when the machine is too busy to load it right now, and
+  estimates a full pass from speed measured locally rather than a number
+  carried over from a developer's laptop.
+- **Summarise every repo in one run**, serially, resumably and cancellably,
+  most-recently-touched first so the repos you are working on are described in
+  the first minute. Summaries cache per commit, so it is paid once per repo per
+  change, and a commit that touches nothing the model was shown re-stamps
+  rather than regenerates.
 - **Finish a piece of work without leaving GSO-1.** A repo's drawer now shows
   the branch it is on, exactly which files are uncommitted, and how many
   commits are unpushed or unpulled, with **Commit**, **Commit & push**,

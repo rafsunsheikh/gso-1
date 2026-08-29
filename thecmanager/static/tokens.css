@@ -1148,6 +1148,68 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-sync[data-d="up"]   { background: var(--warn-soft); color: var(--warn-text); }
 .lib-sync[data-d="down"] { background: var(--primary-soft); color: var(--primary-text); }
 
+/* The model recommendation on the Local LLM tab. */
+.sum-rec {
+  border: 1px solid var(--line); border-radius: 11px; padding: 12px 13px;
+  background: var(--card-2);
+}
+.sum-rec-h {
+  font: 600 9.5px ui-monospace, Menlo, monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--label); margin-bottom: 6px;
+}
+.sum-rec-b { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.sum-rec-b b { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+.sum-rec-b span { font: 400 11px ui-monospace, Menlo, monospace; color: var(--text-3); }
+.sum-rec-w { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
+.sum-rec-warn {
+  margin-top: 8px; padding: 7px 9px; border-radius: 8px;
+  background: var(--warn-soft); color: var(--warn-text);
+  font-size: 11px; line-height: 1.45;
+}
+
+/* Repo summary in the drawer. The model's prose and the measured signals sit
+   in one card but read differently on purpose: prose can be wrong, the signals
+   underneath it cannot. */
+.sum-head { font: 600 13px "Readex Pro", system-ui, sans-serif; color: var(--text); line-height: 1.4; }
+.sum-purpose { margin: 6px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-2); }
+.sum-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.sum-chip {
+  padding: 2px 8px; border-radius: 999px; background: var(--chip);
+  border: 1px solid var(--line); color: var(--text-2);
+  font: 500 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.sum-sec {
+  margin: 12px 0 5px; font: 600 9.5px ui-monospace, Menlo, monospace;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--label);
+}
+.sum-entry { font-size: 11.5px; color: var(--text-2); margin-bottom: 3px; overflow-wrap: anywhere; }
+.sum-entry code {
+  font: 400 11px ui-monospace, Menlo, monospace; color: var(--primary-text);
+}
+.sum-entry span { color: var(--text-3); }
+.sum-caveats { margin: 0; padding-left: 16px; }
+.sum-caveats li { font-size: 11.5px; line-height: 1.5; color: var(--text-2); margin-bottom: 4px; }
+
+.sum-sigs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.sum-sig {
+  padding: 2px 7px; border-radius: 6px; background: var(--chip); color: var(--text-3);
+  font: 500 10px ui-monospace, Menlo, monospace; white-space: nowrap;
+}
+.sum-sig[data-on="1"] { background: var(--live-soft); color: var(--live-text); }
+.sum-foot { margin-top: 6px; font: 400 10.5px ui-monospace, Menlo, monospace; color: var(--text-3); }
+
+.sum-meta { display: flex; align-items: center; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+.sum-conf {
+  font: 600 9.5px "Readex Pro", system-ui, sans-serif; letter-spacing: .04em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+  background: var(--chip); color: var(--text-3);
+}
+.sum-conf[data-c="high"]   { background: var(--live-soft); color: var(--live-text); }
+.sum-conf[data-c="low"]    { background: var(--warn-soft); color: var(--warn-text); }
+.sum-stale { font-size: 10.5px; color: var(--warn-text); }
+.sum-empty { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 11px; }
+.sum-note { font-size: 11px; color: var(--text-3); flex: 1 1 160px; }
+
 /* Git in the drawer: the branch switcher, the list of what would be committed,
    and git's own output when something refuses. */
 .dk-branch {
