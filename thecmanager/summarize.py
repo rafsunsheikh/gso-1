@@ -38,7 +38,7 @@ from . import config, detector, git_ops, llm, scanner
 
 # Bumping this regenerates every summary. Change it whenever the schema or the
 # prompt changes in a way that makes old output the wrong shape or worse.
-TEMPLATE_VERSION = 1
+TEMPLATE_VERSION = 2
 
 _FILE = config.DATA_DIR / "summaries.json"
 _lock = threading.RLock()
@@ -92,15 +92,24 @@ SCHEMA = {
 
 SYSTEM = (
     "You summarise a source repository for a developer who has 200 of them and "
-    "has forgotten what this one is. Use only the evidence given. "
-    "Never state facts about tests, CI, licences, commit dates or file counts: "
-    "those are measured separately and shown next to your text. "
-    "The headline names the thing and what it does, with no filler and no "
-    "trailing period. Purpose is two or three plain sentences: what problem it "
-    "solves and for whom. Caveats are things the reader would be annoyed to "
-    "discover later, and it is correct to return none. "
-    "If the evidence is thin, say so with confidence 'low' and keep the "
-    "headline cautious rather than inventing a purpose."
+    "has forgotten what this one is. Use only the evidence given.\n"
+    "headline: names the thing and what it does. No filler, no trailing period.\n"
+    "purpose: two or three plain sentences, what problem it solves and for "
+    "whom. Do not restate the headline.\n"
+    "stack: the languages, frameworks and services it is built on. Return an "
+    "empty list if it is not software, for example a folder of documents. "
+    "Never put the repository's own name here.\n"
+    "entry_points: where a newcomer starts. A file path, or the command the "
+    "project documents for running it, whichever is truer for this repository.\n"
+    "caveats: things the reader would be annoyed to discover later, such as a "
+    "required setup step, a hard-coded assumption, or two half-finished "
+    "versions of the same thing. Returning none is correct and common.\n"
+    "confidence: 'high' when a README or manifest states what this is; "
+    "'medium' when you inferred it confidently from code and commits; 'low' "
+    "only when you are genuinely guessing. Judge the evidence, not your "
+    "wording.\n"
+    "Never state facts about tests, CI, licences, commit dates or file counts. "
+    "Those are measured separately and shown beside your text."
 )
 
 
@@ -146,8 +155,18 @@ def _manifest(root: Path) -> dict:
             }
         except (ValueError, OSError):
             pass
-    for name in ("pyproject.toml", "requirements.txt", "go.mod", "Cargo.toml",
-                 "Gemfile", "pom.xml", "composer.json"):
+    # Every ecosystem states its own identity somewhere. Somebody else's
+    # library is Java, Rust, PHP or Elixir, not this one's Python and JS.
+    for name in ("pyproject.toml", "setup.py", "requirements.txt", "Pipfile",
+                 "go.mod", "Cargo.toml", "Gemfile", "pom.xml", "build.gradle",
+                 "build.gradle.kts", "composer.json", "mix.exs", "Package.swift",
+                 "pubspec.yaml", "CMakeLists.txt", "Makefile", "*.csproj",
+                 "docker-compose.yml", "Dockerfile"):
+        if "*" in name:
+            match = next(iter(sorted(root.glob(name))), None)
+            if match:
+                out[match.name] = _read(match, 900)
+            continue
         f = root / name
         if f.exists():
             out[name] = _read(f, 900)
@@ -156,8 +175,12 @@ def _manifest(root: Path) -> dict:
 
 _ENTRY_CANDIDATES = (
     "main.py", "app.py", "run.py", "manage.py", "server.py", "__main__.py",
+    "cli.py", "wsgi.py", "asgi.py",
     "index.js", "index.ts", "main.js", "main.ts", "server.js", "app.js",
-    "main.go", "main.rs", "Program.cs", "index.php",
+    "app.ts", "index.tsx", "App.tsx", "app.jsx",
+    "main.go", "main.rs", "lib.rs", "Program.cs", "Main.java", "Application.java",
+    "index.php", "artisan", "main.swift", "main.dart", "application.ex",
+    "main.cpp", "main.c",
 )
 
 
@@ -273,80 +296,223 @@ def _prompt(ev: dict) -> str:
 
 
 # ------------------------------------------------------------- the model
+#
+# This has to work on somebody else's machine, with a model we did not choose,
+# served by a llama.cpp build we do not control. Three things vary and all
+# three broke something during testing:
+#
+#   * Structured output. Recent llama.cpp constrains sampling to a JSON schema;
+#     older builds only honour {"type": "json_object"}; some honour neither.
+#   * Thinking. GLM and Qwen reason before answering and `max_tokens` counts
+#     that scratchpad, so a model can spend its whole budget thinking and
+#     return an empty message. `enable_thinking` switches it off, but it is a
+#     Qwen/GLM chat-template argument: Llama, Mistral and Gemma templates do
+#     not take it, and some builds reject an unknown argument outright.
+#   * Speed. The same summary took 6s and 212s on one machine depending on
+#     whether the model had been swapped out.
+#
+# So nothing is assumed. We probe the server once per model, remember what it
+# accepted, and fall back a rung at a time when something is refused.
 
 _THINK = re.compile(r"<think>.*?</think>", re.S)
+_CAPS: dict[str, dict] = {}
+_caps_lock = threading.Lock()
+
+# Ladder, most constrained first. A model that cannot be constrained at all can
+# still be asked nicely and have the object pulled out of its prose.
+_MODES = ("schema", "json", "prompt")
 
 
-def _chat(prompt: str, timeout: int = 300) -> tuple[Optional[dict], str]:
-    """Ask llama-server for one schema-shaped object.
+def _post(url: str, body: dict, timeout: int) -> tuple[Optional[dict], str]:
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode()), ""
+    except urllib.error.HTTPError as e:
+        detail = e.read()[:300].decode(errors="ignore")
+        return None, f"HTTP {e.code}: {detail}"
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
+        return None, str(e)
 
-    Talks to llama-server's OpenAI endpoint directly rather than through GSO-1's
-    Anthropic shim: the shim exists so Claude Code can drive a local model, and
-    routing through it here would add a translation layer for no benefit and
-    lose the schema constraint on the way.
-    """
-    st = llm.status()
-    if st.get("state") != "running":
-        return None, "The local model is not running."
 
-    body = {
-        "model": st.get("model") or "local",
+def _body(prompt: str, mode: str, no_think: bool, max_tokens: int,
+          model: str) -> dict:
+    body: dict = {
+        "model": model or "local",
         "messages": [{"role": "system", "content": SYSTEM},
                      {"role": "user", "content": prompt}],
         "temperature": 0.3,
-        # Generous, because the cap counts everything the model emits. See below.
-        "max_tokens": 1500,
-        # GLM-4.7 and friends think before they answer, and `max_tokens` counts
-        # those tokens too. Left on, the model spent its entire budget
-        # reasoning and returned `finish_reason: length` with an EMPTY message:
-        # four of five test repos failed that way, 3946 reasoning tokens and
-        # nothing else. There is nothing to think about here, the schema
-        # dictates the shape, so turn it off. Doing so cut a summary from 900
-        # tokens of scratchpad to 253 tokens of answer.
-        "chat_template_kwargs": {"enable_thinking": False},
-        # llama.cpp constrains sampling to the schema, so the shape is
-        # guaranteed rather than hoped for.
-        "response_format": {"type": "json_schema",
-                            "json_schema": {"name": "repo_summary", "schema": SCHEMA}},
+        "max_tokens": max_tokens,
     }
-    req = urllib.request.Request(
-        f"{st['url']}/v1/chat/completions",
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            payload = json.loads(r.read().decode())
-    except urllib.error.HTTPError as e:
-        return None, f"llama-server said {e.code}: {e.read()[:200].decode(errors='ignore')}"
-    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
-        return None, f"llama-server unreachable: {e}"
+    if mode == "schema":
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "repo_summary", "schema": SCHEMA},
+        }
+    elif mode == "json":
+        body["response_format"] = {"type": "json_object"}
+    if no_think:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+    return body
 
-    try:
-        choice = payload["choices"][0]
-        text = choice["message"].get("content") or ""
-    except (KeyError, IndexError):
-        return None, "llama-server returned no message."
 
-    # Name the real failure. "could not parse" sent me looking at the JSON when
-    # the model had simply run out of budget before writing any.
-    if not text.strip():
+def _extract(text: str) -> Optional[dict]:
+    """Pull the object out, whatever the model wrapped it in."""
+    text = _THINK.sub("", text or "").strip()
+    if not text:
+        return None
+    # Fenced code, then the first balanced-looking object.
+    fence = re.search(r"```(?:json)?\s*(.+?)```", text, re.S)
+    if fence:
+        text = fence.group(1).strip()
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth, end = 0, None
+    for i, ch in enumerate(text[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    try:
+        return json.loads(text[start:end] if end else text[start:])
+    except ValueError:
+        return None
+
+
+def _valid(obj: object) -> bool:
+    """Cheap shape check. The schema is the contract; a fallback rung may miss."""
+    if not isinstance(obj, dict):
+        return False
+    return isinstance(obj.get("headline"), str) and isinstance(obj.get("purpose"), str)
+
+
+def _coerce(obj: dict) -> dict:
+    """Make an unconstrained answer fit the template rather than discarding it."""
+    def pairs(v, a, b):
+        out = []
+        for item in v if isinstance(v, list) else []:
+            if isinstance(item, dict) and item.get(a):
+                out.append({a: str(item[a])[:120], b: str(item.get(b, ""))[:120]})
+            elif isinstance(item, str):
+                out.append({a: item[:120], b: ""})
+        return out[:6]
+    return {
+        "headline": str(obj.get("headline", ""))[:100],
+        "purpose": str(obj.get("purpose", ""))[:600],
+        "stack": pairs(obj.get("stack"), "name", "role"),
+        "entry_points": pairs(obj.get("entry_points"), "path", "what")[:3],
+        # A smaller model answers "none" as a string rather than returning an
+        # empty list, and rendering a caveat that reads "None" is worse than
+        # rendering no caveats at all.
+        "caveats": [str(c)[:160] for c in (obj.get("caveats") or [])
+                    if isinstance(c, (str, int, float))
+                    and str(c).strip().lower().rstrip(".")
+                    not in ("", "none", "n/a", "na", "null", "no caveats",
+                            "nothing", "not applicable")][:4],
+        "confidence": obj.get("confidence") if obj.get("confidence") in
+        ("high", "medium", "low") else "medium",
+    }
+
+
+def probe(force: bool = False) -> dict:
+    """Work out what this server and model actually support. Once per model.
+
+    Costs one tiny request. Worth it: the alternative is discovering on repo 40
+    of 262 that this model ignores `response_format`, and having 39 useless
+    summaries.
+    """
+    st = llm.status()
+    if st.get("state") != "running":
+        return {"ok": False, "reason": "the local model is not running"}
+    key = f"{st.get('url')}|{st.get('model')}"
+    with _caps_lock:
+        if not force and key in _CAPS:
+            return _CAPS[key]
+
+    url = f"{st['url']}/v1/chat/completions"
+    model = st.get("model") or "local"
+    caps = {"ok": False, "mode": "prompt", "no_think": False, "model": model,
+            "reason": ""}
+
+    probe_prompt = ('Reply with this exact object and nothing else: '
+                    '{"headline":"ok","purpose":"ok","stack":[],'
+                    '"entry_points":[],"caveats":[],"confidence":"high"}')
+
+    for no_think in (True, False):
+        for mode in _MODES:
+            body = _body(probe_prompt, mode, no_think, 300, model)
+            payload, err = _post(url, body, timeout=120)
+            if payload is None:
+                # A rejected argument is information: stop offering it.
+                if no_think and "chat_template" in err.lower():
+                    break
+                continue
+            try:
+                choice = payload["choices"][0]
+                text = choice["message"].get("content") or ""
+            except (KeyError, IndexError):
+                continue
+            if _valid(_extract(text)):
+                caps.update(ok=True, mode=mode, no_think=no_think)
+                # Whether the model reasons at all, so callers can budget for it.
+                caps["thinks"] = bool(choice["message"].get("reasoning_content")
+                                      or "<think>" in text)
+                with _caps_lock:
+                    _CAPS[key] = caps
+                return caps
+    caps["reason"] = "the model would not return a usable object"
+    with _caps_lock:
+        _CAPS[key] = caps
+    return caps
+
+
+def _complete(prompt: str, timeout: int) -> tuple[Optional[dict], str]:
+    """One summary, degrading a rung at a time rather than failing outright."""
+    st = llm.status()
+    if st.get("state") != "running":
+        return None, "The local model is not running."
+    caps = probe()
+    if not caps.get("ok"):
+        return None, caps.get("reason") or "the model could not be used"
+
+    url = f"{st['url']}/v1/chat/completions"
+    model = caps["model"]
+    attempts = [(caps["mode"], caps["no_think"], 1500)]
+    # A thinking model that will not be silenced needs room for the scratchpad
+    # *and* the answer, so the retry raises the ceiling rather than repeating.
+    if caps.get("thinks") or not caps["no_think"]:
+        attempts.append((caps["mode"], caps["no_think"], 4000))
+    for mode in _MODES[_MODES.index(caps["mode"]) + 1:]:
+        attempts.append((mode, caps["no_think"], 4000))
+
+    last = ""
+    for mode, no_think, budget in attempts:
+        payload, err = _post(url, _body(prompt, mode, no_think, budget, model), timeout)
+        if payload is None:
+            last = err
+            continue
+        try:
+            choice = payload["choices"][0]
+            text = choice["message"].get("content") or ""
+        except (KeyError, IndexError):
+            last = "llama-server returned no message"
+            continue
+        obj = _extract(text)
+        if _valid(obj):
+            return _coerce(obj), ""
         if choice.get("finish_reason") == "length":
             used = (payload.get("usage") or {}).get("completion_tokens", "?")
-            return None, (f"the model used all {used} tokens without answering; "
-                          "raise max_tokens or keep thinking disabled")
-        return None, "the model returned an empty message."
-
-    # A thinking model may still emit its scratchpad ahead of the object when
-    # reasoning_format leaves it inline.
-    text = _THINK.sub("", text).strip()
-    start = text.find("{")
-    if start > 0:
-        text = text[start:]
-    try:
-        return json.loads(text), ""
-    except ValueError:
-        return None, f"could not parse a summary from: {text[:200]}"
+            last = (f"the model used all {used} tokens without answering "
+                    "(it is reasoning at length; a larger budget was tried)")
+        else:
+            last = f"could not read a summary from: {text[:160]}"
+    return None, last
 
 
 # -------------------------------------------------------------- the cache
@@ -366,6 +532,46 @@ def _save(data: dict) -> None:
     tmp.replace(_FILE)
 
 
+def _revision(name: str) -> str:
+    """What this summary was written from: the commit, or the evidence itself."""
+    root = scanner.app_path(name)
+    if git_ops.is_repo(root):
+        rc, sha = git_ops._run(root, "rev-parse", "--short", "HEAD")
+        if rc == 0 and sha:
+            return sha.strip()
+    return ""
+
+
+def timeout_for(name: str) -> int:
+    """How long to wait, scaled to how slow this machine has proven to be.
+
+    A summary took 6 seconds on a warm Apple Silicon machine and 212 on the
+    same machine while the model was swapping. A fixed timeout is either too
+    short for somebody on CPU or so long that a hung server looks like a slow
+    one, so it is derived from what we have actually measured here.
+    """
+    seen = [r.get("seconds", 0) for r in _load().values() if r.get("seconds")]
+    if not seen:
+        return 900                      # generous until we know anything
+    seen.sort()
+    typical = seen[len(seen) // 2]
+    return int(max(180, min(1800, typical * 8)))
+
+
+def count_cached() -> int:
+    """How many repos already have a summary for the current template."""
+    return sum(1 for r in _load().values()
+               if r.get("template") == TEMPLATE_VERSION)
+
+
+def throughput() -> dict:
+    """Measured seconds per summary on THIS machine, for honest estimates."""
+    seen = sorted(r.get("seconds", 0) for r in _load().values() if r.get("seconds"))
+    if not seen:
+        return {"samples": 0, "median_seconds": None}
+    return {"samples": len(seen), "median_seconds": round(seen[len(seen) // 2], 1)}
+
+
 def get(name: str) -> Optional[dict]:
     """The cached summary for a repo, annotated with whether it still applies.
 
@@ -378,9 +584,11 @@ def get(name: str) -> Optional[dict]:
         rec = _load().get(name)
     if not rec:
         return None
-    st = git_ops.status(scanner.app_path(name))
-    head = (st.get("last_commit") or "").split(" ")[0] if st.get("is_repo") else ""
     rec = dict(rec)
+    head = _revision(name)
+    # Plenty of project folders are not repositories. Those fall back to a hash
+    # of the evidence, so they still cache and still go stale, just on content
+    # rather than on commits.
     rec["stale"] = bool(head and rec.get("sha") and head != rec["sha"])
     rec["outdated_template"] = rec.get("template") != TEMPLATE_VERSION
     return rec
@@ -406,15 +614,16 @@ def generate(name: str, force: bool = False) -> dict:
     if not root.is_dir():
         return {"ok": False, "message": f"No such repo: {name}"}
 
-    st = git_ops.status(root)
-    sha = (st.get("last_commit") or "").split(" ")[0] if st.get("is_repo") else ""
-
+    sha = _revision(name)
     existing = get(name)
     if existing and not force and not existing["stale"] and not existing["outdated_template"]:
         return {"ok": True, "cached": True, "record": existing}
 
     ev = evidence(name)
     ev_hash = evidence_hash(ev)
+    # Not a repository: the evidence itself is the revision, so a folder that
+    # has not changed is not summarised twice.
+    sha = sha or ev_hash
 
     # The commit moved but nothing we feed the model changed: a version bump, a
     # README typo, a file we never look at. Re-stamp instead of spending 30s.
@@ -425,7 +634,7 @@ def generate(name: str, force: bool = False) -> dict:
         return {"ok": True, "cached": True, "restamped": True, "record": rec}
 
     t0 = time.time()
-    summary, err = _chat(_prompt(ev))
+    summary, err = _complete(_prompt(ev), timeout_for(name))
     if summary is None:
         return {"ok": False, "message": err}
     rec = put(name, summary, sha, ev_hash, time.time() - t0,
