@@ -439,6 +439,10 @@
     let LLM_META = {};              // model dirs, binary, defaults, last model
     let LLM_FORM = null;            // flags currently in the Start form
     let LLM_SETUP = null;           // install plan, model catalog, download state
+    let LLM_READY = null;           // summary readiness: counts and local timings
+    let LLM_REC = null;             // which model suits this machine
+    let LLM_RUN = null;             // bulk summary run state
+    let sumPoll = null;
     let dlPoll = null;              // interval while a download runs
     let PLANNER = {boards: []};     // kanban boards + tasks
     let activeBoardId = null;       // currently shown board
@@ -1458,6 +1462,36 @@
       } catch (e) { /* the view renders an empty list and says so */ }
       renderLlm();
       loadSetup();
+      loadSummaryReadiness();
+    }
+
+    /** Counts and this machine's measured speed. Cheap; called with the view. */
+    async function loadSummaryReadiness() {
+      try { LLM_READY = await api("/api/summary/readiness", {timeoutMs: 60000}); }
+      catch (e) { LLM_READY = {}; }
+      try { LLM_RUN = await api("/api/summary/run"); } catch (e) { LLM_RUN = {}; }
+      if (activeView === "llm") renderLlm();
+      if ((LLM_RUN || {}).state === "running") watchSummaryRun();
+      // The recommendation resolves the catalog against Hugging Face, so it is
+      // fetched separately and the card fills in when it lands.
+      if (!LLM_REC) {
+        try { LLM_REC = await api("/api/summary/models", {timeoutMs: 90000}); }
+        catch (e) { LLM_REC = {why: "Could not reach the model catalog."}; }
+        if (activeView === "llm") renderLlm();
+      }
+    }
+
+    function watchSummaryRun() {
+      if (sumPoll) return;
+      sumPoll = setInterval(async () => {
+        try { LLM_RUN = await api("/api/summary/run"); } catch (e) { return; }
+        if (LLM_RUN.state !== "running") {
+          clearInterval(sumPoll); sumPoll = null;
+          try { LLM_READY = await api("/api/summary/readiness", {timeoutMs: 60000}); } catch (e) {}
+          if (LLM_RUN.message) flash(LLM_RUN.message, LLM_RUN.state === "done");
+        }
+        if (activeView === "llm") renderLlm();
+      }, 2000);
     }
 
     /** Is llama.cpp missing, and what could we fetch? Resolved against Hugging
@@ -1693,6 +1727,64 @@
                  Downloads resume if interrupted.</p>`}
         </section>` : "";
 
+      // ---- repo summaries: what this machine should use, and what a full
+      // pass would cost here. Both numbers are measured locally, never carried
+      // over from the machine this was written on.
+      const rd = LLM_READY || {};
+      const rec = (LLM_REC || {}).recommended;
+      const run = LLM_RUN || {};
+      const running = run.state === "running";
+      const est = rd.estimate_seconds
+        ? `about ${Math.max(1, Math.round(rd.estimate_seconds / 60))} min`
+        : "not measured yet";
+      const summaryRunCard = `
+        <section>
+          <div class="sec-rule">Repo summaries<span class="sec-note">${
+            rd.repos ? `${rd.summarised || 0} of ${rd.repos} done` : ""}</span></div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px">
+            <p class="text-xs text-slate-500 mb-3">GSO-1 reads each repo and asks your local model
+              what it is, so a folder name becomes a description. Summaries are cached per commit,
+              so this is paid once per repo.</p>
+
+            ${LLM_REC ? (rec ? `
+              <div class="sum-rec">
+                <div class="sum-rec-h">Recommended for this machine</div>
+                <div class="sum-rec-b"><b>${escapeHtml(rec.name)}</b>
+                  <span>${rec.size_gb} GB &middot; ${escapeHtml(rec.source)}</span></div>
+                <div class="sum-rec-w">${escapeHtml((LLM_REC.why || ""))}</div>
+                ${LLM_REC.warning ? `<div class="sum-rec-warn">${escapeHtml(LLM_REC.warning)}</div>` : ""}
+                ${LLM_REC.alternative ? `<div class="sum-rec-w">Or <b>${
+                  escapeHtml(LLM_REC.alternative.name)}</b> (${LLM_REC.alternative.size_gb} GB): ${
+                  escapeHtml(LLM_REC.alternative.note || "")}</div>` : ""}
+              </div>` : `<div class="sum-rec"><div class="sum-rec-w">${
+                escapeHtml(LLM_REC.why || "No model here fits this machine.")}</div></div>`)
+              : `<div class="lib-muted" style="font-size:11.5px">Working out which model suits this machine…</div>`}
+
+            ${running ? `
+              <div style="margin-top:13px">
+                <div style="height:6px;border-radius:99px;background:var(--card-2);overflow:hidden">
+                  <div style="height:100%;width:${run.total ? (run.done / run.total) * 100 : 0}%;
+                       background:var(--primary);transition:width .5s"></div></div>
+                <div class="llm-hour-foot" style="margin-top:7px">
+                  ${run.done} of ${run.total}${run.current ? ` &middot; ${escapeHtml(run.current)}` : ""}${
+                    run.seconds_left ? ` &middot; about ${Math.round(run.seconds_left / 60)} min left` : ""}${
+                    run.failed ? ` &middot; ${run.failed} failed` : ""}</div>
+                <button id="sum-cancel" class="lib-act" data-tone="stop" style="margin-top:10px">Stop</button>
+              </div>`
+            : `<div style="display:flex;gap:8px;align-items:center;margin-top:13px;flex-wrap:wrap">
+                <button id="sum-runall" class="lib-act" ${rd.llm === "running" ? "" : "disabled"}
+                  >Summarise ${rd.remaining || 0} repo${rd.remaining === 1 ? "" : "s"}</button>
+                <span class="text-[11px] text-slate-500">${
+                  rd.llm === "running"
+                    ? `${escapeHtml(est)} at the speed measured here. Runs one at a time; you can stop it.`
+                    : "Load a model above first."}</span>
+              </div>
+              ${run.message ? `<div class="llm-hour-foot" style="margin-top:8px">${escapeHtml(run.message)}</div>` : ""}
+              ${(run.errors || []).length ? `<pre class="dk-log" style="margin-top:8px">${
+                escapeHtml(run.errors.map(e => `${e.name}: ${e.message}`).join("\n"))}</pre>` : ""}`}
+          </div>
+        </section>`;
+
       gridEl.innerHTML = `
       <div class="llm-wrap">
         <div class="llm-toprow">${serverCard}${hourCard}</div>
@@ -1705,6 +1797,8 @@
         </section>
 
         ${getModelCard}
+
+        ${summaryRunCard}
 
         <section>
           <div class="sec-rule">System load<span class="sec-note">sampled every 3s</span></div>
@@ -1954,6 +2048,29 @@
       if (dlStop) dlStop.onclick = async () => {
         dlStop.textContent = "Stopping…"; dlStop.disabled = true;
         await api("/api/llm/download/cancel", { method: "POST" }).catch(() => {});
+      };
+
+      // ---- summarise every repo
+      const runAll = $("#sum-runall");
+      if (runAll) runAll.onclick = async () => {
+        runAll.textContent = "Starting…"; runAll.disabled = true;
+        try {
+          const r = await api("/api/summary/run", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({}), timeoutMs: 60000,
+          });
+          flash(r.message, r.ok);
+          LLM_RUN = {state: "running", done: 0, total: r.total || 0};
+          watchSummaryRun(); renderLlm();
+        } catch (e) {
+          flash(String(e && e.message || e), false);
+          renderLlm();
+        }
+      };
+      const sumCancel = $("#sum-cancel");
+      if (sumCancel) sumCancel.onclick = async () => {
+        sumCancel.textContent = "Stopping…"; sumCancel.disabled = true;
+        await api("/api/summary/run/cancel", {method: "POST"}).catch(() => {});
       };
 
       // ---- where things live
@@ -2753,12 +2870,108 @@
         <pre id="logs-out" class="dk-log hidden"></pre>
       </div>`;
 
+      // 6, what this repo actually is. Loaded after the drawer paints, because
+      // it may need a model that is not running, and the rest of the drawer
+      // must never wait on that.
+      const summary = `<div class="dk-card" id="sum-card">
+        <div class="dk-label">Summary</div>
+        <div id="sum-body" class="lib-muted" style="font-size:12px">Checking…</div>
+      </div>`;
+
       const about = d.description ? `<div class="dk-card">
         <div class="dk-label">About</div>
         <div style="font-size:12px;line-height:1.55;color:var(--text-2)">${escapeHtml(d.description)}</div>
       </div>` : "";
 
-      return identity + fail + git + runcfg + health + logs + about;
+      return identity + fail + summary + git + runcfg + health + logs + about;
+    }
+
+    /* The measured half of a repo summary. Rendered from what GSO-1 counted,
+       never from what the model said about it, so these stay true even when
+       no model has ever run. */
+    function signalRow(sg) {
+      if (!sg) return "";
+      const bits = [];
+      const yn = (on, label) => `<span class="sum-sig" data-on="${on ? 1 : 0}">${
+        on ? "&#10003;" : "&#10005;"} ${label}</span>`;
+      bits.push(yn(sg.tests, "tests"), yn(sg.ci, "CI"), yn(sg.lockfile, "lockfile"));
+      if (sg.license) bits.push(`<span class="sum-sig" data-on="1">${escapeHtml(sg.license)}</span>`);
+      if (sg.docker) bits.push(yn(true, "docker"));
+      const foot = [
+        sg.last_commit ? `last commit ${escapeHtml(sg.last_commit)}` : null,
+        sg.files ? `${sg.files} files` : null,
+        sg.contributors ? `${sg.contributors} contributor${sg.contributors === 1 ? "" : "s"}` : null,
+      ].filter(Boolean).join(" &middot; ");
+      return `<div class="sum-sigs">${bits.join("")}</div>
+        ${foot ? `<div class="sum-foot">${foot}</div>` : ""}`;
+    }
+
+    async function loadSummary(name) {
+      const box = () => $("#sum-body");
+      if (!box()) return;
+      let d;
+      try { d = await api(`/api/apps/${encodeURIComponent(name)}/summary`); }
+      catch (e) { if (box()) box().textContent = "Could not read the summary."; return; }
+      if (!box() || activeView === "settings") return;
+      renderSummary(name, d);
+    }
+
+    function renderSummary(name, d) {
+      const box = $("#sum-body");
+      if (!box) return;
+      const rec = d.record, sg = d.signals;
+      const sig = signalRow(sg);
+      const running = d.llm === "running";
+
+      if (!rec) {
+        // No summary yet. Never block on the model: show what was measured and
+        // make the next step obvious, whichever step that is.
+        box.innerHTML = sig + `<div class="sum-empty">
+          ${running
+            ? `<button id="sum-make" class="dk-btn" data-tone="outline">Summarise this repo</button>
+               <span class="sum-note">Reads the repo and asks your local model what it is.</span>`
+            : `<span class="sum-note">Start a local model to have GSO-1 describe this repo.</span>
+               <button id="sum-goto" class="dk-link">Open Local LLM</button>`}
+        </div>`;
+      } else {
+        const s = rec.summary || {};
+        box.innerHTML = `
+          <div class="sum-head">${escapeHtml(s.headline || "")}</div>
+          <p class="sum-purpose">${escapeHtml(s.purpose || "")}</p>
+          ${(s.stack || []).length ? `<div class="sum-chips">${s.stack.map(x =>
+            `<span class="sum-chip" title="${escapeHtml(x.role || "")}">${escapeHtml(x.name)}</span>`).join("")}</div>` : ""}
+          ${(s.entry_points || []).length ? `<div class="sum-sec">Start at</div>
+            ${s.entry_points.map(e => `<div class="sum-entry"><code>${escapeHtml(e.path)}</code>${
+              e.what ? ` <span>${escapeHtml(e.what)}</span>` : ""}</div>`).join("")}` : ""}
+          ${(s.caveats || []).length ? `<div class="sum-sec">Worth knowing</div>
+            <ul class="sum-caveats">${s.caveats.map(c =>
+              `<li>${escapeHtml(c)}</li>`).join("")}</ul>` : ""}
+          ${sig}
+          <div class="sum-meta">
+            <span class="sum-conf" data-c="${escapeHtml(s.confidence || "")}">${escapeHtml(s.confidence || "")} confidence</span>
+            ${rec.stale ? `<span class="sum-stale">commits since this was written</span>` : ""}
+            <button id="sum-make" class="dk-link" style="margin-left:auto"
+              ${running ? "" : "disabled"}>${rec.stale ? "Refresh" : "Rewrite"}</button>
+          </div>`;
+      }
+
+      const go = $("#sum-goto");
+      if (go) go.onclick = () => { activeView = "llm"; renderViews(); render(); };
+      const btn = $("#sum-make");
+      if (btn) btn.onclick = async () => {
+        btn.textContent = "Reading the repo…"; btn.disabled = true;
+        try {
+          const r = await api(`/api/apps/${encodeURIComponent(name)}/summary`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({force: true}), timeoutMs: 900000,
+          });
+          if (!r.ok) throw new Error(r.message || "failed");
+          loadSummary(name);
+        } catch (e) {
+          flash(String(e && e.message || e), false);
+          btn.textContent = "Summarise this repo"; btn.disabled = false;
+        }
+      };
     }
 
     function section(title, body) {
@@ -2801,6 +3014,9 @@
         const lines = (t || "").trim().split("\n").slice(-8).join("\n");
         failLog.textContent = lines || "No log output was captured.";
       }).catch(() => { failLog.textContent = "Could not read the log."; });
+
+      // ---- summary -------------------------------------------------------
+      loadSummary(name);
 
       // ---- git: pull, push, commit, switch branch -----------------------
       //

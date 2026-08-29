@@ -338,6 +338,28 @@ def summary_models() -> JSONResponse:
     return JSONResponse(summarize.recommend())
 
 
+class BulkBody(BaseModel):
+    force: bool = False
+
+
+@app.post("/api/summary/run")
+def summary_run(body: BulkBody) -> JSONResponse:
+    result = summarize.start_bulk(force=body.force)
+    if result.get("ok"):
+        events.record("llm", "summaries", result["message"][:110])
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.get("/api/summary/run")
+def summary_run_status() -> JSONResponse:
+    return JSONResponse(summarize.bulk_status())
+
+
+@app.post("/api/summary/run/cancel")
+def summary_run_cancel() -> JSONResponse:
+    return JSONResponse({"cancelled": summarize.cancel_bulk()})
+
+
 @app.get("/api/apps/{name}/summary")
 def app_summary(name: str) -> JSONResponse:
     """The cached summary plus the measured signals, which need no model."""
