@@ -95,17 +95,19 @@ main{padding:10px 0 90px}
     <span class="eyebrow">Change of orders</span>
     <h1>Release notes</h1>
     <p class="lede">Every version of GSO-1, what it added, what it fixed, and what it took
-      away. The newest release is <strong>v0.1.4</strong>,
+      away. The newest release is <strong>v0.1.5</strong>,
       <a href="https://github.com/rafsunsheikh/gso-1/releases/latest">available for macOS, Windows and Linux</a>.</p>
   </div>
 </header>
 
 <main>
   <div class="wrap">
-<article class="rel" id="unreleased">
+<article class="rel" id="v0.1.5">
 <div class="rel-head">
-<h2 class="rel-v">Unreleased</h2>
-<span class="rel-tag rel-tag-soft">in progress</span>
+<h2 class="rel-v">0.1.5</h2>
+<span class="rel-date">2026-08-31</span>
+<span class="rel-tag rel-tag-now">current</span>
+<a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.5">Downloads &rarr;</a>
 </div>
 <h3 class="rel-s" data-tone="ok">Added</h3>
 <ul class="rel-list">
@@ -121,6 +123,10 @@ main{padding:10px 0 90px}
 </ul>
 <h3 class="rel-s" data-tone="warn">Fixed</h3>
 <ul class="rel-list">
+<li><strong>System load disagreed with Activity Monitor, and the app was the one that was wrong.</strong> Two separate causes. Memory was divided by 1,000,000,000 while macOS labels binary units as "GB", so the same 34,359,738,368 bytes read as "34.4 GB" here and "32.00 GB" there. And "used" came from <code>top</code>, which counts the file cache as used, where Activity Monitor lists cached files separately because the kernel reclaims them the instant anything needs the space. GSO-1 now reports app, wired, compressed, cached and available the way Apple does, and shows swap, which is the honest sign a machine is over-committed.</li>
+<li><strong>The model recommendation warned about the wrong number.</strong> It read free memory, which on a healthy Mac is near zero by design, and told you 0.2 GB was left when 8.8 GB was genuinely available. It reads available memory now.</li>
+<li><strong>An update could arrive half-applied: new markup wearing the previous release's stylesheet.</strong> Static assets were served with an etag but no <code>Cache-Control</code>, so browsers cached them heuristically and reused a stylesheet for hours without revalidating. Asset URLs now carry the file's own modification time, so an unchanged file still caches hard while a changed one is a URL that cannot be served from cache.</li>
+<li><strong>Settings showed a permanently disabled Save button</strong> on tabs that have nothing to save, which reads like something is broken. Only the tabs made of environment fields show it; Project folders and Ops Room apply immediately.</li>
 <li><strong>Committing from GSO-1 failed on any machine that signs commits.</strong> The app is normally started by a LaunchAgent, whose <code>PATH</code> is four directories long, so git could not find <code>gpg</code> and every commit died with "cannot run gpg" while the identical commit worked in a terminal. Git now runs with a login-shell <code>PATH</code>, and with <code>GIT_TERMINAL_PROMPT=0</code> so a credential prompt fails readably instead of hanging on a terminal that is not there.</li>
 <li><strong>The first changed file in every repo had its name truncated by one character.</strong> <code>git status --porcelain</code> marks an unstaged change with a leading space, and the output was being stripped before parsing, so <code> M .DS_Store</code> became <code>M .DS_Store</code> and the path read as <code>DS_Store</code>. This also fed the Site tab's list of changed files.</li>
 </ul>
@@ -130,7 +136,6 @@ main{padding:10px 0 90px}
 <div class="rel-head">
 <h2 class="rel-v">0.1.4</h2>
 <span class="rel-date">2026-08-26</span>
-<span class="rel-tag rel-tag-now">current</span>
 <a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.4">Downloads &rarr;</a>
 </div>
 <h3 class="rel-s" data-tone="ok">Added</h3>
@@ -142,10 +147,6 @@ main{padding:10px 0 90px}
 </ul>
 <h3 class="rel-s" data-tone="warn">Fixed</h3>
 <ul class="rel-list">
-<li><strong>System load disagreed with Activity Monitor, and the app was the one that was wrong.</strong> Two separate causes. Memory was divided by 1,000,000,000 while macOS labels binary units as "GB", so the same 34,359,738,368 bytes read as "34.4 GB" here and "32.00 GB" there. And "used" came from <code>top</code>, which counts the file cache as used, where Activity Monitor lists cached files separately because the kernel reclaims them the instant anything needs the space. GSO-1 now reports app, wired, compressed, cached and available the way Apple does, and shows swap, which is the honest sign a machine is over-committed.</li>
-<li><strong>The model recommendation warned about the wrong number.</strong> It read free memory, which on a healthy Mac is near zero by design, and told you 0.2 GB was left when 8.8 GB was genuinely available. It reads available memory now.</li>
-<li><strong>An update could arrive half-applied: new markup wearing the previous release's stylesheet.</strong> Static assets were served with an etag but no <code>Cache-Control</code>, so browsers cached them heuristically and reused a stylesheet for hours without revalidating. Asset URLs now carry the file's own modification time, so an unchanged file still caches hard while a changed one is a URL that cannot be served from cache.</li>
-<li><strong>Settings showed a permanently disabled Save button</strong> on tabs that have nothing to save, which reads like something is broken. Only the tabs made of environment fields show it; Project folders and Ops Room apply immediately.</li>
 <li><strong>The Ops Room header claimed a model was connected when nothing was running.</strong> It read <code>GLM-4.7 · local</code> from a hardcoded string, and both status dots were painted green unconditionally. It now reports the model that is actually loaded, or says so when there is none.</li>
 <li><strong>The Library search box was partly covered by the filter chips.</strong> The chip row bled upward 22px into a 16px gap, and painted over the bottom of the input. Search, chips and the column header are now one flush sticky stack, so the search box also stays put instead of scrolling away in a long list.</li>
 <li><strong>The Site tab said "not found at ." when nothing was configured.</strong> Unset and set-but-missing are now different messages, and both link to the setting instead of asking you to restart.</li>
