@@ -34,7 +34,7 @@ def _env_source_files() -> list[Path]:
     for plist in sorted((home / "Library" / "LaunchAgents").glob("*.plist")):
         files.append(plist)
         try:
-            text = plist.read_text()
+            text = plist.read_text(encoding="utf-8")
         except OSError:
             continue
         for m in re.finditer(r"<string>([^<]+)</string>", text):
@@ -71,7 +71,7 @@ def env_origin(key: str) -> str | None:
             continue
         seen.add(path)
         try:
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
         except OSError:
             continue
         if (plist if path.suffix == ".plist" else shell).search(text):
@@ -91,7 +91,7 @@ def _repo_root() -> Path:
     time, the same way the Ops Room launcher does.
     """
     try:
-        src = json.loads((APP_DIR / ".release.json").read_text()).get("source")
+        src = json.loads((APP_DIR / ".release.json").read_text(encoding="utf-8")).get("source")
         if src and Path(src).is_dir():
             return Path(src)
     except (OSError, ValueError):
@@ -103,7 +103,7 @@ def _load_env_file() -> None:
     """Load `<repo>/.env` into the environment. Real env vars always win."""
     path = _repo_root() / ".env"
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return
     for line in text.splitlines():
@@ -151,7 +151,7 @@ def _apply_saved_env() -> None:
     can configure things that are read from os.environ at import time.
     """
     try:
-        saved = json.loads((_resolve_data_dir() / "settings.json").read_text())
+        saved = json.loads((_resolve_data_dir() / "settings.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
     for key, value in (saved.get("env") or {}).items():
@@ -175,7 +175,7 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 def load_settings() -> dict:
     """User settings chosen in the app (as opposed to environment overrides)."""
     try:
-        data = json.loads(SETTINGS_FILE.read_text())
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
@@ -193,7 +193,7 @@ def save_settings(data: dict) -> None:
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2))
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     try:
         os.chmod(tmp, 0o600)
     except OSError:

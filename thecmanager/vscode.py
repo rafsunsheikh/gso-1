@@ -49,7 +49,7 @@ def open_folders() -> set[str]:
     if not _STORAGE.exists():
         return set()
     try:
-        data = json.loads(_STORAGE.read_text())
+        data = json.loads(_STORAGE.read_text(encoding="utf-8"))
     except Exception:
         return set()
 

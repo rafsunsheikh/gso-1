@@ -93,7 +93,7 @@ def cmd_start(args) -> int:
 
     if args.daemon:
         core.ensure_layout()
-        with core.LOGFILE.open("a") as fh:
+        with core.LOGFILE.open("a", encoding="utf-8") as fh:
             subprocess.Popen(
                 [sys.executable, "-m", "supervisor", "start"],
                 cwd=str(core.REPO),

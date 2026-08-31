@@ -11,6 +11,14 @@ Nothing yet.
 
 ## [0.1.5] — 2026-08-31
 
+### Fixed
+- **The Windows build served an error page instead of the app.** Every text
+  file was read with the platform's default encoding, which is UTF-8 on macOS
+  and Linux but cp1252 on Windows, so `index.html` failed to decode and every
+  request returned 500. Everything the app reads, your READMEs, manifests,
+  settings and logs, is now read as UTF-8 explicitly, which also stops
+  non-English filenames and content being mangled on Windows.
+
 ### Added
 - **The Ops Room can run on Claude.** Its model is now a choice between the
   local llama.cpp server and Anthropic's models, made in Settings and stored

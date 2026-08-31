@@ -83,7 +83,7 @@ def start(name: str, command: str, cwd: str, port: Optional[int] = None) -> dict
         return {"ok": False, "message": "No start command configured for this app."}
 
     lp = log_path(name)
-    log_fh = open(lp, "w")
+    log_fh = open(lp, "w", encoding="utf-8")
     header = f"$ cd {cwd}\n$ {command}\n{'-' * 60}\n"
     log_fh.write(header)
     log_fh.flush()
@@ -147,7 +147,7 @@ def tail_log(name: str, lines: int = 200) -> str:
     if not lp.exists():
         return ""
     try:
-        content = lp.read_text(errors="ignore").splitlines()
+        content = lp.read_text(encoding="utf-8", errors="ignore").splitlines()
         return "\n".join(content[-lines:])
     except Exception:
         return ""
@@ -174,7 +174,7 @@ def start_setup(name: str, command: str, cwd: str) -> dict:
         return {"ok": False, "message": f"Setup for {name} is already running."}
 
     lp = setup_log_path(name)
-    log_fh = open(lp, "w")
+    log_fh = open(lp, "w", encoding="utf-8")
     log_fh.write(f"$ cd {cwd}\n$ {command}\n{'-' * 60}\n")
     log_fh.flush()
 
@@ -224,7 +224,7 @@ def tail_setup_log(name: str, lines: int = 400) -> str:
     if not lp.exists():
         return ""
     try:
-        content = lp.read_text(errors="ignore").splitlines()
+        content = lp.read_text(encoding="utf-8", errors="ignore").splitlines()
         return "\n".join(content[-lines:])
     except Exception:
         return ""

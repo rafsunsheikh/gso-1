@@ -26,7 +26,7 @@ _LOG = os.environ.get("MANAGER_APPROVAL_LOG")
 def log(msg: str) -> None:
     if _LOG:
         try:
-            with open(_LOG, "a") as f:
+            with open(_LOG, "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
         except Exception:
             pass

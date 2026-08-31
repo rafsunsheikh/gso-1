@@ -19,7 +19,7 @@ def _load() -> dict:
     if not config.REGISTRY_FILE.exists():
         return {}
     try:
-        return json.loads(config.REGISTRY_FILE.read_text())
+        return json.loads(config.REGISTRY_FILE.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -27,7 +27,7 @@ def _load() -> dict:
 def _save(data: dict) -> None:
     config.ensure_dirs()
     tmp = config.REGISTRY_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True))
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
     tmp.replace(config.REGISTRY_FILE)
 
 

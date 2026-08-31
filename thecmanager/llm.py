@@ -322,7 +322,7 @@ def start(
         min_p = 0.0
 
     lp = log_file()
-    fh = open(lp, "w")
+    fh = open(lp, "w", encoding="utf-8")
     cmd = [
         bin_,
         "-m", model_path,
@@ -429,7 +429,7 @@ def tail_log(lines: int = 200) -> str:
     if not lp.exists():
         return ""
     try:
-        return "\n".join(lp.read_text(errors="ignore").splitlines()[-lines:])
+        return "\n".join(lp.read_text(encoding="utf-8", errors="ignore").splitlines()[-lines:])
     except Exception:
         return ""
 

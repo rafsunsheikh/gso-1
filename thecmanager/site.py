@@ -129,7 +129,7 @@ def list_items(coll: str) -> list[dict]:
     """
     out = []
     for f in _md_files(_coll_dir(coll)):
-        fm, _ = _parse(f.read_text(errors="ignore"))
+        fm, _ = _parse(f.read_text(encoding="utf-8", errors="ignore"))
         out.append({
             "file": f.name,
             "title": fm.get("title") or f.stem,
@@ -142,7 +142,7 @@ def list_items(coll: str) -> list[dict]:
 
 def read_item(coll: str, name: str) -> dict:
     f = _safe_file(coll, name)
-    fm, body = _parse(f.read_text(errors="ignore"))
+    fm, body = _parse(f.read_text(encoding="utf-8", errors="ignore"))
     return {"collection": coll, "file": f.name, "frontmatter": _jsonable(fm), "body": body}
 
 
@@ -151,7 +151,7 @@ def save_item(coll: str, name: str, frontmatter: dict, body: str) -> dict:
     f = _safe_file(coll, name)
     if not f.exists():
         return {"ok": False, "output": "file not found"}
-    f.write_text(_compose(frontmatter, body))
+    f.write_text(_compose(frontmatter, body), encoding="utf-8")
     return {"ok": True, "file": f.name}
 
 
@@ -161,7 +161,7 @@ def create_item(coll: str, filename: str, frontmatter: dict, body: str) -> dict:
     f = _safe_file(coll, filename)
     if f.exists():
         return {"ok": False, "output": "a file with that name already exists"}
-    f.write_text(_compose(frontmatter or {"title": "Untitled"}, body or ""))
+    f.write_text(_compose(frontmatter or {"title": "Untitled"}, body or ""), encoding="utf-8")
     return {"ok": True, "collection": coll, "file": f.name}
 
 
