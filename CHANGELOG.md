@@ -88,6 +88,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without telling you where it was set.
 
 ### Fixed
+- **An update could arrive half-applied: new markup wearing the previous
+  release's stylesheet.** Static assets were served with an etag but no
+  `Cache-Control`, so browsers cached them heuristically and reused a
+  stylesheet for hours without revalidating. Asset URLs now carry the file's
+  own modification time, so an unchanged file still caches hard while a changed
+  one is a URL that cannot be served from cache.
+- **Settings showed a permanently disabled Save button** on tabs that have
+  nothing to save, which reads like something is broken. Only the tabs made of
+  environment fields show it; Project folders and Ops Room apply immediately.
 - **The Ops Room header claimed a model was connected when nothing was
   running.** It read `GLM-4.7 · local` from a hardcoded string, and both status
   dots were painted green unconditionally. It now reports the model that is

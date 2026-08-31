@@ -3681,7 +3681,11 @@
                     border:1px solid var(--line);border-radius:8px;background:transparent;
                     color:var(--text);cursor:pointer">Send a test message</button>` : ""}
 
-          ${SETTINGS_TAB !== "folders" ? `
+          ${/* Only the tabs made of env-var fields have anything to save. Folders
+                and Ops Room apply immediately through their own endpoints, and a
+                permanently greyed-out Save button on them reads like something
+                is broken. */
+             (SETTINGS_FIELDS[SETTINGS_TAB] || []).length ? `
             <div style="display:flex;align-items:center;gap:12px;margin-top:18px">
               <button id="set-save" ${pending ? "" : "disabled"}
                 style="padding:9px 18px;font-size:.87rem;font-weight:600;border:0;border-radius:8px;
