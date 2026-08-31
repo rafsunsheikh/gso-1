@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.5] — 2026-08-31
+
 ### Added
 - **The Ops Room can run on Claude.** Its model is now a choice between the
   local llama.cpp server and Anthropic's models, made in Settings and stored
@@ -52,6 +56,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a repo that needs attention says so without being opened.
 
 ### Fixed
+- **System load disagreed with Activity Monitor, and the app was the one that
+  was wrong.** Two separate causes. Memory was divided by 1,000,000,000 while
+  macOS labels binary units as "GB", so the same 34,359,738,368 bytes read as
+  "34.4 GB" here and "32.00 GB" there. And "used" came from `top`, which counts
+  the file cache as used, where Activity Monitor lists cached files separately
+  because the kernel reclaims them the instant anything needs the space. GSO-1
+  now reports app, wired, compressed, cached and available the way Apple does,
+  and shows swap, which is the honest sign a machine is over-committed.
+- **The model recommendation warned about the wrong number.** It read free
+  memory, which on a healthy Mac is near zero by design, and told you 0.2 GB
+  was left when 8.8 GB was genuinely available. It reads available memory now.
+- **An update could arrive half-applied: new markup wearing the previous
+  release's stylesheet.** Static assets were served with an etag but no
+  `Cache-Control`, so browsers cached them heuristically and reused a
+  stylesheet for hours without revalidating. Asset URLs now carry the file's
+  own modification time, so an unchanged file still caches hard while a changed
+  one is a URL that cannot be served from cache.
+- **Settings showed a permanently disabled Save button** on tabs that have
+  nothing to save, which reads like something is broken. Only the tabs made of
+  environment fields show it; Project folders and Ops Room apply immediately.
 - **Committing from GSO-1 failed on any machine that signs commits.** The app
   is normally started by a LaunchAgent, whose `PATH` is four directories long,
   so git could not find `gpg` and every commit died with "cannot run gpg" while
@@ -88,26 +112,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without telling you where it was set.
 
 ### Fixed
-- **System load disagreed with Activity Monitor, and the app was the one that
-  was wrong.** Two separate causes. Memory was divided by 1,000,000,000 while
-  macOS labels binary units as "GB", so the same 34,359,738,368 bytes read as
-  "34.4 GB" here and "32.00 GB" there. And "used" came from `top`, which counts
-  the file cache as used, where Activity Monitor lists cached files separately
-  because the kernel reclaims them the instant anything needs the space. GSO-1
-  now reports app, wired, compressed, cached and available the way Apple does,
-  and shows swap, which is the honest sign a machine is over-committed.
-- **The model recommendation warned about the wrong number.** It read free
-  memory, which on a healthy Mac is near zero by design, and told you 0.2 GB
-  was left when 8.8 GB was genuinely available. It reads available memory now.
-- **An update could arrive half-applied: new markup wearing the previous
-  release's stylesheet.** Static assets were served with an etag but no
-  `Cache-Control`, so browsers cached them heuristically and reused a
-  stylesheet for hours without revalidating. Asset URLs now carry the file's
-  own modification time, so an unchanged file still caches hard while a changed
-  one is a URL that cannot be served from cache.
-- **Settings showed a permanently disabled Save button** on tabs that have
-  nothing to save, which reads like something is broken. Only the tabs made of
-  environment fields show it; Project folders and Ops Room apply immediately.
 - **The Ops Room header claimed a model was connected when nothing was
   running.** It read `GLM-4.7 · local` from a hardcoded string, and both status
   dots were painted green unconditionally. It now reports the model that is
@@ -285,7 +289,9 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.5
+[0.1.4]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.4
 [0.1.3]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.3
 [0.1.2]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.2
 [0.1.1]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.1

@@ -1,3 +1,3 @@
 """GSO-1: a local application registry & launcher."""
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
