@@ -3355,6 +3355,7 @@
     const SETTINGS_TABS = [
       { id: "folders",  label: "Project folders" },
       { id: "telegram", label: "Telegram" },
+      { id: "opsroom",  label: "Ops Room" },
       { id: "remote",   label: "Phone access" },
       { id: "other",    label: "Other" },
     ];
@@ -3404,6 +3405,198 @@
         </div>`;
     }
 
+    let OPS_PROVIDER = null;      // which brain the Ops Room uses
+    let OPS_LOGIN = null;         // live sign-in events, while one is running
+
+    /* Choosing the Ops Room's brain, and connecting Claude.
+       The agent's tools, its sandbox and the build/verify/promote sequence are
+       the same either way: this only changes which model answers. */
+    function settingsOpsRoomPane() {
+      const p = OPS_PROVIDER;
+      if (!p) {
+        loadOpsProvider();
+        return `<div style="padding:6px 0;color:var(--text-dim);font-size:.85rem">Reading the Ops Room setup…</div>`;
+      }
+      const claude = p.provider === "anthropic";
+      const models = p.models || [];
+      const lg = OPS_LOGIN;
+
+      return `
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0 0 16px">
+          Which model answers in the Ops Room. Its tools, its sandbox and the
+          build&ndash;verify&ndash;promote sequence are the same either way.
+        </p>
+
+        <div class="ops-choice">
+          <button class="ops-opt" data-prov="local" aria-pressed="${!claude}">
+            <b>Local model</b>
+            <span>Runs on this machine through llama.cpp. Free and private; needs a
+              model loaded in the Local LLM tab.</span>
+          </button>
+          <button class="ops-opt" data-prov="anthropic" aria-pressed="${claude}">
+            <b>Claude</b>
+            <span>Anthropic's models over the API. Stronger at multi-step work;
+              billed to your Anthropic account.</span>
+          </button>
+        </div>
+
+        ${claude ? `
+          <div style="margin-top:18px">
+            <label for="ops-model" style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px">Model</label>
+            <select id="ops-model" style="width:100%;max-width:340px;padding:8px 11px;font-size:.85rem;
+                    border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--line)">
+              ${models.map(m => `<option value="${escapeHtml(m.id)}" ${
+                m.id === p.model ? "selected" : ""}>${escapeHtml(m.id)}</option>`).join("")
+                || `<option>${escapeHtml(p.model || "claude-sonnet-5")}</option>`}
+            </select>
+            <div style="font-size:.75rem;color:var(--text-dim);margin-top:4px">
+              Sonnet is the sensible default: Ops Room turns are mostly tool calls
+              over local state, and you pay for each one.</div>
+          </div>
+
+          <div class="ops-conn" data-on="${p.connected ? 1 : 0}" style="margin-top:18px">
+            <span class="gso-dot" data-state="${p.connected ? "live" : ""}" aria-hidden="true"></span>
+            <span style="flex:1">${p.connected
+              ? "Connected to Anthropic."
+              : "Not connected yet. Signing in stores a token for GSO-1 only."}</span>
+            ${p.connected
+              ? `<button id="ops-logout" class="lib-act" data-tone="neutral">Disconnect</button>`
+              : `<button id="ops-login" class="lib-act">Connect Claude</button>`}
+          </div>
+
+          ${lg ? `<div class="ops-login-box">
+            ${lg.url ? `<p style="margin:0 0 8px">Open this to authorise, then come back:</p>
+              <a class="ops-login-url" href="${escapeHtml(lg.url)}" target="_blank"
+                 rel="noreferrer">${escapeHtml(lg.url)}</a>` : ""}
+            ${lg.prompt ? `<p style="margin:10px 0 6px">${escapeHtml(lg.prompt)}</p>
+              <div style="display:flex;gap:8px">
+                <input id="ops-answer" type="${lg.secret ? "password" : "text"}"
+                       autocomplete="off" spellcheck="false"
+                       style="flex:1;padding:7px 10px;font-size:.82rem;border-radius:8px;
+                              background:var(--bg);color:var(--text);border:1px solid var(--line)"/>
+                <button id="ops-answer-send" class="lib-act">Send</button>
+              </div>` : ""}
+            ${(lg.lines || []).length ? `<pre class="dk-log" style="margin-top:10px">${
+              escapeHtml(lg.lines.join("\n"))}</pre>` : ""}
+            ${lg.done ? "" : `<button id="ops-login-cancel" class="dk-link" style="margin-top:8px">Cancel</button>`}
+          </div>` : ""}
+        ` : ""}
+
+        ${p.error ? `<pre class="dk-log" data-tone="err" style="margin-top:14px">${escapeHtml(p.error)}</pre>` : ""}`;
+    }
+
+    async function loadOpsProvider() {
+      try { OPS_PROVIDER = await api("/api/opsroom/provider", {timeoutMs: 120000}); }
+      catch (e) { OPS_PROVIDER = {provider: "local", connected: false, models: [],
+                                  error: String(e && e.message || e)}; }
+      if (activeView === "settings" && SETTINGS_TAB === "opsroom") renderSettings();
+    }
+
+    function wireOpsRoomPane() {
+      $$("[data-prov]").forEach(b => b.onclick = async () => {
+        const want = b.dataset.prov;
+        if (OPS_PROVIDER && OPS_PROVIDER.provider === want) return;
+        try {
+          await api("/api/opsroom/provider", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({provider: want}),
+          });
+          OPS_PROVIDER = {...OPS_PROVIDER, provider: want};
+          flash(want === "anthropic" ? "Ops Room will use Claude" : "Ops Room will use the local model", true);
+          renderSettings();
+          if (window.opsRoom && window.opsRoom.refresh) window.opsRoom.refresh();
+        } catch (e) { flash(String(e && e.message || e), false); }
+      });
+
+      const sel = $("#ops-model");
+      if (sel) sel.onchange = async () => {
+        try {
+          await api("/api/opsroom/provider", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({provider: "anthropic", model: sel.value}),
+          });
+          OPS_PROVIDER = {...OPS_PROVIDER, model: sel.value};
+          flash(`Ops Room will use ${sel.value}`, true);
+        } catch (e) { flash(String(e && e.message || e), false); }
+      };
+
+      const login = $("#ops-login");
+      if (login) login.onclick = () => startOpsLogin();
+
+      const cancel = $("#ops-login-cancel");
+      if (cancel) cancel.onclick = async () => {
+        await api("/api/opsroom/login/cancel", {method: "POST"}).catch(() => {});
+        OPS_LOGIN = null; renderSettings();
+      };
+
+      const send = $("#ops-answer-send");
+      if (send) send.onclick = async () => {
+        const box = $("#ops-answer");
+        if (!box || !box.value.trim()) return;
+        const answer = box.value.trim();
+        send.disabled = true;
+        await api("/api/opsroom/login/answer", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({answer}),
+        }).catch(() => {});
+        OPS_LOGIN = {...OPS_LOGIN, prompt: null};
+        renderSettings();
+      };
+
+      const out = $("#ops-logout");
+      if (out) out.onclick = async () => {
+        if (!confirm("Disconnect Claude from the Ops Room?\n\nThe stored token is deleted.")) return;
+        out.textContent = "Disconnecting…"; out.disabled = true;
+        await api("/api/opsroom/logout", {method: "POST"}).catch(() => {});
+        OPS_PROVIDER = null; OPS_LOGIN = null;
+        renderSettings();
+      };
+    }
+
+    /* The sign-in is a live conversation with the sidecar: it emits a URL to
+       open, may ask for a pasted code, and finishes. Streamed rather than
+       polled so the URL appears the moment it exists. */
+    function startOpsLogin() {
+      OPS_LOGIN = {lines: [], url: null, prompt: null, done: false};
+      renderSettings();
+      const es = new EventSource("/api/opsroom/login");
+      const note = (t) => {
+        OPS_LOGIN.lines = [...(OPS_LOGIN.lines || []), t].slice(-12);
+        renderSettings();
+      };
+      es.addEventListener("auth_url", (e) => {
+        try { OPS_LOGIN.url = JSON.parse(e.data).url; } catch (x) {}
+        note("Waiting for you to authorise…");
+        // Opening it saves a copy-paste; the link stays on screen either way.
+        if (OPS_LOGIN.url) window.open(OPS_LOGIN.url, "_blank", "noreferrer");
+      });
+      es.addEventListener("device_code", (e) => {
+        try { const d = JSON.parse(e.data); OPS_LOGIN.url = d.url;
+              note(`Enter code ${d.code}`); } catch (x) {}
+      });
+      es.addEventListener("prompt", (e) => {
+        try { const d = JSON.parse(e.data);
+              OPS_LOGIN.prompt = d.message; OPS_LOGIN.secret = !!d.secret; } catch (x) {}
+        renderSettings();
+      });
+      ["info", "progress"].forEach(k => es.addEventListener(k, (e) => {
+        try { const d = JSON.parse(e.data); if (d.message) note(d.message); } catch (x) {}
+      }));
+      es.addEventListener("error", (e) => {
+        let msg = "Sign-in failed.";
+        try { msg = JSON.parse(e.data).message || msg; } catch (x) {}
+        OPS_LOGIN.done = true; note(msg); es.close();
+        flash(msg, false);
+      });
+      es.addEventListener("done", () => {
+        OPS_LOGIN = null; es.close();
+        flash("Claude connected", true);
+        OPS_PROVIDER = null; loadOpsProvider();
+      });
+      es.addEventListener("end", () => es.close());
+      es.onerror = () => { es.close(); };
+    }
+
     function settingsFoldersPane() {
       const roots = (SETTINGS && SETTINGS.roots) || [];
       const locked = SETTINGS && SETTINGS.roots_locked;
@@ -3449,7 +3642,9 @@
         }
       }
 
-      const pane = SETTINGS_TAB === "folders"
+      const pane = SETTINGS_TAB === "opsroom"
+        ? settingsOpsRoomPane()
+        : SETTINGS_TAB === "folders"
         ? settingsFoldersPane()
         : (SETTINGS_FIELDS[SETTINGS_TAB] || []).map(settingsField).join("");
 
@@ -3514,6 +3709,8 @@
 
       const edit = $("#set-editroots");
       if (edit) edit.onclick = openRootManager;
+
+      if (SETTINGS_TAB === "opsroom") wireOpsRoomPane();
 
       const save = $("#set-save");
       if (save) save.onclick = async () => {

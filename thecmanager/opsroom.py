@@ -47,6 +47,17 @@ def _agent_env() -> dict:
     meant to talk to some other endpoint.
     """
     env = {**os.environ, "OPSROOM_NO_COLOR": "1"}
+    # Which brain answers. Stored in settings.json rather than the environment
+    # so it survives a restart and can be changed from the app.
+    prov = provider()
+    env["OPSROOM_PROVIDER"] = prov
+    if prov == "anthropic":
+        model = config.load_settings().get("opsroom", {}).get("model")
+        if model:
+            env["OPSROOM_ANTHROPIC_MODEL"] = model
+        # A Claude turn does not touch llama-server, and pointing it at a
+        # stopped one would only produce a misleading warning.
+        return env
     st = llm.status()
     if not os.environ.get("OPSROOM_LLAMA_URL"):
         env["OPSROOM_LLAMA_URL"] = f"{st['url']}/v1"
@@ -55,6 +66,159 @@ def _agent_env() -> dict:
     if not os.environ.get("OPSROOM_MODEL") and st.get("model"):
         env["OPSROOM_MODEL"] = st["model"]
     return env
+
+
+# --------------------------------------------------------------- provider
+
+def provider() -> str:
+    """Which model backs the Ops Room: 'local' or 'anthropic'."""
+    if os.environ.get("OPSROOM_PROVIDER") in ("local", "anthropic"):
+        return os.environ["OPSROOM_PROVIDER"]
+    chosen = (config.load_settings().get("opsroom") or {}).get("provider")
+    return chosen if chosen in ("local", "anthropic") else "local"
+
+
+def set_provider(name: str, model: str | None = None) -> dict:
+    """Choose the brain, and optionally which Claude model."""
+    if name not in ("local", "anthropic"):
+        raise ValueError("provider must be 'local' or 'anthropic'")
+    settings = config.load_settings()
+    block = dict(settings.get("opsroom") or {})
+    block["provider"] = name
+    if model:
+        block["model"] = model
+    settings["opsroom"] = block
+    config.save_settings(settings)
+    return {"provider": name, "model": block.get("model")}
+
+
+def _login_cmd(*args: str) -> list[str]:
+    return [str(launcher()), "login", *args]
+
+
+def _run_login(*args: str, timeout: int = 60) -> dict:
+    """One-shot login subcommands. Each prints a single JSON event."""
+    try:
+        res = subprocess.run(
+            _login_cmd(*args), cwd=str(repo_root()), env=_agent_env(),
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.SubprocessError as exc:
+        return {"event": "error", "message": str(exc)}
+    for line in reversed((res.stdout or "").splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except ValueError:
+                continue
+    return {"event": "error",
+            "message": (res.stderr or "the sidecar printed nothing").strip()[:400]}
+
+
+def credential_status() -> dict:
+    """Whether Claude is connected. Reports presence, never the credential."""
+    ev = _run_login("anthropic", "--status", timeout=45)
+    connected = bool(ev.get("connected"))
+    return {"provider": provider(),
+            "model": (config.load_settings().get("opsroom") or {}).get("model"),
+            "connected": connected,
+            "error": ev.get("message") if ev.get("event") == "error" else None}
+
+
+def anthropic_models() -> list[dict]:
+    ev = _run_login("anthropic", "--models", timeout=45)
+    return ev.get("models") or []
+
+
+def logout() -> dict:
+    ev = _run_login("anthropic", "--logout", timeout=45)
+    return {"ok": ev.get("event") != "error", "message": ev.get("message", "")}
+
+
+# ------------------------------------------------------------ login flow
+#
+# The OAuth flow is interactive: it emits a URL the human must open, and may
+# ask for a code pasted back. So it runs as a live subprocess whose JSON events
+# are streamed to the browser, and whose stdin takes the answer.
+
+_login_lock = threading.Lock()
+_login: dict = {"proc": None, "queue": None}
+
+
+def login_stream() -> Iterator[str]:
+    """Run the OAuth flow, relaying each event to the browser as SSE."""
+    global _login
+    with _login_lock:
+        old = _login.get("proc")
+        if old is not None and old.poll() is None:
+            old.kill()
+        q: "queue.Queue[Optional[str]]" = queue.Queue()
+        try:
+            proc = subprocess.Popen(
+                _login_cmd("anthropic"), cwd=str(repo_root()), env=_agent_env(),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, bufsize=1,
+            )
+        except OSError as exc:
+            yield _sse("error", f"could not start the sidecar: {exc}")
+            return
+        _login = {"proc": proc, "queue": q}
+
+    def pump() -> None:
+        for line in proc.stdout:            # type: ignore[union-attr]
+            q.put(line.rstrip("\n"))
+        q.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    yield _sse("start", json.dumps({"provider": "anthropic"}))
+    try:
+        while True:
+            try:
+                line = q.get(timeout=15)
+            except queue.Empty:
+                yield _sse("ping", "")       # keep the connection from idling out
+                continue
+            if line is None:
+                break
+            line = line.strip()
+            if not line.startswith("{"):
+                continue                     # sidecar noise, not an event
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            yield _sse(str(ev.get("event") or "info"), json.dumps(ev))
+            if ev.get("event") in ("done", "error"):
+                break
+    finally:
+        yield _sse("end", "")
+        with _login_lock:
+            if _login.get("proc") is proc and proc.poll() is None:
+                proc.terminate()
+
+
+def login_answer(text: str) -> bool:
+    """Feed one prompted value back into a running login flow."""
+    with _login_lock:
+        proc = _login.get("proc")
+        if proc is None or proc.poll() is not None or not proc.stdin:
+            return False
+        try:
+            proc.stdin.write(json.dumps({"answer": text}) + "\n")
+            proc.stdin.flush()
+            return True
+        except OSError:
+            return False
+
+
+def login_cancel() -> bool:
+    with _login_lock:
+        proc = _login.get("proc")
+        if proc is None or proc.poll() is not None:
+            return False
+        proc.terminate()
+        return True
 
 
 def repo_root() -> Path:
@@ -82,15 +246,23 @@ def available() -> dict:
     first thing you learn from it is not to trust the header.
     """
     ops = launcher()
-    st = llm.status()
-    return {
+    prov = provider()
+    base = {
         "available": ops.is_file() and os.access(ops, os.X_OK),
         "launcher": str(ops),
         "busy": busy(),
-        "llm_state": st.get("state"),
-        "model": st.get("model"),
-        "endpoint": os.environ.get("OPSROOM_LLAMA_URL") or f"{st['url']}/v1",
+        "provider": prov,
     }
+    if prov == "anthropic":
+        # Claude does not need llama-server, and reporting it as stopped would
+        # put a dead-circuit warning on a working configuration.
+        model = (config.load_settings().get("opsroom") or {}).get("model") \
+            or "claude-sonnet-5"
+        return {**base, "llm_state": "running", "model": model,
+                "endpoint": "anthropic"}
+    st = llm.status()
+    return {**base, "llm_state": st.get("state"), "model": st.get("model"),
+            "endpoint": os.environ.get("OPSROOM_LLAMA_URL") or f"{st['url']}/v1"}
 
 
 def busy() -> bool:

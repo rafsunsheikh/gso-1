@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The Ops Room can run on Claude.** Its model is now a choice between the
+  local llama.cpp server and Anthropic's models, made in Settings and stored
+  with the rest of your configuration. Everything else is unchanged on purpose:
+  the same tools, the same sandbox, the same build-verify-promote sequence. The
+  guarantee that matters, that the agent cannot touch the supervisor which rolls
+  back its mistakes, comes from the path policy rather than from which model is
+  answering, so it holds either way.
+- **Sign in from the app.** Connecting Claude runs the OAuth flow from
+  Settings, opens the authorisation page for you and stores the token in
+  GSO-1's data folder, owner-readable only. Tokens refresh under a lock, so two
+  Ops Room runs waking at once cannot race each other's rotation.
 - **GSO-1 can tell you what a repo is.** Half a typical library detects as
   `unknown`, with no type, no language and often no README: the folder name is
   everything you get. Open a repo and GSO-1 reads it, asks your local model
