@@ -61,11 +61,12 @@ jobs:
           MANAGER_PORT: "8420"
           MANAGER_PROJECTS_DIRS: ${{ github.workspace }}
         run: |
-          ./build/dist/gso1-server/gso1-server &
+          ./build/dist/gso1-server/gso1-server > server.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8420/; then echo "frozen server OK"; exit 0; fi
             sleep 1
           done
+          echo "--- server output ---" >&2; tail -60 server.log >&2
           echo "frozen server never answered" >&2; exit 1
 
       - name: Smoke-test the frozen backend (windows)
@@ -75,14 +76,27 @@ jobs:
           MANAGER_PROJECTS_DIRS: ${{ github.workspace }}
         shell: pwsh
         run: |
-          Start-Process -FilePath "build\dist\gso1-server\gso1-server.exe"
+          # Capture the server's output. Start-Process discarded it, so when the
+          # backend died on startup the only evidence was "never answered" and
+          # the actual cause, a UnicodeDecodeError, was invisible.
+          Start-Process -FilePath "build\dist\gso1-server\gso1-server.exe" `
+            -RedirectStandardOutput server.out.log `
+            -RedirectStandardError server.err.log
+          $ok = $false
           for ($i = 0; $i -lt 40; $i++) {
             try {
               Invoke-WebRequest -Uri http://127.0.0.1:8420/ -UseBasicParsing -TimeoutSec 2 | Out-Null
-              Write-Host "frozen server OK"; exit 0
+              $ok = $true; break
             } catch { Start-Sleep -Seconds 1 }
           }
-          Write-Error "frozen server never answered"; exit 1
+          if (-not $ok) {
+            Write-Host "--- server stdout ---"
+            if (Test-Path server.out.log) { Get-Content server.out.log -Tail 60 }
+            Write-Host "--- server stderr ---"
+            if (Test-Path server.err.log) { Get-Content server.err.log -Tail 60 }
+            Write-Error "frozen server never answered"; exit 1
+          }
+          Write-Host "frozen server OK"
 
       - name: Install shell dependencies
         working-directory: desktop

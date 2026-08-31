@@ -42,7 +42,7 @@ def _mcp_config_path() -> Path:
     p = config.DATA_DIR / "claude_mcp.json"
     script = str(Path(__file__).resolve().parent / "claude_perm_mcp.py")
     cfg = {"mcpServers": {_MCP_NAME: {"command": __import__("sys").executable, "args": [script]}}}
-    p.write_text(json.dumps(cfg, indent=2))
+    p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     return p
 
 

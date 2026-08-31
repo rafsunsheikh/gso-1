@@ -225,7 +225,7 @@ def repo_root() -> Path:
     """The real checkout, even when running from a release snapshot."""
     meta = config.APP_DIR / ".release.json"
     try:
-        src = json.loads(meta.read_text()).get("source")
+        src = json.loads(meta.read_text(encoding="utf-8")).get("source")
         if src and Path(src).is_dir():
             return Path(src)
     except (OSError, ValueError):

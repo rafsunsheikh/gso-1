@@ -136,7 +136,7 @@ def _walk(root: Path, limit: int = _TREE_LIMIT) -> tuple[list[str], int]:
 
 def _read(path: Path, chars: int) -> str:
     try:
-        return path.read_text(errors="ignore")[:chars]
+        return path.read_text(encoding="utf-8", errors="ignore")[:chars]
     except OSError:
         return ""
 
@@ -147,7 +147,7 @@ def _manifest(root: Path) -> dict:
     pkg = root / "package.json"
     if pkg.exists():
         try:
-            d = json.loads(pkg.read_text(errors="ignore"))
+            d = json.loads(pkg.read_text(encoding="utf-8", errors="ignore"))
             out["package.json"] = {
                 "name": d.get("name"), "description": d.get("description"),
                 "scripts": list((d.get("scripts") or {}).items())[:10],
@@ -523,7 +523,7 @@ def _complete(prompt: str, timeout: int) -> tuple[Optional[dict], str]:
 # models, which is precisely the evidence the recommendation needs.
 def _read_file() -> dict:
     try:
-        d = json.loads(_FILE.read_text())
+        d = json.loads(_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"version": 2, "repos": {}, "perf": {}}
     if not isinstance(d, dict):
@@ -545,7 +545,7 @@ def _read_file() -> dict:
 def _write_file(data: dict) -> None:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = _FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=1))
+    tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
     tmp.replace(_FILE)
 
 

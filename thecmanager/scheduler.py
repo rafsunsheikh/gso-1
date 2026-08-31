@@ -73,7 +73,7 @@ DEFAULT_JOBS: list[dict] = [
 
 def _read_json(path: Path, fallback: Any) -> Any:
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return fallback
 
@@ -81,7 +81,7 @@ def _read_json(path: Path, fallback: Any) -> Any:
 def _write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2))
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp.replace(path)  # atomic; a crash mid-write cannot corrupt the schedule
 
 
@@ -254,7 +254,7 @@ def _opsroom_prompt(job: dict) -> str:
         return f"launcher not found at {ops}"
     log = config.LOG_DIR / f"job-{job.get('id', 'opsroom')}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a") as fh:
+    with log.open("a", encoding="utf-8") as fh:
         subprocess.Popen(
             [str(ops), prompt], cwd=str(config.APP_DIR),
             stdout=fh, stderr=subprocess.STDOUT, start_new_session=True,

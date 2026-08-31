@@ -37,7 +37,7 @@ def _load() -> dict:
     try:
         import json
 
-        data = json.loads(_PLANNER_FILE.read_text())
+        data = json.loads(_PLANNER_FILE.read_text(encoding="utf-8"))
         if "boards" not in data:
             data["boards"] = []
         return data
@@ -50,7 +50,7 @@ def _save(data: dict) -> None:
 
     config.ensure_dirs()
     tmp = _PLANNER_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2))
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp.replace(_PLANNER_FILE)
 
 

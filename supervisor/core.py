@@ -51,7 +51,7 @@ def _load_env() -> None:
     the supervisor stays stdlib-only and independent of the app package.
     """
     try:
-        text = (REPO / ".env").read_text()
+        text = (REPO / ".env").read_text(encoding="utf-8")
     except OSError:
         return
     for line in text.splitlines():
@@ -95,7 +95,7 @@ def log(msg: str) -> None:
     print(line, file=sys.stderr, flush=True)
     try:
         VAR.mkdir(parents=True, exist_ok=True)
-        with LOGFILE.open("a") as fh:
+        with LOGFILE.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
     except OSError:
         pass
@@ -160,7 +160,7 @@ def create_release(source: Path | None = None) -> str:
         "created": datetime.now(timezone.utc).isoformat(),
         "git": _git_describe(src),
     }
-    (dest / ".release.json").write_text(json.dumps(meta, indent=2))
+    (dest / ".release.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log(f"release created: {stamp} ({meta['git'] or 'no git'})")
     return stamp
 
@@ -459,7 +459,7 @@ class Supervisor:
 
     def run(self) -> int:
         ensure_layout()
-        PIDFILE.write_text(str(os.getpid()))
+        PIDFILE.write_text(str(os.getpid()), encoding="utf-8")
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, self._on_signal)
 
@@ -512,7 +512,7 @@ def running_pid() -> int | None:
     if not PIDFILE.exists():
         return None
     try:
-        pid = int(PIDFILE.read_text().strip())
+        pid = int(PIDFILE.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return None
     try:

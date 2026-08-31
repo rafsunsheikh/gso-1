@@ -39,7 +39,7 @@ def record(kind: str, repo: str, text: str) -> None:
         with _lock:
             path = _path()
             path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a") as fh:
+            with path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(row) + "\n")
             _trim(path)
     except OSError:
@@ -51,8 +51,8 @@ def _trim(path) -> None:
     try:
         if path.stat().st_size < 200_000:
             return
-        lines = path.read_text(errors="ignore").splitlines()[-MAX_EVENTS:]
-        path.write_text("\n".join(lines) + "\n")
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()[-MAX_EVENTS:]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     except OSError:
         pass
 
@@ -60,7 +60,7 @@ def _trim(path) -> None:
 def recent(limit: int = 60, since: Optional[float] = None) -> list[dict]:
     """Newest first. `since` is a unix timestamp, the UI passes local midnight."""
     try:
-        lines = _path().read_text(errors="ignore").splitlines()
+        lines = _path().read_text(encoding="utf-8", errors="ignore").splitlines()
     except OSError:
         return []
 

@@ -24,7 +24,7 @@ def _venv_python(path: Path) -> str:
 
 def _read_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -36,7 +36,7 @@ def _find_streamlit_entry(path: Path) -> Optional[str]:
         f = path / name
         if f.exists():
             try:
-                head = f.read_text(errors="ignore")[:4000]
+                head = f.read_text(encoding="utf-8", errors="ignore")[:4000]
                 if "import streamlit" in head or "streamlit" in head.split("\n")[0]:
                     return name
             except Exception:
@@ -44,7 +44,7 @@ def _find_streamlit_entry(path: Path) -> Optional[str]:
     # Fallback: scan a few python files at the top level.
     for f in sorted(path.glob("*.py"))[:10]:
         try:
-            if "import streamlit" in f.read_text(errors="ignore")[:2000]:
+            if "import streamlit" in f.read_text(encoding="utf-8", errors="ignore")[:2000]:
                 return f.name
         except Exception:
             continue
@@ -62,7 +62,7 @@ def _script_port_hint(path: Path, script: str) -> Optional[int]:
     """Guess a port by reading an explicit run script."""
     f = path / script
     try:
-        text = f.read_text(errors="ignore")
+        text = f.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return None
     # Explicit --port / --server.port / PORT=
@@ -122,7 +122,7 @@ def detect(path: Path) -> dict:
     makefile = path / "Makefile"
     if makefile.exists():
         try:
-            mk = makefile.read_text(errors="ignore")
+            mk = makefile.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             mk = ""
         for target in ("run", "serve", "dev", "start"):
@@ -205,7 +205,7 @@ def detect(path: Path) -> dict:
             f = path / entry_name
             if f.exists():
                 try:
-                    head = f.read_text(errors="ignore")[:4000]
+                    head = f.read_text(encoding="utf-8", errors="ignore")[:4000]
                 except Exception:
                     head = ""
                 module = entry_name[:-3]

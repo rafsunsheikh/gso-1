@@ -77,7 +77,7 @@ def _stamp_assets(html: str) -> str:
 
 def _page(name: str) -> HTMLResponse:
     """A page whose asset links carry the current build's fingerprints."""
-    html = _stamp_assets((STATIC_DIR / name).read_text())
+    html = _stamp_assets((STATIC_DIR / name).read_text(encoding="utf-8"))
     # The document itself must never be cached, or the stamps inside it are
     # exactly as stale as the assets they were meant to bust.
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})

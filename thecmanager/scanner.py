@@ -97,7 +97,7 @@ def read_description(name: str) -> str:
         f = path / readme
         if f.exists():
             try:
-                text = f.read_text(errors="ignore")
+                text = f.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 continue
             desc = _first_paragraph(text)
@@ -108,7 +108,7 @@ def read_description(name: str) -> str:
     pkg = path / "package.json"
     if pkg.exists():
         try:
-            d = json.loads(pkg.read_text()).get("description")
+            d = json.loads(pkg.read_text(encoding="utf-8")).get("description")
             if d:
                 return d
         except Exception:

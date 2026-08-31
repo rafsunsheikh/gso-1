@@ -109,6 +109,10 @@ main{padding:10px 0 90px}
 <span class="rel-tag rel-tag-now">current</span>
 <a class="rel-dl" href="https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.5">Downloads &rarr;</a>
 </div>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>The Windows build served an error page instead of the app.</strong> Every text file was read with the platform's default encoding, which is UTF-8 on macOS and Linux but cp1252 on Windows, so <code>index.html</code> failed to decode and every request returned 500. Everything the app reads, your READMEs, manifests, settings and logs, is now read as UTF-8 explicitly, which also stops non-English filenames and content being mangled on Windows.</li>
+</ul>
 <h3 class="rel-s" data-tone="ok">Added</h3>
 <ul class="rel-list">
 <li><strong>The Ops Room can run on Claude.</strong> Its model is now a choice between the local llama.cpp server and Anthropic's models, made in Settings and stored with the rest of your configuration. Everything else is unchanged on purpose: the same tools, the same sandbox, the same build-verify-promote sequence. The guarantee that matters, that the agent cannot touch the supervisor which rolls back its mistakes, comes from the path policy rather than from which model is answering, so it holds either way.</li>
