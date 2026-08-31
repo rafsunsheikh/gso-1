@@ -1519,7 +1519,7 @@
       }, 1000);
     }
 
-    function fmtGb(n) { return (Number(n || 0) / 1e9).toFixed(1) + " GB"; }
+    function fmtGb(n) { return (Number(n || 0) / (1024 ** 3)).toFixed(1) + " GB"; }
 
     /** Swap the form over to another model's remembered flags. */
     function useModelPreset(path) {
@@ -1595,7 +1595,7 @@
 
       // ---- live server card
       const resident = (SYS && SYS.ram && SYS.ram.llm_bytes)
-        ? (SYS.ram.llm_bytes / 1e9).toFixed(1) + " GB" : "—";
+        ? (SYS.ram.llm_bytes / (1024 ** 3)).toFixed(1) + " GB" : "—";
       const bars = (USAGE && USAGE.bars) || [];
       const totals = (USAGE && USAGE.totals) || { requests: 0, tokens: 0, errors: 0 };
       const perMin = totals.tokens ? Math.round(totals.tokens / 60) : 0;
@@ -2142,8 +2142,13 @@
       }</div>`;
     }
 
+    /* macOS labels binary units as "GB": Activity Monitor's "32.00 GB" is
+       32 GiB, the same 34,359,738,368 bytes GSO-1 was rendering as "34.4 GB"
+       by dividing by 1e9. Same memory, different convention, and being the odd
+       one out is what made the two screens look like they disagreed. */
+    const GIB = 1024 ** 3;
     function renderSysmon(s) {
-      const gb = b => (b/1e9).toFixed(1);
+      const gb = b => (Number(b || 0) / GIB).toFixed(1);
       const c = s.cpu, r = s.ram, g = s.gpu;
       const cpuBar = bar([
         {w: c.llm,   cls: "bg-indigo-500"},
@@ -2174,10 +2179,15 @@
         <div>
           <div class="flex justify-between text-xs mb-1">
             <span class="text-slate-300">RAM, ${gb(r.used_bytes)} / ${gb(r.total_bytes)} GB (${r.percent}%)</span>
-            <span><span class="text-indigo-400">LLM ${gb(r.llm_bytes)}G</span> · <span class="text-emerald-400">other ${gb(r.other_bytes)}G</span> · free ${gb(r.free_bytes)}G</span>
+            <span><span class="text-indigo-400">LLM ${gb(r.llm_bytes)}G</span> · <span class="text-emerald-400">other ${gb(r.other_bytes)}G</span> · <span class="text-slate-400">cached ${gb(r.cached_bytes)}G</span></span>
           </div>
           ${ramBar}
-          <div class="text-[11px] text-slate-500 mt-1">of which wired ${gb(r.wired_bytes)}G</div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            ${gb(r.available_bytes)}G available for something new
+            &middot; wired ${gb(r.wired_bytes)}G
+            &middot; compressed ${gb(r.compressed_bytes)}G${
+              r.swap_used_bytes ? ` &middot; <span class="text-amber-400">swap ${
+                gb(r.swap_used_bytes)}G in use</span>` : ""}</div>
         </div>
         ${g.available ? `
         <div>
@@ -2192,8 +2202,11 @@
           <div class="space-y-1">${rows || '<span class="text-xs text-slate-500">—</span>'}</div>
         </div>
         <p class="text-[11px] text-slate-500 leading-relaxed border-t border-slate-800 pt-2">
-          Memory figures are each process's physical footprint (matches Activity Monitor); for the
-          GPU-offloaded model (<span class="mono">-ngl</span>) that includes its Metal/wired weights, which
+          Counted the way Activity Monitor counts: used is app memory plus wired plus compressed,
+          and cached files are listed apart from it because macOS reclaims them the moment anything
+          needs the space. "Available" is free plus that cache, which is what a new process can
+          actually have. Per-process figures are physical footprint; for a GPU-offloaded model
+          (<span class="mono">-ngl</span>) that includes its Metal/wired weights, which
           <span class="mono">ps</span>/RSS would miss. macOS doesn't expose per-process GPU utilization, so
           the GPU bar is system-wide, with the model on GPU, that activity is essentially the LLM.
         </p>
@@ -2691,7 +2704,7 @@
       const el = document.getElementById("dock-machine");
       if (!el || !SYS) return;
       const c = SYS.cpu, r = SYS.ram;
-      const gb = b => (b / 1e9).toFixed(1);
+      const gb = b => (Number(b || 0) / (1024 ** 3)).toFixed(1);
       const cpuTone = c.busy > 85 ? "err" : c.busy > 60 ? "warn" : "";
       const ramTone = r.percent > 90 ? "err" : r.percent > 75 ? "warn" : "";
       const pct = b => Math.max(0, Math.min(100, (b / r.total_bytes) * 100));
