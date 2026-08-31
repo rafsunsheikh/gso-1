@@ -81,11 +81,30 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: No secrets committed
+        # Every credential this project can hold, not just the API-key shapes.
+        # The Ops Room stores an OAuth token now, and a Telegram bot token and a
+        # Tavily key were already possible; none of those matched the old
+        # pattern, so the check would have passed while publishing one.
         run: |
-          if git grep -InE '(sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY)' -- . ; then
+          if git grep -InE '(sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|tvly-[A-Za-z0-9-]{20,}|[0-9]{8,}:AA[A-Za-z0-9_-]{30,}|"(access|refresh)"[[:space:]]*:[[:space:]]*"[A-Za-z0-9_.-]{30,}")' -- . ':!.env.example' ; then
             echo "::error::possible secret committed"
             exit 1
           fi
+          echo "clean"
+
+      - name: Runtime state is never tracked
+        # These files hold the OAuth token, the bot token and the phone token on
+        # a real install. In a source checkout they sit inside the repo, one
+        # `git add -f` away from being published with it.
+        run: |
+          bad=0
+          for f in .env data/credentials.json data/settings.json data/registry.json; do
+            if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+              echo "::error::$f is tracked and must not be"
+              bad=1
+            fi
+          done
+          [ "$bad" = "0" ] || exit 1
           echo "clean"
 
       - name: No hardcoded home directories
