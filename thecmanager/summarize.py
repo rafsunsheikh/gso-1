@@ -648,6 +648,10 @@ _KV_AND_OVERHEAD_GB = 1.5
 _COMFORTABLE = 0.50
 _TIGHT = 0.70
 
+# macOS reports memory in binary units labelled "GB". Matching that convention
+# keeps every number GSO-1 shows comparable with Activity Monitor.
+GIB = 1024 ** 3
+
 
 def _fit(size_gb: float, total_gb: float) -> str:
     if not total_gb:
@@ -673,7 +677,7 @@ def recommend(repo_count: Optional[int] = None,
     from . import modelsetup, sysmon        # local: avoids an import cycle
 
     total_b = total_bytes if total_bytes is not None else sysmon.total_memory()
-    total_gb = round(total_b / 1e9, 1) if total_b else 0.0
+    total_gb = round(total_b / GIB, 1) if total_b else 0.0
     # get_snapshot returns nothing until the background sampler has warmed up,
     # and a recommendation that silently reports 0 GB free would never warn.
     snap = sysmon.get_snapshot(None)
@@ -683,8 +687,12 @@ def recommend(repo_count: Optional[int] = None,
         except Exception:      # noqa: BLE001
             snap = {}
     ram = (snap or {}).get("ram") or {}
-    free_b = ram.get("free_bytes") or 0
-    free_gb = round(free_b / 1e9, 1) if free_b else None
+    # Available, not free. Bare free memory on a healthy Mac is close to zero
+    # because the kernel spends the rest on a file cache it will hand back the
+    # instant anything asks: reading `free_bytes` had this warning claiming
+    # 0.2 GB was left on a machine with 8.8 GB genuinely available.
+    free_b = ram.get("available_bytes") or ram.get("free_bytes") or 0
+    free_gb = round(free_b / GIB, 1) if free_b else None
 
     options: list[dict] = []
     seen: set[str] = set()
@@ -779,7 +787,7 @@ def recommend(repo_count: Optional[int] = None,
     warning = None
     need = (pick["size_gb"] + _KV_AND_OVERHEAD_GB) if pick else 0
     if pick and free_gb is not None and need > free_gb:
-        warning = (f"Only {free_gb} GB is free at the moment, so loading this "
+        warning = (f"About {free_gb} GB is available right now, so loading this "
                    f"({need:.1f} GB) will push other applications into swap. It "
                    "still works, just slowly; closing a few things first helps.")
 

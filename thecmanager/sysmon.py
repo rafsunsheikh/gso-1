@@ -48,6 +48,78 @@ def _to_bytes(s: str) -> int:
     return int(val * mult.get(unit, 1))
 
 
+def _memory() -> dict:
+    """Memory the way Activity Monitor accounts for it.
+
+    `top`'s PhysMem "used" counts the file cache as used, so GSO-1 reported 90%
+    used and 2 GB free on a machine Activity Monitor showed as healthy with
+    6.8 GB of reclaimable cache. That is not a rounding difference, it is a
+    different definition, and the alarming one is the wrong one: cached file
+    pages are evicted the moment anything needs the space.
+
+    vm_stat exposes the categories Apple actually breaks out, and the arithmetic
+    below reproduces the Memory tab to two decimal places on this machine:
+
+        App Memory   = anonymous - purgeable
+        Memory Used  = App Memory + wired + compressed
+        Cached Files = file-backed + purgeable
+        Available    = free + speculative + cached
+    """
+    try:
+        out = subprocess.run(["vm_stat"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except Exception:
+        return {}
+    m = re.search(r"page size of (\d+)", out)
+    if not m:
+        return {}
+    page = int(m.group(1))
+
+    def pages(name: str) -> int:
+        hit = re.search(rf"{re.escape(name)}:\s+(\d+)", out)
+        return int(hit.group(1)) * page if hit else 0
+
+    anon = pages("Anonymous pages")
+    purgeable = pages("Pages purgeable")
+    wired = pages("Pages wired down")
+    compressed = pages("Pages occupied by compressor")
+    file_backed = pages("File-backed pages")
+    free = pages("Pages free")
+    speculative = pages("Pages speculative")
+    if not (anon or wired):
+        return {}
+
+    app = max(0, anon - purgeable)
+    cached = file_backed + purgeable
+    return {
+        "app_bytes": app,
+        "wired_bytes": wired,
+        "compressed_bytes": compressed,
+        "cached_bytes": cached,
+        "free_bytes": free + speculative,
+        "used_bytes": app + wired + compressed,
+        # Free plus everything reclaimable: the number that decides whether a
+        # 9 GB model loads without swapping, and the one the summariser's
+        # recommendation should be reading rather than bare free memory.
+        "available_bytes": free + speculative + cached,
+    }
+
+
+def _swap() -> dict:
+    """Swap in use. The honest signal that a machine is over-committed."""
+    try:
+        out = subprocess.run(["sysctl", "-n", "vm.swapusage"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return {}
+    used = re.search(r"used\s*=\s*([\d.]+[KMGT]?)", out)
+    total = re.search(r"total\s*=\s*([\d.]+[KMGT]?)", out)
+    return {
+        "swap_used_bytes": _to_bytes(used.group(1)) if used else 0,
+        "swap_total_bytes": _to_bytes(total.group(1)) if total else 0,
+    }
+
+
 def _gpu() -> dict:
     try:
         out = subprocess.run(
@@ -166,6 +238,7 @@ def _collect() -> dict:
     if llm_row and llm_row not in top:
         top = top[:7] + [llm_row]
 
+    vm = _memory()
     return {
         "ts": time.time(),
         "ncpu": _NCPU,
@@ -179,12 +252,22 @@ def _collect() -> dict:
         },
         "ram": {
             "total_bytes": _TOTAL_MEM,
-            "used_bytes": mem_used,
-            "wired_bytes": mem_wired,
-            "free_bytes": mem_unused or max(0, _TOTAL_MEM - mem_used),
+            # Apple's accounting where vm_stat gave it; top's cruder figures
+            # only as a fallback.
+            "used_bytes": vm.get("used_bytes", mem_used),
+            "wired_bytes": vm.get("wired_bytes", mem_wired),
+            "free_bytes": vm.get("free_bytes",
+                                 mem_unused or max(0, _TOTAL_MEM - mem_used)),
+            "cached_bytes": vm.get("cached_bytes", 0),
+            "compressed_bytes": vm.get("compressed_bytes", 0),
+            "app_bytes": vm.get("app_bytes", 0),
+            "available_bytes": vm.get("available_bytes",
+                                      mem_unused or max(0, _TOTAL_MEM - mem_used)),
             "llm_bytes": llm_mem,  # process RSS only (GPU-offloaded weights excluded)
-            "other_bytes": max(0, mem_used - llm_mem),
-            "percent": round(mem_used / _TOTAL_MEM * 100, 1) if _TOTAL_MEM else 0,
+            "other_bytes": max(0, vm.get("used_bytes", mem_used) - llm_mem),
+            "percent": round(vm.get("used_bytes", mem_used) / _TOTAL_MEM * 100, 1)
+            if _TOTAL_MEM else 0,
+            **_swap(),
         },
         "gpu": gpu,
         "top": top,

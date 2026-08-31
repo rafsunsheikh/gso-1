@@ -88,6 +88,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without telling you where it was set.
 
 ### Fixed
+- **System load disagreed with Activity Monitor, and the app was the one that
+  was wrong.** Two separate causes. Memory was divided by 1,000,000,000 while
+  macOS labels binary units as "GB", so the same 34,359,738,368 bytes read as
+  "34.4 GB" here and "32.00 GB" there. And "used" came from `top`, which counts
+  the file cache as used, where Activity Monitor lists cached files separately
+  because the kernel reclaims them the instant anything needs the space. GSO-1
+  now reports app, wired, compressed, cached and available the way Apple does,
+  and shows swap, which is the honest sign a machine is over-committed.
+- **The model recommendation warned about the wrong number.** It read free
+  memory, which on a healthy Mac is near zero by design, and told you 0.2 GB
+  was left when 8.8 GB was genuinely available. It reads available memory now.
 - **An update could arrive half-applied: new markup wearing the previous
   release's stylesheet.** Static assets were served with an etag but no
   `Cache-Control`, so browsers cached them heuristically and reused a
