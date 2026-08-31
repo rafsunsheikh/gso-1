@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import re
 import sys
 import threading
 import time
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import (
-    FileResponse, JSONResponse, PlainTextResponse, StreamingResponse,
+    FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -54,9 +55,37 @@ def _require(name: str) -> None:
 # --------------------------------------------------------------------------
 # UI
 # --------------------------------------------------------------------------
+# Static assets are served with an etag but no Cache-Control, so a browser
+# applies heuristic caching and may reuse a stylesheet for hours without ever
+# revalidating. The symptom is an update that half-arrives: new markup styled by
+# the previous release's CSS. Stamping each asset URL with the file's own
+# modification time means an unchanged file still caches hard, and a changed one
+# is a different URL that cannot be served from cache.
+_ASSET_REF = re.compile(r'(href|src)="(/static/[^"?]+)"')
+
+
+def _stamp_assets(html: str) -> str:
+    def sub(m: re.Match) -> str:
+        attr, path = m.group(1), m.group(2)
+        target = STATIC_DIR / path[len("/static/"):]
+        try:
+            return f'{attr}="{path}?v={int(target.stat().st_mtime)}"'
+        except OSError:
+            return m.group(0)
+    return _ASSET_REF.sub(sub, html)
+
+
+def _page(name: str) -> HTMLResponse:
+    """A page whose asset links carry the current build's fingerprints."""
+    html = _stamp_assets((STATIC_DIR / name).read_text())
+    # The document itself must never be cached, or the stamps inside it are
+    # exactly as stale as the assets they were meant to bust.
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+def index() -> HTMLResponse:
+    return _page("index.html")
 
 
 @app.get("/health")
@@ -69,8 +98,8 @@ def health_probe() -> JSONResponse:
 # Phone companion
 # --------------------------------------------------------------------------
 @app.get("/m")
-def mobile_index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "mobile.html")
+def mobile_index() -> HTMLResponse:
+    return _page("mobile.html")
 
 
 @app.get("/manifest.webmanifest")
