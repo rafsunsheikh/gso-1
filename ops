@@ -75,4 +75,12 @@ export OPSROOM_ENV_FILE="$REPO/.env"
 # The agent edits the repo, whatever it is running from.
 export OPSROOM_SANDBOX_ROOT="${OPSROOM_SANDBOX_ROOT:-$REPO}"
 
+# `ops login ...` runs the credential flow instead of a question. It is the
+# same binary and the same environment on purpose: whatever the agent will
+# authenticate as, the login must store.
+if [ "${1:-}" = "login" ]; then
+  shift
+  exec "$NODE" "$RUN_DIR/src/login.ts" "$@"
+fi
+
 exec "$NODE" "$RUN_DIR/src/ask.ts" "$@"

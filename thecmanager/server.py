@@ -720,6 +720,57 @@ def opsroom_status() -> JSONResponse:
     return JSONResponse(opsroom_bridge.available())
 
 
+@app.get("/api/opsroom/provider")
+def opsroom_provider() -> JSONResponse:
+    """Which brain the Ops Room uses, and whether Claude is connected."""
+    st = opsroom_bridge.credential_status()
+    return JSONResponse({**st, "models": opsroom_bridge.anthropic_models()})
+
+
+class ProviderBody(BaseModel):
+    provider: str
+    model: str | None = None
+
+
+@app.post("/api/opsroom/provider")
+def set_opsroom_provider(body: ProviderBody) -> JSONResponse:
+    try:
+        result = opsroom_bridge.set_provider(body.provider, body.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    events.record("run", "ops room", f"model set to {body.model or body.provider}")
+    return JSONResponse({"ok": True, **result})
+
+
+@app.get("/api/opsroom/login")
+def opsroom_login():
+    """SSE stream of the Claude sign-in. GET so EventSource can consume it."""
+    return StreamingResponse(
+        opsroom_bridge.login_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+class LoginAnswer(BaseModel):
+    answer: str
+
+
+@app.post("/api/opsroom/login/answer")
+def opsroom_login_answer(body: LoginAnswer) -> JSONResponse:
+    return JSONResponse({"ok": opsroom_bridge.login_answer(body.answer)})
+
+
+@app.post("/api/opsroom/login/cancel")
+def opsroom_login_cancel() -> JSONResponse:
+    return JSONResponse({"cancelled": opsroom_bridge.login_cancel()})
+
+
+@app.post("/api/opsroom/logout")
+def opsroom_logout() -> JSONResponse:
+    return JSONResponse(opsroom_bridge.logout())
+
+
 @app.post("/api/opsroom/cancel")
 def opsroom_cancel() -> JSONResponse:
     return JSONResponse({"cancelled": opsroom_bridge.cancel()})

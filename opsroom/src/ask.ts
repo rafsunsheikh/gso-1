@@ -9,7 +9,7 @@
 import "./env.ts"; // must be first: loads <repo>/.env into process.env
 
 import { Agent } from "@earendil-works/pi-agent-core";
-import { assertModelMatches, assertServerUp, buildModels, LLAMA_BASE_URL, MODEL_ID } from "./model.ts";
+import { assertModelMatches, assertReady, buildModels, describeModel, PROVIDER } from "./model.ts";
 import { M1_TOOLS } from "./tools.ts";
 import { M2_TOOLS } from "./fstools.ts";
 import { describePolicy } from "./policy.ts";
@@ -76,7 +76,7 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  await assertServerUp();
+  await assertReady();
   const served = await assertModelMatches();
   const { models, model } = buildModels();
 
@@ -127,7 +127,7 @@ async function main(): Promise<number> {
   });
 
   if (verbose) {
-    console.error(`[model] ${MODEL_ID} @ ${LLAMA_BASE_URL} (serving: ${served})`);
+    console.error(`[model] ${describeModel()} via ${PROVIDER} (serving: ${served})`);
     console.error(`[tools] ${tools.map((t) => t.name).join(", ")}`);
     console.error(describePolicy());
     console.error(`web_search: ${SEARCH_ENABLED ? "enabled" : "disabled (no TAVILY_API_KEY)"}\n`);
