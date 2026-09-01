@@ -4001,8 +4001,11 @@
       statusEl.textContent =
         !d.available ? 'launcher not found'
         : d.busy ? 'working…'
+        // Set to Claude but never signed in: say which of the two is missing.
+        : d.llm_state === 'unconfigured' ? 'Claude not connected'
         : d.llm_state === 'loading' ? 'model loading…'
         : d.llm_state !== 'running' ? 'no model running'
+        : d.provider === 'anthropic' ? shortModel(d.model) + ' · Claude'
         : (d.model ? shortModel(d.model) + ' · local' : 'local');
       statusEl.style.color = down ? 'var(--err-text)' : '';
       ['#ops-dock-dot', '#ops-btn-dot'].forEach(function (sel) {

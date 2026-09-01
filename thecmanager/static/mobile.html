@@ -593,6 +593,7 @@
     repos: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.2" y="3.2" width="6.4" height="6.4" rx="1.8"/><rect x="12.4" y="3.2" width="6.4" height="6.4" rx="1.8"/><rect x="3.2" y="12.4" width="6.4" height="6.4" rx="1.8"/><rect x="12.4" y="12.4" width="6.4" height="6.4" rx="1.8"/></svg>',
     planner: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7.6"/><path d="M11 6.4V11l3 1.8"/></svg>',
     room: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M11 3.4v15.2M3.4 11h15.2M5.6 5.6l10.8 10.8M16.4 5.6 5.6 16.4"/></svg>',
+    more: '<svg viewBox="0 0 22 22" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="5" cy="11" r="1.4"/><circle cx="11" cy="11" r="1.4"/><circle cx="17" cy="11" r="1.4"/></svg>',
     search: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="5"/><path d="M11.8 11.8 15.5 15.5"/></svg>',
   };
 
@@ -625,7 +626,8 @@
   }
 
   function tabbar() {
-    const tabs = [["ops", "Ops"], ["repos", "Repos"], ["planner", "Planner"], ["room", "Room"]];
+    const tabs = [["ops", "Ops"], ["repos", "Repos"], ["planner", "Planner"],
+                  ["room", "Room"], ["more", "More"]];
     return `<nav class="tabs">${tabs.map(([id, label]) =>
       `<button class="tab" data-tab="${id}" ${STATE.tab === id ? 'aria-current="page"' : ""}>
         ${ICONS[id]}<span>${label}</span></button>`).join("")}</nav>`;
@@ -878,7 +880,9 @@
     if (!board) {
       return header("Planner", "no boards") +
         `<div class="scroll"><div class="empty"><div class="empty-t">No boards yet</div>
-          <div class="empty-s">Create one on the desktop app.</div></div></div>` + tabbar();
+          <div class="empty-s">A board holds tasks in four columns.</div>
+          <button class="btn" data-boardmenu="1" style="margin-top:14px">New board</button>
+        </div></div>` + tabbar();
     }
     const counts = {};
     COLS.forEach(col => counts[col.id] = board.tasks.filter(t => t.status === col.id).length);
@@ -889,7 +893,9 @@
       `<button class="colbtn" data-board="${b.id}" aria-pressed="${b.id === board.id}">${esc(b.name)}</button>`
       ).join("")}</div>` : "";
 
-    return header("Planner", `${esc(board.name)} · ${board.tasks.length} tasks`) +
+    return header("Planner", `${esc(board.name)} · ${board.tasks.length} tasks`,
+      `<button class="hd-btn" data-newtask="1" aria-label="New task">+</button>
+       <button class="hd-btn" data-boardmenu="1" aria-label="Boards">&#8943;</button>`) +
       `<div class="scroll">
         ${boardPills}
         <div class="colbar">${COLS.map(col =>
@@ -904,6 +910,177 @@
           `<div class="empty"><div class="empty-t">Nothing in ${esc(
             (COLS.find(c => c.id === STATE.plannerCol) || {}).label)}</div>
            <div class="empty-s">Tap a task in another column to move it here.</div></div>`}
+      </div>` + tabbar();
+  }
+
+  // ---- 5. More: the screens that do not earn a tab of their own
+  function viewMore() {
+    const llm = STATE.llm || {};
+    const running = llm.state === "running";
+    const row = (tab, title, note, tone) => `
+      <button class="repo" data-go="${tab}">
+        <span class="repo-b"><span class="repo-n">${esc(title)}</span>
+          <span class="repo-m" ${tone ? `data-tone="${tone}"` : ""}>${note}</span></span>
+        <span class="chev">&rsaquo;</span>
+      </button>`;
+    const jobs = (STATE.schedule || {}).jobs || [];
+    const due = jobs.filter(j => j.enabled).length;
+    return header("More", "everything else GSO-1 does") +
+      `<div class="scroll">
+        ${row("llm", "Local LLM", running
+            ? `running &middot; ${esc(llm.model || "")}`
+            : "stopped", running ? "live" : "")}
+        ${row("brain", "Ops Room model", STATE.brain
+            ? (STATE.brain.provider === "anthropic"
+                ? `Claude &middot; ${STATE.brain.connected ? "connected" : "not connected"}`
+                : "the local model")
+            : "&hellip;", STATE.brain && STATE.brain.provider === "anthropic"
+               && !STATE.brain.connected ? "warn" : "")}
+        ${row("sched", "Scheduled jobs", jobs.length
+            ? `${due} of ${jobs.length} enabled` : "&hellip;")}
+        <div class="card" style="margin-top:14px">
+          <div class="card-l">This device</div>
+          <div class="kv">Signed in<b>with your phone token</b></div>
+          <button class="btn" data-tone="outline" data-act="lock"
+            style="width:100%;margin-top:10px">Lock this device</button>
+        </div>
+      </div>` + tabbar();
+  }
+
+  // ---- 6. Local LLM
+  function viewLlm() {
+    const st = STATE.llm || {};
+    const models = STATE.models || [];
+    const setup = STATE.llmSetup || {};
+    const dl = setup.download || {};
+    const rd = STATE.summaryReady || {};
+    const run = STATE.summaryRun || {};
+    const busy = st.state === "running" || st.state === "loading";
+
+    const server = `<div class="card">
+        <div class="card-l">llama-server</div>
+        <div class="kv">State<b data-tone="${busy ? "live" : ""}">${esc(st.state || "…")}</b></div>
+        <div class="kv">Model<b>${esc(st.model || "none loaded")}</b></div>
+        <div class="kv">Port<b>${st.port || "—"}</b></div>
+        ${st.uptime_seconds ? `<div class="kv">Uptime<b>${fmtUptime(st.uptime_seconds)}</b></div>` : ""}
+        ${busy ? `<button class="btn" data-tone="outline" data-act="llmstop"
+          style="width:100%;margin-top:10px;border-color:var(--err-line);color:var(--err-text)">Stop the server</button>` : ""}
+        ${!st.server_bin ? `<div class="sum-f" data-tone="warn">llama.cpp is not installed.
+          ${esc((setup.install || {}).command || "")}</div>` : ""}
+      </div>`;
+
+    const disk = `<div class="card">
+        <div class="card-l">Models on disk</div>
+        ${models.length ? models.map(m => `
+          <button class="repo" data-load="${esc(m.path)}" ${busy ? "disabled" : ""}>
+            <span class="repo-b"><span class="repo-n">${esc(m.name)}</span>
+              <span class="repo-m">${m.size_gb} GB${
+                m.name === st.model ? " &middot; loaded" : ""}</span></span>
+            ${m.name === st.model ? "" : `<span class="chev">&rsaquo;</span>`}
+          </button>`).join("")
+          : `<div class="sheet-n">No .gguf files found yet.</div>`}
+      </div>`;
+
+    const cat = (setup.catalog || {}).models || [];
+    const get = `<div class="card">
+        <div class="card-l">Get a model</div>
+        ${dl.state === "running" ? `
+          <div class="track"><i style="width:${dl.total ? (dl.done / dl.total) * 100 : 0}%;background:var(--primary)"></i></div>
+          <div class="sum-f">${esc(dl.label || "")} &middot; ${(dl.done / 1073741824).toFixed(1)} of ${
+            (dl.total / 1073741824).toFixed(1)} GB</div>
+          <button class="btn" data-tone="outline" data-act="dlcancel" style="width:100%;margin-top:10px">Stop</button>
+        ` : cat.length ? cat.map(m => `
+          <button class="repo" data-get="${esc(m.id)}" ${m.on_disk || !m.fits ? "disabled" : ""}>
+            <span class="repo-b"><span class="repo-n">${esc(m.label)}</span>
+              <span class="repo-m">${m.size_gb} GB &middot; ${
+                m.on_disk ? "already here" : m.fits ? esc(m.quant) : "too big for this Mac"}</span></span>
+            ${m.on_disk || !m.fits ? "" : `<span class="chev">&rsaquo;</span>`}
+          </button>`).join("") : `<div class="sheet-n">Checking what is available&hellip;</div>`}
+      </div>`;
+
+    const sum = `<div class="card">
+        <div class="card-l">Repo summaries</div>
+        ${run.state === "running" ? `
+          <div class="track"><i style="width:${run.total ? (run.done / run.total) * 100 : 0}%;background:var(--primary)"></i></div>
+          <div class="sum-f">${run.done} of ${run.total}${
+            run.current ? ` &middot; ${esc(run.current)}` : ""}${
+            run.seconds_left ? ` &middot; ~${Math.round(run.seconds_left / 60)} min left` : ""}</div>
+          <button class="btn" data-tone="outline" data-act="sumcancel" style="width:100%;margin-top:10px">Stop</button>
+        ` : `
+          <div class="kv">Done<b>${rd.summarised || 0} of ${rd.repos || 0}</b></div>
+          ${rd.estimate_seconds ? `<div class="sum-f">About ${
+            Math.max(1, Math.round(rd.estimate_seconds / 60))} min for the rest, at the speed measured here.</div>` : ""}
+          <button class="btn" data-act="sumrun" ${busy ? "" : "disabled"}
+            style="width:100%;margin-top:10px">Summarise ${rd.remaining || 0} repo${
+            rd.remaining === 1 ? "" : "s"}</button>
+          ${busy ? "" : `<div class="sum-f">Load a model first.</div>`}
+          ${run.message ? `<div class="sum-f">${esc(run.message)}</div>` : ""}
+        `}
+      </div>`;
+
+    return header("Local LLM", busy ? `running on :${st.port}` : "stopped", "", true) +
+      `<div class="scroll">${server}${disk}${get}${sum}</div>` + tabbar();
+  }
+
+  // ---- 7. Which brain answers in the Ops Room
+  function viewBrain() {
+    const b = STATE.brain;
+    if (!b) return header("Ops Room model", "loading…", "", true) +
+      `<div class="scroll"><div class="skel"></div></div>` + tabbar();
+    const claude = b.provider === "anthropic";
+    return header("Ops Room model", claude ? "Claude" : "the local model", "", true) +
+      `<div class="scroll">
+        <button class="repo" data-prov="local" aria-pressed="${!claude}">
+          <span class="repo-b"><span class="repo-n">Local model</span>
+            <span class="repo-m">Free and private. Needs one loaded.</span></span>
+          ${claude ? "" : `<span class="tag">in use</span>`}
+        </button>
+        <button class="repo" data-prov="anthropic" aria-pressed="${claude}">
+          <span class="repo-b"><span class="repo-n">Claude</span>
+            <span class="repo-m">Stronger at multi-step work. Billed to your account.</span></span>
+          ${claude ? `<span class="tag">in use</span>` : ""}
+        </button>
+        ${claude ? `<div class="card" style="margin-top:14px">
+          <div class="card-l">Claude</div>
+          <div class="kv">Model<b><button class="linkb" data-act="brainmodel">${
+            esc(b.model || "claude-sonnet-5")} &#9662;</button></b></div>
+          <div class="kv">Connection<b data-tone="${b.connected ? "live" : "warn"}">${
+            b.connected ? "connected" : "not connected"}</b></div>
+          ${b.connected
+            ? `<button class="btn" data-tone="outline" data-act="brainout"
+                 style="width:100%;margin-top:10px">Disconnect</button>`
+            : `<div class="sum-f">Signing in opens a page in your browser. The
+                 sign-in finishes on the Mac running GSO-1, so it is easiest to
+                 do it there: Settings, then Ops Room.</div>`}
+        </div>` : ""}
+      </div>` + tabbar();
+  }
+
+  // ---- 8. Scheduled jobs
+  function viewSchedule() {
+    const sc = STATE.schedule;
+    if (!sc) return header("Scheduled jobs", "loading…", "", true) +
+      `<div class="scroll"><div class="skel"></div></div>` + tabbar();
+    const jobs = sc.jobs || [];
+    return header("Scheduled jobs", sc.running ? "scheduler running" : "scheduler stopped", "", true) +
+      `<div class="scroll">
+        ${jobs.map(j => {
+          const last = j.last || {};
+          return `<div class="card">
+            <div class="kv" style="align-items:center">
+              <b style="font-size:14px">${esc(j.name)}</b>
+              <button class="switch" data-job="${esc(j.id)}" role="switch"
+                aria-checked="${j.enabled ? "true" : "false"}" aria-label="Enabled"></button></div>
+            <div class="sum-f">${j.daily_at ? `daily at ${esc(j.daily_at)}` : esc(j.kind || "")}${
+              last.last_run ? ` &middot; last ran ${esc(String(last.last_run).replace("T", " ").slice(0, 16))}` : " &middot; never run"}${
+              last.last_run ? (last.ok ? "" : " &middot; failed") : ""}</div>
+            ${last.detail ? `<pre class="log" style="margin-top:9px;max-height:110px">${
+              esc(String(last.detail).slice(0, 600))}</pre>` : ""}
+            <button class="btn" data-tone="outline" data-runjob="${esc(j.id)}"
+              style="width:100%">Run it now</button>
+          </div>`;
+        }).join("") || `<div class="empty"><div class="empty-t">No jobs</div>
+          <div class="empty-s">Scheduled jobs are configured on the desktop.</div></div>`}
       </div>` + tabbar();
   }
 
@@ -962,6 +1139,10 @@
       STATE.tab === "ops" ? viewOps()
       : STATE.tab === "repos" ? viewRepos()
       : STATE.tab === "planner" ? viewPlanner()
+      : STATE.tab === "more" ? viewMore()
+      : STATE.tab === "llm" ? viewLlm()
+      : STATE.tab === "sched" ? viewSchedule()
+      : STATE.tab === "brain" ? viewBrain()
       : viewRoom();
     wire();
   }
@@ -1019,6 +1200,20 @@
       b.onclick = () => ask(STATE.replies[Number(b.dataset.reply)]));
 
     document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => sheetAction(b.dataset.act));
+
+    // ---- More, and the screens it leads to
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+      STATE.tab = b.dataset.go; render(); refresh();
+    });
+    document.querySelectorAll("[data-load]").forEach(b => b.onclick = () => loadModel(b.dataset.load));
+    document.querySelectorAll("[data-get]").forEach(b => b.onclick = () => getModel(b.dataset.get));
+    document.querySelectorAll("[data-prov]").forEach(b => b.onclick = () => setProvider(b.dataset.prov));
+    document.querySelectorAll("[data-job]").forEach(b => b.onclick = () => toggleJob(b.dataset.job));
+    document.querySelectorAll("[data-runjob]").forEach(b => b.onclick = () => runJob(b.dataset.runjob));
+
+    // ---- planner writes
+    document.querySelectorAll("[data-newtask]").forEach(b => b.onclick = () => newTask());
+    document.querySelectorAll("[data-boardmenu]").forEach(b => b.onclick = () => boardMenu());
 
     const send = $("#sendbtn");
     if (send) send.onclick = () => ask($("#ask").value);
@@ -1089,7 +1284,16 @@
   }
 
   async function sheetAction(act) {
-    if (act === "back") { STATE.repo = STATE.repoName = null; return render(); }
+    if (act === "back") {
+      // The Local LLM, Ops Room and Schedule screens are reached from More, so
+      // back belongs there rather than wherever the tab bar last was.
+      if (["llm", "brain", "sched"].includes(STATE.tab)) { STATE.tab = "more"; return render(); }
+      STATE.repo = STATE.repoName = null; return render();
+    }
+    if (act === "lock") {
+      document.cookie = "gso_token=; Max-Age=0; path=/";
+      STATE.locked = true; return render();
+    }
     if (act === "search") { STATE.tab = "repos"; render(); const q = $("#q"); if (q) q.focus(); return; }
     if (act === "clear") { STATE.chat = []; STATE.replies = []; return render(); }
 
@@ -1192,21 +1396,244 @@
     } catch (e) { toast(`${act} failed: ${e.message}`, "error"); }
   }
 
+  // ---- loading the new screens -------------------------------------------
+  async function loadLlmScreen() {
+    // Status first so the card paints, then the slow parts as they land: the
+    // catalog resolves against Hugging Face and the readiness call counts repos.
+    try { STATE.llm = await api("/api/llm/status"); render(); } catch (e) {}
+    api("/api/llm/models").then(d => { STATE.models = d.models || []; render(); }).catch(() => {});
+    api("/api/llm/setup").then(d => { STATE.llmSetup = d; render();
+      if ((d.download || {}).state === "running") watchDownload(); }).catch(() => {});
+    api("/api/summary/readiness").then(d => { STATE.summaryReady = d; render(); }).catch(() => {});
+    api("/api/summary/run").then(d => { STATE.summaryRun = d; render();
+      if (d.state === "running") watchSummaryRun(); }).catch(() => {});
+  }
+
+  let _dlPoll = null;
+  function watchDownload() {
+    if (_dlPoll) return;
+    _dlPoll = setInterval(async () => {
+      let d; try { d = await api("/api/llm/download"); } catch (e) { return; }
+      STATE.llmSetup = { ...(STATE.llmSetup || {}), download: d };
+      if (d.state !== "running") {
+        clearInterval(_dlPoll); _dlPoll = null;
+        toast(d.message || "Download finished", d.state === "done" ? "info" : "error");
+        api("/api/llm/models").then(x => { STATE.models = x.models || []; render(); }).catch(() => {});
+      }
+      if (STATE.tab === "llm") render();
+    }, 1500);
+  }
+
+  let _sumPoll = null;
+  function watchSummaryRun() {
+    if (_sumPoll) return;
+    _sumPoll = setInterval(async () => {
+      let d; try { d = await api("/api/summary/run"); } catch (e) { return; }
+      STATE.summaryRun = d;
+      if (d.state !== "running") {
+        clearInterval(_sumPoll); _sumPoll = null;
+        if (d.message) toast(d.message, d.state === "done" ? "info" : "error");
+        api("/api/summary/readiness").then(x => { STATE.summaryReady = x; render(); }).catch(() => {});
+      }
+      if (STATE.tab === "llm") render();
+    }, 2000);
+  }
+
+  async function loadBrain() {
+    try { STATE.brain = await api("/api/opsroom/provider"); }
+    catch (e) { STATE.brain = { provider: "local", connected: false, models: [] }; }
+    render();
+  }
+
+  async function loadSchedule() {
+    try { STATE.schedule = await api("/api/schedule"); } catch (e) { STATE.schedule = { jobs: [] }; }
+    render();
+  }
+
+  // ---- Local LLM actions --------------------------------------------------
+  async function loadModel(path) {
+    const model = (STATE.models || []).find(m => m.path === path);
+    if (!model) return;
+    const go = await choose(model.name, [{ value: "load", label: `Load this model (${model.size_gb} GB)` }],
+      { note: "It uses the flags it was last started with." });
+    if (go !== "load") return;
+    try {
+      toast("Starting the server\u2026");
+      const r = await api("/api/llm/start", {
+        method: "POST", body: JSON.stringify({ ...(model.preset || {}), model_path: path }) });
+      toast(r.message || "Starting", r.ok ? "info" : "error");
+      setTimeout(() => api("/api/llm/status").then(v => { STATE.llm = v; render(); }).catch(() => {}), 2500);
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  async function getModel(id) {
+    const m = (((STATE.llmSetup || {}).catalog || {}).models || []).find(x => x.id === id);
+    if (!m) return;
+    const go = await choose(m.label, [{ value: "go", label: `Download ${m.size_gb} GB` }],
+      { note: `Saved into ${esc(((STATE.llmSetup || {}).catalog || {}).dest || "your model folder")}. It resumes if interrupted.` });
+    if (go !== "go") return;
+    try {
+      const r = await api("/api/llm/download", { method: "POST", body: JSON.stringify({ id }) });
+      toast(r.message, r.ok ? "info" : "error");
+      STATE.llmSetup = { ...(STATE.llmSetup || {}),
+        download: { state: "running", id, label: m.label, done: 0, total: m.size_bytes } };
+      watchDownload(); render();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  async function setProvider(which) {
+    if (STATE.brain && STATE.brain.provider === which) return;
+    try {
+      await api("/api/opsroom/provider", { method: "POST", body: JSON.stringify({ provider: which }) });
+      toast(which === "anthropic" ? "Ops Room will use Claude" : "Ops Room will use the local model");
+      await loadBrain();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  // ---- scheduled jobs -----------------------------------------------------
+  async function toggleJob(id) {
+    const job = ((STATE.schedule || {}).jobs || []).find(j => j.id === id);
+    if (!job) return;
+    try {
+      await api(`/api/schedule/${encodeURIComponent(id)}/enabled`, {
+        method: "POST", body: JSON.stringify({ enabled: !job.enabled }) });
+      await loadSchedule();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  async function runJob(id) {
+    const job = ((STATE.schedule || {}).jobs || []).find(j => j.id === id);
+    const go = await choose(job ? job.name : "Run job",
+      [{ value: "run", label: "Run it now" }],
+      { note: "It runs on the Mac and reports back here." });
+    if (go !== "run") return;
+    try {
+      toast("Running\u2026");
+      await api(`/api/schedule/${encodeURIComponent(id)}/run`, { method: "POST" });
+      await loadSchedule();
+      toast("Done");
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  // ---- planner writes -----------------------------------------------------
+  function currentBoard() {
+    return (STATE.planner || []).find(b => b.id === STATE.plannerBoard)
+      || (STATE.planner || [])[0] || null;
+  }
+
+  async function newTask() {
+    const board = currentBoard();
+    if (!board) return;
+    const col = COLS.find(c => c.id === STATE.plannerCol) || COLS[0];
+    const title = await askText("New task", {
+      note: `Added to ${col.label} on ${board.name}.`,
+      placeholder: "What needs doing", ok: "Add" });
+    if (!title || !title.trim()) return;
+    try {
+      await api(`/api/planner/boards/${board.id}/tasks`, {
+        method: "POST", body: JSON.stringify({ title: title.trim(), status: col.id }) });
+      await loadPlanner(); render();
+      toast("Added");
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  async function boardMenu() {
+    const board = currentBoard();
+    const pick = await choose("Boards", [
+      { value: "new", label: "New board" },
+      ...(board ? [
+        { value: "rename", label: `Rename "${board.name}"` },
+        { value: "link", label: board.app ? `Linked to ${board.app}` : "Link to an app" },
+        { value: "delete", label: `Delete "${board.name}"` },
+      ] : []),
+    ]);
+    if (!pick) return;
+    try {
+      if (pick === "new") {
+        const name = await askText("New board", { placeholder: "Board name", ok: "Create" });
+        if (!name || !name.trim()) return;
+        const r = await api("/api/planner/boards", {
+          method: "POST", body: JSON.stringify({ name: name.trim() }) });
+        await loadPlanner();
+        if (r.board) STATE.plannerBoard = r.board.id;
+        toast("Board created");
+      } else if (pick === "rename") {
+        const name = await askText("Rename board", { value: board.name, ok: "Rename" });
+        if (!name || !name.trim()) return;
+        await api(`/api/planner/boards/${board.id}`, {
+          method: "PUT", body: JSON.stringify({ name: name.trim() }) });
+        await loadPlanner();
+      } else if (pick === "link") {
+        const app = await askText("Link to an app", {
+          note: "The app's exact name, or blank to unlink.",
+          value: board.app || "", ok: "Link" });
+        if (app === null) return;
+        await api(`/api/planner/boards/${board.id}`, {
+          method: "PUT", body: JSON.stringify({ app: app.trim() || null }) });
+        await loadPlanner();
+      } else if (pick === "delete") {
+        // Deleting takes the tasks with it, so it is confirmed by name rather
+        // than by a yes/no somebody taps through on a phone.
+        const sure = await choose(`Delete "${board.name}"?`,
+          [{ value: "yes", label: `Delete it and its ${board.tasks.length} task${
+            board.tasks.length === 1 ? "" : "s"}` }],
+          { note: "This cannot be undone." });
+        if (sure !== "yes") return;
+        await api(`/api/planner/boards/${board.id}`, { method: "DELETE" });
+        STATE.plannerBoard = null;
+        await loadPlanner();
+        toast("Board deleted");
+      }
+      render();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
   async function moveTask(id) {
-    const board = (STATE.planner || []).find(b => b.id === STATE.plannerBoard);
+    const board = currentBoard();
     if (!board) return;
     const task = board.tasks.find(t => t.id === id);
     if (!task) return;
-    // Tapping advances a task one column, the phone gesture for "done with this".
+
+    // Advancing a column stays the first option, because it is what a tap on a
+    // task nearly always means. Everything else a task can need is under it,
+    // rather than only on the desktop.
     const i = COLS.findIndex(c => c.id === task.status);
-    const next = COLS[Math.min(COLS.length - 1, i + 1)].id;
-    if (next === task.status) return toast("Already done");
+    const next = i < COLS.length - 1 ? COLS[i + 1] : null;
+    const back = i > 0 ? COLS[i - 1] : null;
+
+    const pick = await choose(task.title, [
+      ...(next ? [{ value: `to:${next.id}`, label: `Move to ${next.label}` }] : []),
+      ...(back ? [{ value: `to:${back.id}`, label: `Back to ${back.label}` }] : []),
+      { value: "edit", label: "Edit the title" },
+      { value: "app", label: task.app ? `Linked to ${task.app}` : "Link to an app" },
+      { value: "delete", label: "Delete this task" },
+    ]);
+    if (!pick) return;
+
     try {
-      await api(`/api/planner/boards/${board.id}/tasks/${id}/move`, {
-        method: "PUT", body: JSON.stringify({ status: next, index: 0 }) });
-      toast(`Moved to ${COLS.find(c => c.id === next).label}`);
+      if (pick.startsWith("to:")) {
+        const status = pick.slice(3);
+        await api(`/api/planner/boards/${board.id}/tasks/${id}/move`, {
+          method: "PUT", body: JSON.stringify({ status, index: 0 }) });
+        toast(`Moved to ${(COLS.find(c => c.id === status) || {}).label}`);
+      } else if (pick === "edit") {
+        const title = await askText("Edit task", { value: task.title, ok: "Save" });
+        if (!title || !title.trim()) return;
+        await api(`/api/planner/boards/${board.id}/tasks/${id}`, {
+          method: "PUT", body: JSON.stringify({ title: title.trim() }) });
+      } else if (pick === "app") {
+        const app = await askText("Link to an app", {
+          note: "The app's exact name, or blank to unlink.",
+          value: task.app || "", ok: "Link" });
+        if (app === null) return;
+        await api(`/api/planner/boards/${board.id}/tasks/${id}`, {
+          method: "PUT", body: JSON.stringify({ app: app.trim() || null }) });
+      } else if (pick === "delete") {
+        await api(`/api/planner/boards/${board.id}/tasks/${id}`, { method: "DELETE" });
+        toast("Deleted");
+      }
       await loadPlanner(); render();
-    } catch (e) { toast(`Could not move it: ${e.message}`, "error"); }
+    } catch (e) { toast(e.message, "error"); }
   }
 
   // ---- Ops Room over SSE. The cookie carries the token; EventSource cannot
@@ -1256,6 +1683,16 @@
       }
       if (STATE.tab === "repos" && !STATE.apps) await Promise.all([loadApps(), loadOverview()]);
       if (STATE.tab === "planner" && !STATE.planner) await loadPlanner();
+      // The More screen summarises three others, so it needs their state before
+      // it can say anything useful about them.
+      if (STATE.tab === "more") {
+        if (!STATE.llm) api("/api/llm/status").then(v => { STATE.llm = v; render(); }).catch(() => {});
+        if (!STATE.brain) loadBrain();
+        if (!STATE.schedule) loadSchedule();
+      }
+      if (STATE.tab === "llm" && !STATE.models) await loadLlmScreen();
+      if (STATE.tab === "brain" && !STATE.brain) await loadBrain();
+      if (STATE.tab === "sched" && !STATE.schedule) await loadSchedule();
       render();
     } catch (e) {
       if (e.message !== "locked") toast(e.message, "error");

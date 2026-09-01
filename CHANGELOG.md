@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The phone gets the rest of GSO-1.** A More tab leads to the Local LLM,
+  where you can see the server, load a model, download one and run the whole
+  library's summaries with progress; to which model answers in the Ops Room;
+  and to the scheduled jobs, which can be switched on and off or run on the
+  spot. The Planner can now create boards and tasks, rename, link, move and
+  delete them, rather than showing what the desktop made.
 - **The phone can finish a piece of work too.** A repo on mobile now shows what
   it is, from the same summary the desktop writes, with the measured facts
   beside it; its branch, which taps to switch, including branches that only
@@ -16,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **The Ops Room header showed a green light for Claude even with no account
+  connected.** Choosing Claude is not the same as being able to reach it: the
+  status said "running" and named a model while every question was refused for
+  a missing credential. It now says so, and reading whether a credential exists
+  no longer spawns the sidecar, which took the Settings screen from about
+  forty-five seconds to half a second.
 - **Six buttons did nothing in the desktop app.** New board, Rename board and
   Link app in the Planner, and New file and Publish in the Site tab, all asked
   for a line of text with `window.prompt`, which Electron does not implement

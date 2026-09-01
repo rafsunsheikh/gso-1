@@ -116,14 +116,28 @@ def _run_login(*args: str, timeout: int = 60) -> dict:
             "message": (res.stderr or "the sidecar printed nothing").strip()[:400]}
 
 
+def has_anthropic_credential() -> bool:
+    """Whether a Claude credential is actually stored.
+
+    Read straight from the file the sidecar writes. Asking the sidecar means
+    spawning node and waiting seconds, and the dock polls this every fifteen;
+    reading one key out of a small JSON file costs nothing.
+    """
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_OAUTH_TOKEN"):
+        return True
+    try:
+        data = json.loads((config.DATA_DIR / "credentials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(isinstance(data, dict) and data.get("anthropic"))
+
+
 def credential_status() -> dict:
     """Whether Claude is connected. Reports presence, never the credential."""
-    ev = _run_login("anthropic", "--status", timeout=45)
-    connected = bool(ev.get("connected"))
     return {"provider": provider(),
             "model": (config.load_settings().get("opsroom") or {}).get("model"),
-            "connected": connected,
-            "error": ev.get("message") if ev.get("event") == "error" else None}
+            "connected": has_anthropic_credential(),
+            "error": None}
 
 
 def anthropic_models() -> list[dict]:
@@ -254,11 +268,17 @@ def available() -> dict:
         "provider": prov,
     }
     if prov == "anthropic":
-        # Claude does not need llama-server, and reporting it as stopped would
-        # put a dead-circuit warning on a working configuration.
+        # Claude does not need llama-server, but "provider is Claude" is not the
+        # same as "Claude will answer". Reporting running here regardless put a
+        # green dot and a model name on a configuration that refuses every
+        # question, which is the exact failure this header had once before.
         model = (config.load_settings().get("opsroom") or {}).get("model") \
             or "claude-sonnet-5"
-        return {**base, "llm_state": "running", "model": model,
+        ready = has_anthropic_credential()
+        return {**base,
+                "llm_state": "running" if ready else "unconfigured",
+                "model": model if ready else None,
+                "connected": ready,
                 "endpoint": "anthropic"}
     st = llm.status()
     return {**base, "llm_state": st.get("state"), "model": st.get("model"),
