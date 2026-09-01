@@ -281,7 +281,28 @@ def available() -> dict:
                 "connected": ready,
                 "endpoint": "anthropic"}
     st = llm.status()
+    # When nothing is running, say what could be. The Ops Room used to answer a
+    # question with "llama-server is not reachable, start it from the Local LLM
+    # view", which is a instruction to go elsewhere, do four things and come
+    # back, for a model the app already knows how to start.
+    startable = None
+    if st.get("state") == "stopped" and llm.server_bin():
+        path = llm.last_model()
+        models = llm.list_models()
+        if not path or not any(m["path"] == path for m in models):
+            # Nothing started before: the smallest on disk is the one most
+            # likely to load without trouble.
+            models.sort(key=lambda m: m.get("size_gb") or 0)
+            path = models[0]["path"] if models else None
+        if path:
+            match = next((m for m in models if m["path"] == path), None)
+            startable = {"path": path,
+                         "name": match["name"] if match else Path(path).stem,
+                         "size_gb": match.get("size_gb") if match else None}
     return {**base, "llm_state": st.get("state"), "model": st.get("model"),
+            "startable": startable,
+            "has_models": bool(llm.list_models()),
+            "has_llama": bool(llm.server_bin()),
             "endpoint": os.environ.get("OPSROOM_LLAMA_URL") or f"{st['url']}/v1"}
 
 

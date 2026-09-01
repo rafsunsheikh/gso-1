@@ -1639,10 +1639,72 @@
   // ---- Ops Room over SSE. The cookie carries the token; EventSource cannot
   // set headers, which is exactly why login sets one.
   let es = null;
-  function ask(text) {
+  /* Same reasoning as the desktop dock: a question typed here means the user
+     wants an answer, and refusing it because nothing is loaded, when the app
+     knows exactly what to load, is a dead end rather than an error. */
+  async function offerToStart(text) {
+    const st = STATE.opsStatus || {};
+    if (st.provider === "anthropic") {
+      STATE.chat.push({ who: "err", text:
+        "The Ops Room is set to use Claude, but no account is connected. Sign in on the Mac: Settings, then Ops Room." });
+      return true;
+    }
+    if (!st.has_llama) {
+      STATE.chat.push({ who: "err", text:
+        "llama.cpp is not installed on the Mac yet. More, then Local LLM, has the command." });
+      return true;
+    }
+    if (!st.startable) {
+      STATE.chat.push({ who: "err", text: st.has_models
+        ? "No model is running. Load one from More, then Local LLM."
+        : "No model on the Mac yet. More, then Local LLM, can download one." });
+      return true;
+    }
+    const m = st.startable;
+    const go = await choose("No model is running", [
+      { value: "start", label: `Start ${m.name}`, tag: `${m.size_gb || "?"} GB` },
+    ], { note: "It loads on the Mac, then your question is asked." });
+    if (go !== "start") return true;
+
+    STATE.chat.push({ who: "agent", text: `Loading ${m.name}\u2026` });
+    render();
+    try {
+      const r = await api("/api/llm/start", {
+        method: "POST", body: JSON.stringify({ model_path: m.path }) });
+      if (!r.ok) { STATE.chat.push({ who: "err", text: r.message || "Could not start it." }); render(); return true; }
+    } catch (e) {
+      STATE.chat.push({ who: "err", text: e.message }); render(); return true;
+    }
+    // Poll rather than guess: a big model takes a while to answer /health.
+    for (let i = 0; i < 150; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      let st2; try { st2 = await api("/api/llm/status"); } catch (e) { continue; }
+      if (st2.state === "running") {
+        STATE.llm = st2;
+        STATE.chat.pop();               // drop the "Loading…" line
+        render();
+        ask(text, true);                // and finally ask what was waiting
+        return true;
+      }
+    }
+    STATE.chat.push({ who: "err", text: "It is taking longer than expected; check More, then Local LLM." });
+    render();
+    return true;
+  }
+
+  function ask(text, echoed) {
     text = (text || "").trim();
     if (!text || STATE.chatBusy) return;
-    STATE.chat.push({ who: "user", text });
+    const os = STATE.opsStatus;
+    if (!echoed && os && os.available && os.llm_state
+        && os.llm_state !== "running" && os.llm_state !== "loading") {
+      STATE.chat.push({ who: "user", text });
+      const ta = $("#ask"); if (ta) ta.value = "";
+      render();
+      offerToStart(text);
+      return;
+    }
+    if (!echoed) STATE.chat.push({ who: "user", text });
     STATE.replies = [];
     STATE.chatBusy = true;
     render();
@@ -1683,6 +1745,11 @@
       }
       if (STATE.tab === "repos" && !STATE.apps) await Promise.all([loadApps(), loadOverview()]);
       if (STATE.tab === "planner" && !STATE.planner) await loadPlanner();
+      // The Room needs to know whether anything can answer before it sends a
+      // question, so it can offer to start one instead of failing.
+      if (STATE.tab === "room") {
+        api("/api/opsroom/status").then(v => { STATE.opsStatus = v; render(); }).catch(() => {});
+      }
       // The More screen summarises three others, so it needs their state before
       // it can say anything useful about them.
       if (STATE.tab === "more") {

@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **Asking the Ops Room a question with no model loaded was a dead end.** It
+  answered "llama-server is not reachable, start it from the Local LLM view",
+  which is an instruction to go elsewhere, do four things and come back, for a
+  model the app already knew how to start. It now offers to start the one you
+  used last, waits for it, and then asks the question you were holding. When
+  the real obstacle is something else, no llama.cpp, no model on disk, or Claude
+  selected without an account, it says which rather than naming a port.
 - **The Ops Room header showed a green light for Claude even with no account
   connected.** Choosing Claude is not the same as being able to reach it: the
   status said "running" and named a model while every question was refused for

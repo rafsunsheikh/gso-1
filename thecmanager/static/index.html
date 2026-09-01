@@ -3995,8 +3995,10 @@
     return d;
   }
 
+  var LAST_OPS_STATUS = null;
   function refreshStatus() {
     fetch('/api/opsroom/status').then(function (r) { return r.json(); }).then(function (d) {
+      LAST_OPS_STATUS = d;
       var down = !d.available || d.llm_state !== 'running';
       statusEl.textContent =
         !d.available ? 'launcher not found'
@@ -4029,14 +4031,91 @@
     refreshStatus();
   }
 
-  function ask(prompt) {
+  /* Nothing is running, but something could be. Rather than sending the
+     question so the sidecar can refuse it, offer the one action that would
+     make it work: a question typed here is a strong signal the user wants the
+     model up, and every ingredient for starting it is already known. */
+  function offerToStart(prompt) {
+    var s = LAST_OPS_STATUS || {};
+    if (s.provider === 'anthropic') {
+      add('err', 'The Ops Room is set to use Claude, but no account is connected. ' +
+                 'Connect it in Settings, then Ops Room.');
+      return true;
+    }
+    if (!s.has_llama) {
+      add('err', 'llama.cpp is not installed yet. The Local LLM tab can install it.');
+      return true;
+    }
+    if (!s.startable) {
+      add('err', s.has_models
+        ? 'No model is running. Load one in the Local LLM tab.'
+        : 'No model on this machine yet. The Local LLM tab can download one.');
+      return true;
+    }
+    var m = s.startable;
+    var row = document.createElement('div');
+    row.className = 'ops-tool';
+    row.innerHTML = 'No model is running. Start <b>' + m.name + '</b> (' +
+      (m.size_gb || '?') + ' GB) and ask? ';
+    var go = document.createElement('button');
+    go.className = 'lib-act';
+    go.style.marginLeft = '8px';
+    go.textContent = 'Start it';
+    row.appendChild(go);
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+
+    go.onclick = function () {
+      go.disabled = true; go.textContent = 'Loading…';
+      fetch('/api/llm/start', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_path: m.path }),
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (!res.ok) { row.textContent = res.message || 'Could not start it.'; return; }
+        row.textContent = 'Loading ' + m.name + '…';
+        // A large model takes a while to become healthy; poll rather than
+        // guess, then send the question that was waiting.
+        var tries = 0;
+        var poll = setInterval(function () {
+          tries++;
+          fetch('/api/llm/status').then(function (r) { return r.json(); }).then(function (st) {
+            if (st.state === 'running') {
+              clearInterval(poll);
+              row.remove();
+              refreshStatus();
+              if (prompt) ask(prompt, true);
+            } else if (tries > 150) {
+              clearInterval(poll);
+              row.textContent = 'It is taking longer than expected. The Local LLM tab shows the log.';
+            }
+          }).catch(function () {});
+        }, 2000);
+      }).catch(function (e) { row.textContent = String(e && e.message || e); });
+    };
+    return true;
+  }
+
+  /* `echoed` is set when the question is already on screen, which happens when
+     it was held back while a model loaded. Without it the retry adds the user's
+     line a second time. */
+  function ask(prompt, echoed) {
     prompt = (prompt || input.value).trim();
     if (!prompt || es) return;
+    var st = LAST_OPS_STATUS || {};
+    // Only intercept when we know it would fail. An unknown state still tries.
+    if (!echoed && st.available && st.llm_state
+        && st.llm_state !== 'running' && st.llm_state !== 'loading') {
+      input.value = '';
+      var ph = log.querySelector('.ops-hint');
+      if (ph) ph.remove();
+      add('user', prompt);
+      if (offerToStart(prompt)) return;
+    }
     input.value = '';
     input.style.height = '';
     var placeholder = log.querySelector('.ops-hint');
     if (placeholder) placeholder.remove();
-    add('user', prompt);
+    if (!echoed) add('user', prompt);
     var out = add('agent', '');
     send.disabled = true;
     cancel.classList.remove('hidden');
