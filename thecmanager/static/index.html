@@ -180,6 +180,27 @@
 </aside>
 
   <!-- Task editor modal -->
+  <!-- Asking the user for one line of text. Electron does not implement
+       window.prompt() and never will, so every feature that used it, creating a
+       board, renaming one, naming a new site post, failed silently in the
+       desktop app while working perfectly in a browser. -->
+  <div id="ask-modal" role="dialog" aria-modal="true" aria-labelledby="ask-title"
+       style="display:none;position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);
+              align-items:center;justify-content:center;padding:24px">
+    <div style="width:100%;max-width:420px;padding:22px;background:var(--surface);
+                border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)">
+      <h2 id="ask-title" style="font-size:1rem;font-weight:650;margin:0 0 4px"></h2>
+      <p id="ask-note" style="font-size:.8rem;color:var(--text-dim);margin:0 0 14px;line-height:1.5"></p>
+      <input id="ask-input" type="text" autocomplete="off" spellcheck="false"
+             style="width:100%;padding:9px 12px;font-size:.9rem;border-radius:9px;
+                    background:var(--bg);color:var(--text);border:1px solid var(--line)"/>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button id="ask-cancel" class="lib-act" data-tone="neutral">Cancel</button>
+        <button id="ask-ok" class="lib-act">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="task-modal" class="fixed inset-0 z-[55] hidden" role="dialog" aria-modal="true" aria-label="Edit task">
     <div id="task-modal-bg" class="absolute inset-0 bg-black/60"></div>
     <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-6"
@@ -1350,9 +1371,11 @@
     }
 
     async function siteNew() {
-      const file = prompt("New file name (e.g. 2025-06-20-my-post.md):");
+      const file = await ask("New file", {
+        note: "Include the date prefix your site expects.",
+        placeholder: "2025-06-20-my-post.md", ok: "Create"});
       if (!file) return;
-      const title = prompt("Title:") || "Untitled";
+      const title = (await ask("Title", {placeholder: "Untitled"})) || "Untitled";
       siteBusy = true; renderSite();
       try {
         const r = await api("/api/site/"+encodeURIComponent(siteColl),
@@ -1365,7 +1388,9 @@
 
     async function sitePublish() {
       if (siteBusy) return;
-      const msg = prompt("Commit message:", "Update site content");
+      const msg = await ask("Publish", {
+        note: "This commits every change and pushes it to GitHub.",
+        value: "Update site content", ok: "Publish"});
       if (msg === null) return;
       siteBusy = true; renderSite();
       try {
@@ -2478,9 +2503,44 @@
       renderViews();
     }
 
+    /* Stands in for window.prompt, which Electron does not implement. Same
+       contract: resolves to the string, or null when cancelled, so call sites
+       keep their `if (name === null) return` shape. */
+    function ask(title, { note = "", value = "", ok = "OK", placeholder = "" } = {}) {
+      return new Promise(resolve => {
+        const modal = $("#ask-modal"), input = $("#ask-input");
+        $("#ask-title").textContent = title;
+        const noteEl = $("#ask-note");
+        noteEl.textContent = note;
+        noteEl.style.display = note ? "" : "none";
+        input.value = value;
+        input.placeholder = placeholder;
+        $("#ask-ok").textContent = ok;
+        modal.style.display = "flex";
+        input.focus();
+        input.select();
+
+        const close = (result) => {
+          modal.style.display = "none";
+          document.removeEventListener("keydown", onKey, true);
+          resolve(result);
+        };
+        const submit = () => close(input.value);
+        const onKey = (e) => {
+          if (e.key === "Escape") { e.preventDefault(); close(null); }
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+        };
+        document.addEventListener("keydown", onKey, true);
+        $("#ask-ok").onclick = submit;
+        $("#ask-cancel").onclick = () => close(null);
+        // A click on the backdrop is a cancel, the same as Escape.
+        modal.onclick = (e) => { if (e.target === modal) close(null); };
+      });
+    }
+
     async function newBoard() {
-      const name = prompt("New board name:");
-      if (!name) return;
+      const name = await ask("New board", {placeholder: "Board name", ok: "Create"});
+      if (!name || !name.trim()) return;
       const r = await api("/api/planner/boards", {method:"POST",
         headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
       await reloadPlanner();
@@ -2488,14 +2548,16 @@
       renderPlanner();
     }
     async function renameBoard(board) {
-      const name = prompt("Rename board:", board.name);
-      if (!name) return;
+      const name = await ask("Rename board", {value: board.name, ok: "Rename"});
+      if (!name || !name.trim()) return;
       await api(`/api/planner/boards/${board.id}`, {method:"PUT",
         headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
       await reloadPlanner(); renderPlanner();
     }
     async function linkBoard(board) {
-      const name = prompt("Link this board to which app? (exact name, blank to unlink)", board.app||"");
+      const name = await ask("Link this board to an app", {
+        note: "Type the app's exact name, or leave it blank to unlink.",
+        value: board.app || "", ok: "Link"});
       if (name === null) return;
       await api(`/api/planner/boards/${board.id}`, {method:"PUT",
         headers:{"Content-Type":"application/json"}, body:JSON.stringify({app: name.trim()||null})});

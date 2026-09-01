@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- **Six buttons did nothing in the desktop app.** New board, Rename board and
+  Link app in the Planner, and New file and Publish in the Site tab, all asked
+  for a line of text with `window.prompt`, which Electron does not implement
+  and has said it never will. It returns undefined, so each of these read that
+  as "cancelled" and returned without a word. They worked when the same page
+  was opened in a browser, which is what made it look like the feature was
+  simply missing. GSO-1 now asks in its own dialog, which works in both.
 
 ## [0.1.5] — 2026-08-31
 

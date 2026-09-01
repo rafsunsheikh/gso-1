@@ -102,6 +102,17 @@ main{padding:10px 0 90px}
 
 <main>
   <div class="wrap">
+<article class="rel" id="unreleased">
+<div class="rel-head">
+<h2 class="rel-v">Unreleased</h2>
+<span class="rel-tag rel-tag-soft">in progress</span>
+</div>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>Six buttons did nothing in the desktop app.</strong> New board, Rename board and Link app in the Planner, and New file and Publish in the Site tab, all asked for a line of text with <code>window.prompt</code>, which Electron does not implement and has said it never will. It returns undefined, so each of these read that as "cancelled" and returned without a word. They worked when the same page was opened in a browser, which is what made it look like the feature was simply missing. GSO-1 now asks in its own dialog, which works in both.</li>
+</ul>
+</article>
+
 <article class="rel" id="v0.1.5">
 <div class="rel-head">
 <h2 class="rel-v">0.1.5</h2>
