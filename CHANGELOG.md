@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The phone can see what is open in VSCode.** It could already open a repo in
+  the editor on your Mac but had no way to show which were already open, which
+  the desktop has had all along. Repos now filters between what needs you and
+  what is open in the editor, marks the ones that are both, and lists folders
+  open in VSCode that are not among your apps, which a tap brings to the front.
 - **The phone gets the rest of GSO-1.** A More tab leads to the Local LLM,
   where you can see the server, load a model, download one and run the whole
   library's summaries with progress; to which model answers in the Ops Room;

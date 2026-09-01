@@ -726,10 +726,29 @@
     const apps = STATE.apps || [];
     const q = STATE.query.trim().toLowerCase();
     const idx = (STATE.overview && STATE.overview.repo_index) || {};
-    // No 270-row list on a phone: show running and dirty first, then search.
+    // Which repos are open in the editor, by name, so a row can say so.
+    const openNames = new Set(((STATE.vscode || {}).folders || []).map(f => f.name));
+    const filter = STATE.repoFilter || "attention";
+
+    // No 270-row list on a phone: show what needs you first, then search.
     const shown = q
       ? apps.filter(a => a.name.toLowerCase().includes(q)).slice(0, 40)
-      : apps.filter(a => a.running || (idx[a.name] && idx[a.name].dirty)).slice(0, 25);
+      : filter === "vscode"
+        ? apps.filter(a => openNames.has(a.name)).slice(0, 40)
+        : apps.filter(a => a.running || (idx[a.name] && idx[a.name].dirty)).slice(0, 25);
+
+    // Folders open in VSCode that GSO-1 does not know as apps still belong in
+    // that list: they are open on the Mac, whatever the scanner thinks.
+    const strays = (!q && filter === "vscode")
+      ? (((STATE.vscode || {}).folders) || []).filter(f => !apps.some(a => a.name === f.name))
+      : [];
+
+    const chips = q ? "" : `<div class="colbar">
+        <button class="colbtn" data-repofilter="attention" aria-pressed="${filter === "attention"}">
+          Needs you</button>
+        <button class="colbtn" data-repofilter="vscode" aria-pressed="${filter === "vscode"}">
+          In VSCode${openNames.size ? ` ${openNames.size}` : ""}</button>
+      </div>`;
 
     const rows = shown.map(a => {
       const g = idx[a.name];
@@ -739,15 +758,29 @@
       return `<button class="repo" data-repo="${esc(a.name)}">
         <span class="repo-b"><span class="repo-n">${esc(a.name)}</span>
           <span class="repo-m">${meta}</span></span>
-        <span class="chev">&rsaquo;</span>
+        ${openNames.has(a.name) && filter !== "vscode"
+          ? `<span class="tag">editor</span>` : `<span class="chev">&rsaquo;</span>`}
       </button>`;
-    }).join("") || `<div class="empty"><div class="empty-t">${q ? "No match" : "Nothing needs attention"}</div>
-        <div class="empty-s">${q ? "Try another name." : "Search to find any of your repos."}</div></div>`;
+    }).join("")
+      + strays.map(f => `<button class="repo" data-focus="${esc(f.path)}">
+          <span class="repo-b"><span class="repo-n">${esc(f.name)}</span>
+            <span class="repo-m">open in VSCode &middot; not one of your apps</span></span>
+          <span class="chev">&rsaquo;</span>
+        </button>`).join("")
+      || `<div class="empty"><div class="empty-t">${
+          q ? "No match" : filter === "vscode" ? "Nothing open in VSCode" : "Nothing needs attention"}</div>
+        <div class="empty-s">${
+          q ? "Try another name."
+            : filter === "vscode" ? "Windows you open on the Mac show up here."
+            : "Search to find any of your repos."}</div></div>`;
 
-    return header("Repos", q ? `${shown.length} matching` : "running and uncommitted") +
+    return header("Repos", q ? `${shown.length} matching`
+        : filter === "vscode" ? `${openNames.size} open in the editor`
+        : "running and uncommitted") +
       `<div class="scroll">
         <input class="search" id="q" type="search" placeholder="Search repos…"
           autocapitalize="off" autocorrect="off" value="${esc(STATE.query)}" />
+        ${chips}
         ${rows}
       </div>` + tabbar();
   }
@@ -1202,6 +1235,17 @@
     document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => sheetAction(b.dataset.act));
 
     // ---- More, and the screens it leads to
+    document.querySelectorAll("[data-repofilter]").forEach(b => b.onclick = () => {
+      STATE.repoFilter = b.dataset.repofilter;
+      render();
+    });
+    document.querySelectorAll("[data-focus]").forEach(b => b.onclick = async () => {
+      try {
+        await api("/api/vscode/focus-path", {
+          method: "POST", body: JSON.stringify({ path: b.dataset.focus }) });
+        toast("Brought to the front on your Mac");
+      } catch (e) { toast(e.message, "error"); }
+    });
     document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
       STATE.tab = b.dataset.go; render(); refresh();
     });
@@ -1744,6 +1788,11 @@
         ]);
       }
       if (STATE.tab === "repos" && !STATE.apps) await Promise.all([loadApps(), loadOverview()]);
+      // Which windows are open changes constantly, so it is refetched with the
+      // tab rather than cached like the app list.
+      if (STATE.tab === "repos" && !STATE.repoName) {
+        api("/api/vscode/folders").then(v => { STATE.vscode = v; render(); }).catch(() => {});
+      }
       if (STATE.tab === "planner" && !STATE.planner) await loadPlanner();
       // The Room needs to know whether anything can answer before it sends a
       // question, so it can offer to start one instead of failing.
