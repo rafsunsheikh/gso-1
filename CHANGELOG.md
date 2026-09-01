@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **Six controls on the phone's newer screens did nothing.** Stop the server,
+  the summary run and its cancel, the download cancel, and both Claude controls
+  all fell through a guard written for the repository screen, which returns
+  early when no repo is open. Starting a model from the phone and then being
+  unable to stop it is how this was found.
 - **Asking the Ops Room a question with no model loaded was a dead end.** It
   answered "llama-server is not reachable, start it from the Local LLM view",
   which is an instruction to go elsewhere, do four things and come back, for a
