@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The phone can finish a piece of work too.** A repo on mobile now shows what
+  it is, from the same summary the desktop writes, with the measured facts
+  beside it; its branch, which taps to switch, including branches that only
+  exist on the remote; the files that would be committed; and Commit, Commit &
+  push, Push and Pull. Its logs and run configuration are there as well, so
+  "that lives in the desktop app" is no longer the answer.
+
 ### Fixed
 - **Six buttons did nothing in the desktop app.** New board, Rename board and
   Link app in the Planner, and New file and Publish in the Site tab, all asked

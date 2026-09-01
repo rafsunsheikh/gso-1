@@ -235,6 +235,87 @@
       white-space: pre-wrap; max-height: 150px; overflow: auto; margin-bottom: 10px;
     }
 
+    /* ---- bottom sheets: a phone keyboard covers a centred dialog ---- */
+    .sheet-host { position: fixed; inset: 0; z-index: 90; }
+    .sheet-bg {
+      position: absolute; inset: 0; background: rgba(0,0,0,.55);
+      opacity: 0; transition: opacity .18s ease;
+    }
+    .sheet-host[data-on="1"] .sheet-bg { opacity: 1; }
+    .sheet {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+      background: var(--surface); border-top: 1px solid var(--line);
+      border-radius: 18px 18px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,.45);
+      transform: translateY(100%); transition: transform .2s cubic-bezier(.2,.8,.2,1);
+      max-height: 80vh; overflow: auto;
+    }
+    .sheet-host[data-on="1"] .sheet { transform: translateY(0); }
+    .sheet-t { font: 650 15px "Readex Pro", system-ui, sans-serif; color: var(--text); }
+    .sheet-n { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+    .sheet-in {
+      width: 100%; margin-top: 13px; padding: 12px 13px; border-radius: 11px;
+      background: var(--bg); border: 1px solid var(--line); color: var(--text);
+      font-size: 16px;   /* 16px or iOS zooms the page when it takes focus */
+    }
+    .sheet-in:focus { outline: none; border-color: var(--primary); }
+    .picks { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .pick {
+      all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 9px;
+      width: 100%; padding: 13px 13px; border-bottom: 1px solid var(--line-2);
+      font: 400 13.5px ui-monospace, Menlo, monospace; color: var(--text-2);
+    }
+    .pick:last-child { border-bottom: 0; }
+    .pick[aria-current="true"] { color: var(--text); font-weight: 600; }
+    .pick-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pick .tag { margin-left: auto; }
+    .linkb {
+      all: unset; cursor: pointer; color: var(--primary-text);
+      font-size: 12.5px; font-weight: 600;
+    }
+
+    /* ---- changed files, and the repo summary ---- */
+    .files {
+      margin: 9px 0; border: 1px solid var(--line); border-radius: 10px;
+      background: var(--card-2); max-height: 190px; overflow: auto;
+    }
+    .file {
+      display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+      font: 400 11.5px ui-monospace, Menlo, monospace; color: var(--text-2);
+      overflow-wrap: anywhere;
+    }
+    .file-x {
+      flex: none; width: 22px; text-align: center; border-radius: 5px;
+      font-weight: 700; font-size: 10px; padding: 2px 0;
+      background: var(--chip); color: var(--text-3);
+    }
+    .file-x[data-x="??"] { background: var(--warn-soft); color: var(--warn-text); }
+    .file-x[data-x="M"] { background: var(--primary-soft); color: var(--primary-text); }
+    .file-x[data-x="D"] { background: var(--err-soft); color: var(--err-text); }
+
+    .sum-h { font: 600 14px "Readex Pro", system-ui, sans-serif; color: var(--text); line-height: 1.4; }
+    .sum-p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+    .chip {
+      padding: 3px 9px; border-radius: 999px; background: var(--chip);
+      border: 1px solid var(--line); color: var(--text-2);
+      font: 500 11px ui-monospace, Menlo, monospace;
+    }
+    .sum-s {
+      margin: 12px 0 5px; font: 600 10px ui-monospace, Menlo, monospace;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--text-3);
+    }
+    .caveats { margin: 0; padding-left: 17px; }
+    .caveats li { font-size: 12.5px; line-height: 1.5; color: var(--text-2); margin-bottom: 4px; }
+    .sigs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
+    .sig {
+      padding: 3px 8px; border-radius: 7px; background: var(--chip); color: var(--text-3);
+      font: 500 11px ui-monospace, Menlo, monospace; white-space: nowrap;
+    }
+    .sig[data-on="1"] { background: var(--live-soft); color: var(--live-text); }
+    .sum-f { margin-top: 7px; font: 400 11px ui-monospace, Menlo, monospace; color: var(--text-3); }
+    .sum-f[data-tone="warn"] { color: var(--warn-text); }
+
     /* ---- planner ---- */
     .colbar { display: flex; gap: 7px; overflow-x: auto; padding: 4px 0 12px; }
     .colbtn {
@@ -373,9 +454,84 @@
       ...opts,
     });
     if (res.status === 401) { STATE.locked = true; render(); throw new Error("locked"); }
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // Git refusals carry their reason in the body. Throwing the status alone
+      // turns "your local changes would be overwritten" into "400 Bad Request".
+      let detail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.text();
+        const data = body && body.trim().startsWith("{") ? JSON.parse(body) : null;
+        detail = (data && (data.detail || data.message || data.output)) || body.slice(0, 200) || detail;
+      } catch (e) { /* keep the status */ }
+      throw new Error(String(detail));
+    }
     const type = res.headers.get("content-type") || "";
     return type.includes("json") ? res.json() : res.text();
+  }
+
+  /* Asking for a line of text, or for a choice from a list. A phone keyboard
+     covers the bottom half of the screen, so both are bottom sheets that sit
+     above it rather than centred dialogs the keyboard would hide. */
+  function sheet(html) {
+    return new Promise(resolve => {
+      const host = document.createElement("div");
+      host.className = "sheet-host";
+      host.innerHTML = `<div class="sheet-bg"></div><div class="sheet">${html}</div>`;
+      document.body.appendChild(host);
+      requestAnimationFrame(() => host.dataset.on = "1");
+      const close = (v) => {
+        host.dataset.on = "";
+        setTimeout(() => host.remove(), 180);
+        resolve(v);
+      };
+      host.querySelector(".sheet-bg").onclick = () => close(null);
+      host.addEventListener("click", e => {
+        const b = e.target.closest("[data-sheet]");
+        if (b) close(b.dataset.sheet === "__cancel__" ? null : b.dataset.sheet);
+      });
+      host._close = close;
+      host._el = host;
+    });
+  }
+
+  function askText(title, { note = "", value = "", ok = "OK", placeholder = "" } = {}) {
+    return new Promise(resolve => {
+      const host = document.createElement("div");
+      host.className = "sheet-host";
+      host.innerHTML = `<div class="sheet-bg"></div>
+        <div class="sheet">
+          <div class="sheet-t">${esc(title)}</div>
+          ${note ? `<div class="sheet-n">${esc(note)}</div>` : ""}
+          <input class="sheet-in" type="text" autocomplete="off" autocapitalize="off"
+                 spellcheck="false" value="${esc(value)}" placeholder="${esc(placeholder)}"/>
+          <div class="pair" style="margin-top:14px">
+            <button class="btn" data-tone="outline" data-x="cancel">Cancel</button>
+            <button class="btn" data-x="ok">${esc(ok)}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(host);
+      requestAnimationFrame(() => host.dataset.on = "1");
+      const input = host.querySelector(".sheet-in");
+      setTimeout(() => input.focus(), 60);
+      const close = (v) => { host.dataset.on = ""; setTimeout(() => host.remove(), 180); resolve(v); };
+      host.querySelector(".sheet-bg").onclick = () => close(null);
+      host.querySelector('[data-x="cancel"]').onclick = () => close(null);
+      host.querySelector('[data-x="ok"]').onclick = () => close(input.value);
+      input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); close(input.value); } };
+    });
+  }
+
+  /** Pick one of a list. Returns the chosen value, or null. */
+  function choose(title, items, { note = "" } = {}) {
+    const rows = items.map(it => `
+      <button class="pick" data-sheet="${esc(it.value)}" ${it.current ? 'aria-current="true"' : ""}>
+        <span class="pick-n">${esc(it.label)}</span>
+        ${it.tag ? `<span class="tag">${esc(it.tag)}</span>` : ""}
+      </button>`).join("");
+    return sheet(`<div class="sheet-t">${esc(title)}</div>
+      ${note ? `<div class="sheet-n">${esc(note)}</div>` : ""}
+      <div class="picks">${rows || '<div class="sheet-n">Nothing to choose.</div>'}</div>
+      <button class="btn" data-tone="outline" data-sheet="__cancel__" style="width:100%;margin-top:12px">Cancel</button>`);
   }
 
   let _toastTimer = null;
@@ -604,19 +760,76 @@
     const running = !!(p && p.running);
     const failed = (p && !p.running && p.exit_code) || (d.health || {}).state === "crashed";
 
+    const files = g.changed_files || [];
     const git = g.is_repo ? `<div class="card">
         <div class="card-l">Git</div>
-        <div class="kv">Branch<b>${esc(g.branch || "?")}</b></div>
+        <div class="kv">Branch<b><button class="linkb" data-act="branch">${
+          esc(g.branch || "?")} &#9662;</button></b></div>
         <div class="kv">Status<b data-tone="${g.dirty ? "warn" : "live"}">${
-          g.dirty ? `${g.changed_count} changed` : "clean"}</b></div>
-        <div class="kv">Ahead / behind<b>${g.ahead} / ${g.behind}</b></div>
-        <div class="divide"></div>
+          g.dirty ? `${g.changed_count} uncommitted` : "clean"}</b></div>
+        <div class="kv">Ahead / behind<b data-tone="${g.ahead ? "warn" : ""}">${g.ahead} / ${g.behind}</b></div>
         <div class="commit">${esc((g.last_commit || "").slice(0, 130))}</div>
-        <div class="pair">
-          <button class="btn" data-tone="outline" data-act="commit">Commit all</button>
-          <button class="btn" data-tone="outline" data-act="pull">Pull</button>
+
+        ${g.dirty ? `
+          <div class="divide"></div>
+          <button class="linkb" data-act="files">${
+            STATE.showFiles ? "Hide the file list" : `Show the ${g.changed_count} file${
+              g.changed_count === 1 ? "" : "s"} that would be committed`}</button>
+          ${STATE.showFiles ? `<div class="files">${files.map(f => {
+            const code = f.slice(0, 2).trim() || "??";
+            return `<div class="file"><span class="file-x" data-x="${esc(code)}">${esc(code)}</span>${esc(f.slice(3))}</div>`;
+          }).join("")}${g.changed_count > files.length
+            ? `<div class="file" style="opacity:.6">and ${g.changed_count - files.length} more</div>` : ""}</div>` : ""}
+          <div class="pair" style="margin-top:10px">
+            <button class="btn" data-act="commit">Commit</button>
+            <button class="btn" data-tone="outline" data-act="commitpush">Commit &amp; push</button>
+          </div>` : ""}
+
+        <div class="pair" style="margin-top:10px">
+          <button class="btn" data-tone="outline" data-act="pull">Pull${g.behind ? ` ${g.behind}` : ""}</button>
+          <button class="btn" data-tone="outline" data-act="push" ${g.ahead ? "" : "disabled"}
+            >Push${g.ahead ? ` ${g.ahead}` : ""}</button>
         </div>
+        ${STATE.gitOut ? `<pre class="log" style="margin-top:10px">${esc(STATE.gitOut)}</pre>` : ""}
       </div>` : "";
+
+    // What this repo is. Never blocks on a model: the measured half renders
+    // whether or not one has ever run, exactly as it does on the desktop.
+    const sm = STATE.summary;
+    const sg = sm && sm.signals;
+    const rec = sm && sm.record;
+    const yn = (on, label) => `<span class="sig" data-on="${on ? 1 : 0}">${on ? "&#10003;" : "&#10005;"} ${label}</span>`;
+    const summary = `<div class="card">
+        <div class="card-l">Summary</div>
+        ${!sm ? `<div class="sheet-n">Reading&hellip;</div>` : `
+          ${rec ? `
+            <div class="sum-h">${esc(rec.summary.headline || "")}</div>
+            <p class="sum-p">${esc(rec.summary.purpose || "")}</p>
+            ${(rec.summary.stack || []).length ? `<div class="chips">${
+              rec.summary.stack.map(x => `<span class="chip">${esc(x.name)}</span>`).join("")}</div>` : ""}
+            ${(rec.summary.caveats || []).length ? `<div class="sum-s">Worth knowing</div>
+              <ul class="caveats">${rec.summary.caveats.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+          ` : ""}
+          ${sg ? `<div class="sigs">${yn(sg.tests, "tests")}${yn(sg.ci, "CI")}${yn(sg.lockfile, "lockfile")}${
+            sg.license ? `<span class="sig" data-on="1">${esc(sg.license)}</span>` : ""}</div>
+            <div class="sum-f">${[sg.last_commit ? `last commit ${esc(sg.last_commit)}` : null,
+              sg.files ? `${sg.files} files` : null,
+              sg.contributors ? `${sg.contributors} contributor${sg.contributors === 1 ? "" : "s"}` : null
+            ].filter(Boolean).join(" &middot; ")}</div>` : ""}
+          ${rec && rec.stale ? `<div class="sum-f" data-tone="warn">commits since this was written</div>` : ""}
+          ${sm.llm === "running"
+            ? `<button class="btn" data-tone="outline" data-act="summarise" style="width:100%;margin-top:10px">${
+                rec ? "Rewrite" : "Summarise this repo"}</button>`
+            : `<div class="sum-f">Start a local model to have GSO-1 describe this repo.</div>`}
+        `}
+      </div>`;
+
+    const logs = `<div class="card">
+        <div class="card-l">Logs</div>
+        ${STATE.logs
+          ? `<pre class="log">${esc(STATE.logs)}</pre>`
+          : `<button class="linkb" data-act="logs">Load the latest output</button>`}
+      </div>`;
 
     const fail = failed ? `<div class="card" data-tone="err">
         <div class="fail-h"><span class="fail-b">!</span><span class="fail-t">Last run failed</span>
@@ -638,6 +851,7 @@
           <button class="sq" data-act="more" aria-label="More">&#8943;</button>
         </div>
         ${fail}
+        ${summary}
         ${git}
         <div class="card">
           <div class="card-l">Run config</div>
@@ -648,6 +862,7 @@
             <button class="switch" data-act="fav" role="switch"
               aria-checked="${c.favourite ? "true" : "false"}" aria-label="Favourite"></button></div>
         </div>
+        ${logs}
         ${d.description ? `<div class="card"><div class="card-l">About</div>
           <div style="font-size:13px;line-height:1.55;color:var(--text-2)">${esc(d.description)}</div></div>` : ""}
       </div>` + tabbar();
@@ -827,7 +1042,14 @@
 
   // ---------------------------------------------------------------- actions
   async function openRepo(name) {
-    STATE.tab = "repos"; STATE.repoName = name; STATE.repo = null; render();
+    STATE.tab = "repos"; STATE.repoName = name; STATE.repo = null;
+    STATE.summary = null; STATE.logs = null; STATE.gitOut = null; STATE.showFiles = false;
+    render();
+    // The summary may need a model that is not running, so it is fetched
+    // beside the repo rather than before it: the sheet must paint either way.
+    api(`/api/apps/${encodeURIComponent(name)}/summary`)
+      .then(v => { if (STATE.repoName === name) { STATE.summary = v; render(); } })
+      .catch(() => { if (STATE.repoName === name) { STATE.summary = {}; render(); } });
     try { STATE.repo = await api(`/api/apps/${encodeURIComponent(name)}`); }
     catch (e) { toast(e.message, "error"); }
     render();
@@ -884,19 +1106,85 @@
         toast(`Opening ${name} in VSCode on your Mac`);
       } else if (act === "fav") {
         await api(`/api/apps/${encodeURIComponent(name)}/favourite`, { method: "POST" });
-      } else if (act === "commit") {
-        await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
-          method: "POST", body: JSON.stringify({ message: `Update ${name} via GSO-1 mobile` }) });
-        toast(`${name}, committed`);
+      } else if (act === "commit" || act === "commitpush") {
+        // A message is asked for rather than generated. "Update X via GSO-1
+        // mobile" is what a commit log looks like when nobody was paying
+        // attention, and these commits are as real as any other.
+        const msg = await askText(act === "commitpush" ? "Commit and push" : "Commit", {
+          note: `Everything uncommitted in ${name} is staged.`,
+          placeholder: "What changed", ok: act === "commitpush" ? "Commit & push" : "Commit" });
+        if (!msg || !msg.trim()) return;
+        const r = await api(`/api/apps/${encodeURIComponent(name)}/commit`, {
+          method: "POST", body: JSON.stringify({ message: msg.trim() }) });
+        STATE.gitOut = r.output || "";
+        if (r.nochange) toast("Nothing to commit");
+        else if (act === "commitpush") {
+          const pr = await api(`/api/apps/${encodeURIComponent(name)}/push`, { method: "POST" });
+          STATE.gitOut = `${r.output || ""}\n\n${pr.output || ""}`.trim();
+          toast(`${name}, committed and pushed`);
+        } else toast(`${name}, committed`);
+      } else if (act === "push") {
+        const r = await api(`/api/apps/${encodeURIComponent(name)}/push`, { method: "POST" });
+        STATE.gitOut = r.output || "";
+        toast(`${name}, pushed`);
       } else if (act === "pull") {
-        await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
+        const r = await api(`/api/apps/${encodeURIComponent(name)}/update`, { method: "POST" });
+        STATE.gitOut = r.output || "";
         toast(`${name}, pulled`);
+      } else if (act === "files") {
+        STATE.showFiles = !STATE.showFiles;
+        return render();
+      } else if (act === "branch") {
+        const data = await api(`/api/apps/${encodeURIComponent(name)}/branches`);
+        const pick = await choose("Switch branch", (data.branches || []).map(b => ({
+          value: b.name, label: b.name, current: b.current,
+          tag: b.current ? "on this" : b.remote_only ? "remote" : "",
+        })), { note: data.total > (data.branches || []).length
+          ? `${data.total} branches, newest first.` : "" });
+        if (!pick) return;
+        const r = await api(`/api/apps/${encodeURIComponent(name)}/checkout`, {
+          method: "POST", body: JSON.stringify({ branch: pick }) });
+        STATE.gitOut = r.output || "";
+        toast(`On ${pick}`);
+      } else if (act === "summarise") {
+        toast("Reading the repo\u2026");
+        await api(`/api/apps/${encodeURIComponent(name)}/summary`, {
+          method: "POST", body: JSON.stringify({ force: true }) });
+        STATE.summary = await api(`/api/apps/${encodeURIComponent(name)}/summary`);
+        toast("Summarised");
+        return render();
+      } else if (act === "logs") {
+        STATE.logs = (await api(`/api/apps/${encodeURIComponent(name)}/logs`)) || "(no output)";
+        return render();
       } else if (act === "askops") {
         STATE.tab = "room";
         render();
         return ask(`The repo "${name}" at ${d.path} failed its last run. Read its logs, find the cause and tell me the fix.`);
       } else if (act === "more") {
-        return toast("Setup, config and logs live in the desktop app.");
+        const pick = await choose(name, [
+          { value: "config", label: "Edit start command / port" },
+          ...(d.config && d.config.setup_command
+            ? [{ value: "setup", label: "Run setup / install" }] : []),
+          { value: "refresh", label: "Refresh" },
+        ]);
+        if (pick === "config") {
+          const cmd = await askText("Start command", {
+            value: (d.config || {}).start_command || "",
+            placeholder: "npm run dev", ok: "Save" });
+          if (cmd === null) return;
+          const port = await askText("Port", {
+            note: "Leave blank if it does not serve one.",
+            value: (d.config || {}).port || "", ok: "Save" });
+          if (port === null) return;
+          await api(`/api/apps/${encodeURIComponent(name)}/config`, {
+            method: "PUT", body: JSON.stringify({
+              start_command: cmd.trim() || null,
+              port: port.trim() ? parseInt(port, 10) : null }) });
+          toast("Saved");
+        } else if (pick === "setup") {
+          await api(`/api/apps/${encodeURIComponent(name)}/setup`, { method: "POST" });
+          toast("Setup running; check the logs card");
+        } else if (pick !== "refresh") return;
       }
       STATE.repo = await api(`/api/apps/${encodeURIComponent(name)}`);
       loadOverview(true).catch(() => {});

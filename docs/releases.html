@@ -107,6 +107,10 @@ main{padding:10px 0 90px}
 <h2 class="rel-v">Unreleased</h2>
 <span class="rel-tag rel-tag-soft">in progress</span>
 </div>
+<h3 class="rel-s" data-tone="ok">Added</h3>
+<ul class="rel-list">
+<li><strong>The phone can finish a piece of work too.</strong> A repo on mobile now shows what it is, from the same summary the desktop writes, with the measured facts beside it; its branch, which taps to switch, including branches that only exist on the remote; the files that would be committed; and Commit, Commit &amp; push, Push and Pull. Its logs and run configuration are there as well, so "that lives in the desktop app" is no longer the answer.</li>
+</ul>
 <h3 class="rel-s" data-tone="warn">Fixed</h3>
 <ul class="rel-list">
 <li><strong>Six buttons did nothing in the desktop app.</strong> New board, Rename board and Link app in the Planner, and New file and Publish in the Site tab, all asked for a line of text with <code>window.prompt</code>, which Electron does not implement and has said it never will. It returns undefined, so each of these read that as "cancelled" and returned without a word. They worked when the same page was opened in a browser, which is what made it look like the feature was simply missing. GSO-1 now asks in its own dialog, which works in both.</li>
