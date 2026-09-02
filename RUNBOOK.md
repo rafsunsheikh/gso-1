@@ -162,6 +162,16 @@ To prove unattended firing, set a job's `daily_at` a minute ahead and wait.
 
 ---
 
+## Planned, not built
+
+* [`REMOTE_EDITING_PLAN.md`](REMOTE_EDITING_PLAN.md) — seeing the VS Code view
+  and a terminal from the phone. Researched and deferred on 2026-09-02: the
+  routes, what each costs, and the security trade are written down so the
+  argument does not have to be had twice.
+* [`OPS_ROOM_PLAN.md`](OPS_ROOM_PLAN.md) — the agent sidecar, largely built.
+
+---
+
 ## Cutting a release
 
 Every published release must leave the website telling the truth about it. CI
