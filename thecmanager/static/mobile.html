@@ -1339,7 +1339,12 @@
       STATE.locked = true; return render();
     }
     if (act === "search") { STATE.tab = "repos"; render(); const q = $("#q"); if (q) q.focus(); return; }
-    if (act === "clear") { STATE.chat = []; STATE.replies = []; return render(); }
+    if (act === "clear") {
+      STATE.chat = []; STATE.replies = []; render();
+      api("/api/opsroom/history/clear?session=dock", { method: "POST" })
+        .then(() => toast("Conversation cleared")).catch(() => {});
+      return;
+    }
 
     // Actions that belong to a screen rather than to a repository. These have
     // to be handled before the guard below, which exists for the repo sheet:
@@ -1847,6 +1852,19 @@
       // question, so it can offer to start one instead of failing.
       if (STATE.tab === "room") {
         api("/api/opsroom/status").then(v => { STATE.opsStatus = v; render(); }).catch(() => {});
+        // The phone joins the same conversation as the dock rather than
+        // starting its own: asking on the Mac and following up on the sofa is
+        // the whole point of the thing remembering.
+        if (!STATE.chatLoaded) {
+          STATE.chatLoaded = true;
+          api("/api/opsroom/history?session=dock").then(d => {
+            const msgs = (d && d.messages) || [];
+            if (msgs.length && !STATE.chat.length) {
+              STATE.chat = msgs.map(m => ({ who: m.who, text: m.text }));
+              render();
+            }
+          }).catch(() => {});
+        }
       }
       // The More screen summarises three others, so it needs their state before
       // it can say anything useful about them.

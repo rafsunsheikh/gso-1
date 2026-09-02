@@ -31,7 +31,12 @@ export const PROVIDER: ProviderId =
   opsSetting("provider", "OPSROOM_PROVIDER") === "anthropic" ? "anthropic" : "local";
 
 export const LLAMA_BASE_URL = process.env.OPSROOM_LLAMA_URL ?? "http://127.0.0.1:8080/v1";
-export const MODEL_ID = process.env.OPSROOM_MODEL ?? "glm-4.7-flash";
+
+/** The local model's name. Only a label: llama-server serves whatever is
+ *  loaded whatever you ask for. Left unset it is discovered from the running
+ *  server, so `./ops` in a terminal agrees with the app instead of comparing
+ *  reality against a name hardcoded months ago and refusing to run. */
+export const MODEL_ID = process.env.OPSROOM_MODEL ?? "";
 
 /** Must not exceed the ctx llama-server was started with. */
 const CONTEXT_WINDOW = Number(process.env.OPSROOM_CTX ?? 65536);
@@ -43,9 +48,18 @@ const MAX_TOKENS = Number(process.env.OPSROOM_MAX_TOKENS ?? 4096);
 export const ANTHROPIC_MODEL =
   opsSetting("model", "OPSROOM_ANTHROPIC_MODEL") ?? "claude-sonnet-5";
 
+let resolvedModelId = MODEL_ID;
+
+/** Ask the server what it is serving, once, before anything is built. */
+export async function resolveLocalModel(): Promise<string> {
+  if (resolvedModelId) return resolvedModelId;
+  resolvedModelId = (await servedModel()) || "local";
+  return resolvedModelId;
+}
+
 const localModel: Model<"openai-completions"> = {
-  id: MODEL_ID,
-  name: `${MODEL_ID} (local llama.cpp)`,
+  get id() { return resolvedModelId || "local"; },
+  get name() { return `${resolvedModelId || "local"} (local llama.cpp)`; },
   api: "openai-completions",
   provider: "llamacpp",
   baseUrl: LLAMA_BASE_URL,
@@ -89,7 +103,7 @@ export function buildModels(provider: ProviderId = PROVIDER) {
   const models = createStoredModels();
   const [providerId, modelId] = provider === "anthropic"
     ? ["anthropic", ANTHROPIC_MODEL]
-    : ["llamacpp", MODEL_ID];
+    : ["llamacpp", resolvedModelId || "local"];
   const model = models.getModel(providerId, modelId);
   if (!model) {
     throw new Error(
@@ -113,7 +127,7 @@ export function anthropicModels(): Array<{ id: string; contextWindow: number }> 
 export function describeModel(): string {
   return PROVIDER === "anthropic"
     ? `${ANTHROPIC_MODEL} (Anthropic)`
-    : `${MODEL_ID} @ ${LLAMA_BASE_URL}`;
+    : `${resolvedModelId || "local"} @ ${LLAMA_BASE_URL}`;
 }
 
 /**
@@ -185,6 +199,10 @@ export async function assertModelMatches(): Promise<string> {
   if (PROVIDER === "anthropic") return ANTHROPIC_MODEL;
   const served = await servedModel();
   if (!served) return "(server did not report a model)";
+  // Nothing was pinned, so there is nothing to disagree with: adopt what is
+  // actually loaded. The check below exists for the person who deliberately
+  // named a model and would want to know it had been swapped underneath them.
+  if (!MODEL_ID) { resolvedModelId = served; return served; }
   if (served !== MODEL_ID && !served.toLowerCase().includes(MODEL_ID.toLowerCase())) {
     throw new Error(
       `model mismatch: configured OPSROOM_MODEL="${MODEL_ID}" but llama-server is serving "${served}".\n` +

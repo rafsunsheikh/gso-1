@@ -4145,7 +4145,42 @@
       add('err', 'cancelled'); finish();
     });
   });
-  clear.addEventListener('click', function () { log.innerHTML = ''; });
+  clear.addEventListener('click', function () {
+    // Clearing only the screen left the conversation intact on disk, so the
+    // next question still carried everything the user had just wiped.
+    fetch('/api/opsroom/history/clear?session=dock', { method: 'POST' })
+      .catch(function () {})
+      .then(function () {
+        log.innerHTML = '';
+        log.appendChild(hintNode());
+      });
+  });
+
+  /** The empty-state text, rebuilt after a clear. */
+  function hintNode() {
+    var d = document.createElement('div');
+    d.className = 'ops-hint';
+    d.textContent = 'Ask about your projects \u2014 git state, apps, logs \u2014 or have it '
+      + 'change its own code. It remembers this conversation, so you can follow up.';
+    return d;
+  }
+
+  /* Paint what was said before. The conversation outlives the window now, and
+     a dock that opens empty after a reload would suggest otherwise. */
+  function restoreHistory() {
+    fetch('/api/opsroom/history?session=dock')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var msgs = (d && d.messages) || [];
+        if (!msgs.length) return;
+        var ph = log.querySelector('.ops-hint');
+        if (ph) ph.remove();
+        msgs.forEach(function (m) { add(m.who === 'user' ? 'user' : 'agent', m.text); });
+        log.scrollTop = log.scrollHeight;
+      })
+      .catch(function () {});
+  }
+  restoreHistory();
 
   try { setOpen(localStorage.getItem('opsPanelOpen') === '1'); } catch (e) { setOpen(false); }
   refreshStatus();

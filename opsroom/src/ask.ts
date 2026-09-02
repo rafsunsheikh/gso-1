@@ -13,6 +13,7 @@ import { assertModelMatches, assertReady, buildModels, describeModel, PROVIDER }
 import { M1_TOOLS } from "./tools.ts";
 import { M2_TOOLS } from "./fstools.ts";
 import { describePolicy } from "./policy.ts";
+import * as sessionStore from "./session.ts";
 import { M3_TOOLS, SEARCH_ENABLED } from "./websearch.ts";
 import { M4_TOOLS } from "./buildtools.ts";
 
@@ -65,25 +66,40 @@ rather than guessing.`;
 
 function parseArgs(argv: string[]) {
   const verbose = argv.includes("--verbose");
-  const question = argv.filter((a) => a !== "--verbose").join(" ").trim();
-  return { question, verbose };
+  // --session names the conversation this question belongs to; --fresh starts
+  // that conversation again. Both are flags rather than positional arguments so
+  // an existing `./ops "question"` keeps working unchanged.
+  let session = process.env.OPSROOM_SESSION ?? "dock";
+  const fresh = argv.includes("--fresh");
+  const rest: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--verbose" || a === "--fresh") continue;
+    if (a === "--session") { session = argv[++i] ?? session; continue; }
+    if (a.startsWith("--session=")) { session = a.slice("--session=".length); continue; }
+    rest.push(a);
+  }
+  return { question: rest.join(" ").trim(), verbose, session, fresh };
 }
 
 async function main(): Promise<number> {
-  const { question, verbose } = parseArgs(process.argv.slice(2));
+  const { question, verbose, session, fresh } = parseArgs(process.argv.slice(2));
   if (!question) {
     console.error('usage: node src/ask.ts [--verbose] "your question"');
     return 2;
   }
 
   await assertReady();
-  const served = await assertModelMatches();
+  const served = await assertModelMatches();   // also adopts the served name
   const { models, model } = buildModels();
 
   const tools = [...M1_TOOLS, ...M2_TOOLS, ...M3_TOOLS, ...M4_TOOLS];
 
+  if (fresh) sessionStore.clear(session);
+  const history = sessionStore.load(session);
+
   const agent = new Agent({
-    initialState: { systemPrompt: SYSTEM_PROMPT, model, tools },
+    initialState: { systemPrompt: SYSTEM_PROMPT, model, tools, messages: history },
     streamFn: models.streamSimple.bind(models),
   });
 
@@ -128,12 +144,23 @@ async function main(): Promise<number> {
 
   if (verbose) {
     console.error(`[model] ${describeModel()} via ${PROVIDER} (serving: ${served})`);
+    console.error(`[session] ${session}, ${history.length} message(s) carried over`);
     console.error(`[tools] ${tools.map((t) => t.name).join(", ")}`);
     console.error(describePolicy());
     console.error(`web_search: ${SEARCH_ENABLED ? "enabled" : "disabled (no TAVILY_API_KEY)"}\n`);
   }
 
   await agent.prompt(question);
+
+  // Persist even when the turn failed: the user's question and whatever came
+  // back are both part of what happened, and dropping them makes the next
+  // question refer to something the agent has no record of.
+  try {
+    sessionStore.save(session, agent.state.messages as unknown[]);
+  } catch (err) {
+    console.error(`ops-room: could not save the conversation, ${(err as Error).message}`);
+  }
+
   if (printed) process.stdout.write("\n");
 
   if (failure) {

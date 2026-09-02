@@ -235,6 +235,78 @@ def login_cancel() -> bool:
         return True
 
 
+SESSIONS_FILE = "opsroom-sessions.json"
+
+
+def _sessions_path() -> Path:
+    return config.DATA_DIR / SESSIONS_FILE
+
+
+def _read_sessions() -> dict:
+    try:
+        data = json.loads(_sessions_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _text_of(message: dict) -> str:
+    """The readable part of one stored agent message.
+
+    Messages carry tool calls and results as well as prose. The transcript a
+    person wants back after a reload is what was said, so the rest is skipped
+    rather than rendered as JSON at them.
+    """
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [b.get("text", "") for b in content
+                 if isinstance(b, dict) and b.get("type") == "text"]
+        return "\n".join(p for p in parts if p).strip()
+    return ""
+
+
+def history(session: str = "dock") -> list[dict]:
+    """A conversation in the shape the chat UIs already render."""
+    entry = _read_sessions().get(session) or {}
+    out: list[dict] = []
+    for m in entry.get("messages") or []:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        text = _text_of(m)
+        if text:
+            out.append({"who": "user" if role == "user" else "agent", "text": text})
+    return out
+
+
+def sessions() -> list[dict]:
+    rows = []
+    for key, entry in (_read_sessions() or {}).items():
+        if isinstance(entry, dict):
+            rows.append({"key": key,
+                         "updated": entry.get("updated"),
+                         "messages": len(entry.get("messages") or [])})
+    return sorted(rows, key=lambda r: r.get("updated") or 0, reverse=True)
+
+
+def clear_session(session: str = "dock") -> bool:
+    data = _read_sessions()
+    if session not in data:
+        return False
+    del data[session]
+    try:
+        tmp = _sessions_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        tmp.replace(_sessions_path())
+        return True
+    except OSError:
+        return False
+
+
 def repo_root() -> Path:
     """The real checkout, even when running from a release snapshot."""
     meta = config.APP_DIR / ".release.json"
@@ -332,7 +404,7 @@ def _sse(event: str, data: str) -> str:
     return f"event: {event}\n{payload}\n\n"
 
 
-def ask_stream(prompt: str) -> Iterator[str]:
+def ask_stream(prompt: str, session: str = "dock") -> Iterator[str]:
     """Run one prompt, yielding SSE frames as output arrives."""
     global _current
 
@@ -357,7 +429,7 @@ def ask_stream(prompt: str) -> Iterator[str]:
     try:
         yield _sse("start", json.dumps({"prompt": prompt, "launcher": str(ops)}))
         proc = subprocess.Popen(
-            [str(ops), prompt],
+            [str(ops), "--session", session, prompt],
             cwd=str(repo_root()),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

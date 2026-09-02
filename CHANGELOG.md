@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The Ops Room remembers the conversation.** It answered every question as a
+  stranger: "which repos are dirty?" then "commit the first one" were two
+  unrelated requests. It now carries the exchange forward, on the desktop and
+  the phone, which share one conversation so you can ask at the desk and follow
+  up from the sofa. It survives closing the window, and Clear genuinely
+  forgets rather than only blanking the screen. Old turns are dropped once the
+  transcript outgrows what a local model can hold, newest kept.
 - **The phone can see what is open in VSCode.** It could already open a repo in
   the editor on your Mac but had no way to show which were already open, which
   the desktop has had all along. Repos now filters between what needs you and
@@ -27,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **`./ops` in a terminal refused to run whenever a different model was
+  loaded**, comparing what the server was serving against a name hardcoded when
+  the file was written. The local model's name is now discovered from the
+  running server unless you deliberately pin one, and the mismatch warning is
+  kept for the case it was written for: a model swapped underneath somebody who
+  had chosen it.
 - **Six controls on the phone's newer screens did nothing.** Stop the server,
   the summary run and its cancel, the download cancel, and both Claude controls
   all fell through a guard written for the repository screen, which returns

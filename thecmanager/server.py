@@ -805,11 +805,24 @@ def opsroom_cancel() -> JSONResponse:
     return JSONResponse({"cancelled": opsroom_bridge.cancel()})
 
 
+@app.get("/api/opsroom/history")
+def opsroom_history(session: str = "dock") -> JSONResponse:
+    """What was said in this conversation, so a reload does not lose it."""
+    return JSONResponse({"session": session,
+                         "messages": opsroom_bridge.history(session),
+                         "sessions": opsroom_bridge.sessions()})
+
+
+@app.post("/api/opsroom/history/clear")
+def opsroom_history_clear(session: str = "dock") -> JSONResponse:
+    return JSONResponse({"cleared": opsroom_bridge.clear_session(session)})
+
+
 @app.get("/api/opsroom/ask")
-def opsroom_ask(prompt: str):
+def opsroom_ask(prompt: str, session: str = "dock"):
     """SSE stream. GET so EventSource can consume it directly."""
     return StreamingResponse(
-        opsroom_bridge.ask_stream(prompt),
+        opsroom_bridge.ask_stream(prompt, session),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
