@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The Ops Room can be taught new things without writing code.** A skill is a
+  folder with a `SKILL.md`: a line saying what it is for, the binaries it
+  needs, and instructions written for the model. Three ship with it, for
+  GitHub, Docker and dependencies, and your own go in `data/skills/` where an
+  update will not touch them. A skill whose binaries are missing is never
+  offered as usable, so the agent can say it would need `gh` installed rather
+  than running a command that is not there.
 - **The Ops Room shows its plan while it works.** A job of several steps used
   to be a blank panel and the word "thinking" for a minute, which is
   indistinguishable from a hang. The agent now writes down what it intends to

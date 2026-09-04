@@ -162,6 +162,22 @@ To prove unattended firing, set a job's `daily_at` a minute ahead and wait.
 
 ---
 
+## Teaching the Ops Room something new
+
+A skill is a folder with a `SKILL.md`: frontmatter saying what it is for and
+which binaries it needs, then instructions written for the model. No code, no
+rebuild of the sidecar, no release for a skill of your own.
+
+* `opsroom/skills/` ships with GSO-1 and travels into every release.
+* `data/skills/` is yours, survives updates, and overrides a bundled skill of
+  the same name.
+
+A skill whose binaries are missing is never offered as usable, so the agent
+says what it would need instead of running a command that is not there. Full
+guidance in [`opsroom/skills/README.md`](opsroom/skills/README.md).
+
+---
+
 ## Planned, not built
 
 * [`REMOTE_EDITING_PLAN.md`](REMOTE_EDITING_PLAN.md) — seeing the VS Code view

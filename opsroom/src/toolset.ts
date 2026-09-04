@@ -17,9 +17,11 @@ import { M2_TOOLS } from "./fstools.ts";
 import { M3_TOOLS } from "./websearch.ts";
 import { M4_TOOLS } from "./buildtools.ts";
 import { PLAN_TOOLS } from "./plantool.ts";
+import { SKILL_TOOLS } from "./skills.ts";
 
 export function allTools(): AgentTool[] {
-  return [...M1_TOOLS, ...M2_TOOLS, ...M3_TOOLS, ...M4_TOOLS, ...PLAN_TOOLS];
+  return [...M1_TOOLS, ...M2_TOOLS, ...M3_TOOLS, ...M4_TOOLS, ...PLAN_TOOLS,
+          ...SKILL_TOOLS];
 }
 
 /** Tools with real side effects, which the smoke test must not simply run. */

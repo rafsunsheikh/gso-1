@@ -13,6 +13,7 @@ import { assertModelMatches, assertReady, buildModels, describeModel, PROVIDER }
 import { describePolicy } from "./policy.ts";
 import { SEARCH_ENABLED } from "./websearch.ts";
 import { allTools } from "./toolset.ts";
+import { listSkills, skillsPromptSection } from "./skills.ts";
 import * as sessionStore from "./session.ts";
 
 const SYSTEM_PROMPT = `You are Ops Room, an assistant embedded in GSO-1: a local
@@ -101,8 +102,12 @@ async function main(): Promise<number> {
   if (fresh) sessionStore.clear(session);
   const history = sessionStore.load(session);
 
+  // The skills index is appended rather than baked in, because which skills
+  // are usable depends on what is installed on this machine right now.
+  const systemPrompt = SYSTEM_PROMPT + skillsPromptSection();
+
   const agent = new Agent({
-    initialState: { systemPrompt: SYSTEM_PROMPT, model, tools, messages: history },
+    initialState: { systemPrompt, model, tools, messages: history },
     streamFn: models.streamSimple.bind(models),
   });
 
@@ -148,6 +153,8 @@ async function main(): Promise<number> {
   if (verbose) {
     console.error(`[model] ${describeModel()} via ${PROVIDER} (serving: ${served})`);
     console.error(`[session] ${session}, ${history.length} message(s) carried over`);
+    console.error(`[skills] ${listSkills().map((s) =>
+      s.available ? s.name : `${s.name}(needs ${s.missing.join(",")})`).join(", ") || "none"}`);
     console.error(`[tools] ${tools.map((t) => t.name).join(", ")}`);
     console.error(describePolicy());
     console.error(`web_search: ${SEARCH_ENABLED ? "enabled" : "disabled (no TAVILY_API_KEY)"}\n`);
