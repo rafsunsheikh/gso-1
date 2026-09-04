@@ -235,6 +235,28 @@
       white-space: pre-wrap; max-height: 150px; overflow: auto; margin-bottom: 10px;
     }
 
+    /* ---- the agent's checklist ---- */
+    .plan {
+      margin: 0 0 12px; padding: 11px 12px; border-radius: 12px;
+      background: var(--card); border: 1px solid var(--line);
+    }
+    .plan-h {
+      display: flex; font: 600 10px ui-monospace, Menlo, monospace;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--text-3);
+      margin-bottom: 8px;
+    }
+    .plan-h span { margin-left: auto; letter-spacing: 0; text-transform: none; }
+    .plan-s {
+      display: flex; align-items: flex-start; gap: 8px; padding: 3px 0;
+      font-size: 13px; line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere;
+    }
+    .plan-m { flex: none; width: 15px; text-align: center; color: var(--text-3); }
+    .plan-s[data-s="completed"] { color: var(--text-3); }
+    .plan-s[data-s="completed"] .plan-m { color: var(--live-text); }
+    .plan-s[data-s="in_progress"] { color: var(--text); font-weight: 600; }
+    .plan-s[data-s="in_progress"] .plan-m { color: var(--primary-text); }
+    .plan-n { margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+
     /* ---- bottom sheets: a phone keyboard covers a centred dialog ---- */
     .sheet-host { position: fixed; inset: 0; z-index: 90; }
     .sheet-bg {
@@ -1118,6 +1140,20 @@
   }
 
   // ---- 4. Ops Room chat
+  function planCard() {
+    const p = STATE.plan;
+    const steps = (p && p.plan) || [];
+    if (!steps.length) return "";
+    const done = steps.filter(s => s.status === "completed").length;
+    return `<div class="plan">
+      <div class="plan-h">Plan<span>${done} of ${steps.length}</span></div>
+      ${steps.map(s => `<div class="plan-s" data-s="${s.status}">
+        <span class="plan-m">${s.status === "completed" ? "&#10003;"
+          : s.status === "in_progress" ? "&#9679;" : "&#9675;"}</span>${esc(s.step)}</div>`).join("")}
+      ${p.note ? `<div class="plan-n">${esc(p.note)}</div>` : ""}
+    </div>`;
+  }
+
   function viewRoom() {
     const bubbles = STATE.chat.map(m =>
       m.who === "err" ? `<div class="bub-err">${esc(m.text)}</div>`
@@ -1131,6 +1167,7 @@
         `<button class="hd-btn" data-act="clear" aria-label="Clear">&#8635;</button>`, false, "live") +
       `<div class="scroll" id="chatscroll">
         <div class="chat" id="chatlog">
+          ${planCard()}
           ${bubbles || `<div class="empty" style="padding-top:52px">
             <div class="empty-t">Ask about your machine</div>
             <div class="empty-s">Git state, what is running, what failed, or have it change its own code.
@@ -1340,7 +1377,7 @@
     }
     if (act === "search") { STATE.tab = "repos"; render(); const q = $("#q"); if (q) q.focus(); return; }
     if (act === "clear") {
-      STATE.chat = []; STATE.replies = []; render();
+      STATE.chat = []; STATE.replies = []; STATE.plan = null; render();
       api("/api/opsroom/history/clear?session=dock", { method: "POST" })
         .then(() => toast("Conversation cleared")).catch(() => {});
       return;
@@ -1811,6 +1848,13 @@
     const out = { who: "agent", text: "" };
     STATE.chat.push(out);
     es = new EventSource(`/api/opsroom/ask?prompt=${encodeURIComponent(text)}`);
+    // The plan is one checklist being revised, so it lives in STATE rather
+    // than the transcript: a new version replaces the old instead of pushing
+    // another block into a conversation you are scrolling.
+    es.addEventListener("plan", (e) => {
+      try { STATE.plan = JSON.parse(e.data); } catch (x) { return; }
+      render();
+    });
     es.addEventListener("output", (e) => {
       out.text += (out.text ? "\n" : "") + e.data;
       const log = $("#chatlog");

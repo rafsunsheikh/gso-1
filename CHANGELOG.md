@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The Ops Room shows its plan while it works.** A job of several steps used
+  to be a blank panel and the word "thinking" for a minute, which is
+  indistinguishable from a hang. The agent now writes down what it intends to
+  do and marks each step off as it goes, on the desktop and the phone. One
+  checklist, revised in place, not a stream of announcements.
 - **The Ops Room remembers the conversation.** It answered every question as a
   stranger: "which repos are dirty?" then "commit the first one" were two
   unrelated requests. It now carries the exchange forward, on the desktop and
@@ -34,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **Release verification was checking a different set of tools than the agent
+  runs.** The list was written out by hand in two places, so a tool added to
+  one was invisible to the other: verification reported sixteen tools while the
+  agent had seventeen, and could not have noticed the seventeenth breaking.
+  Both now read the same list.
 - **`./ops` in a terminal refused to run whenever a different model was
   loaded**, comparing what the server was serving against a name hardcoded when
   the file was written. The local model's name is now discovered from the

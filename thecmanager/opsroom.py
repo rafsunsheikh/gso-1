@@ -29,6 +29,11 @@ from typing import Iterator, Optional
 
 from . import config, llm
 
+# Written by opsroom/src/plantool.ts. Kept in both places on purpose: the
+# sidecar and the bridge are separate programs, and a shared constant would
+# mean one importing the other's language.
+PLAN_MARKER = "@@GSO1_PLAN "
+
 MAX_PROMPT_CHARS = 4000
 IDLE_TIMEOUT = 900  # a stuck run must not hold the lock forever
 
@@ -467,6 +472,18 @@ def ask_stream(prompt: str, session: str = "dock") -> Iterator[str]:
                 continue
             if line is None:
                 break
+            # The plan arrives on the same pipe as the prose, marked, because
+            # the sidecar has one output channel and a second would have to be
+            # invented. Forward it as its own event so the UI can draw a
+            # checklist rather than print a line of JSON at the reader.
+            if line.startswith(PLAN_MARKER):
+                payload = line[len(PLAN_MARKER):].strip()
+                try:
+                    json.loads(payload)          # forward only what parses
+                except ValueError:
+                    continue
+                yield _sse("plan", payload)
+                continue
             yield _sse("output", line)
 
         code = proc.wait()

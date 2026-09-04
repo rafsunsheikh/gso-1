@@ -3984,6 +3984,30 @@
     return parts.length > 2 ? parts.slice(0, 2).join('-') : m;
   }
 
+  /** The agent's checklist, drawn once and revised in place. */
+  function renderPlan(data) {
+    var steps = (data && data.plan) || [];
+    if (!steps.length) return;
+    var box = log.querySelector('.ops-plan');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'ops-plan';
+      log.appendChild(box);
+    }
+    var done = steps.filter(function (s) { return s.status === 'completed'; }).length;
+    var rows = steps.map(function (s) {
+      var mark = s.status === 'completed' ? '&#10003;'
+        : s.status === 'in_progress' ? '&#9679;' : '&#9675;';
+      return '<div class="ops-plan-s" data-s="' + s.status + '">'
+        + '<span class="ops-plan-m">' + mark + '</span>'
+        + escapeHtml(s.step) + '</div>';
+    }).join('');
+    box.innerHTML = '<div class="ops-plan-h">Plan <span>' + done + ' of '
+      + steps.length + '</span></div>' + rows
+      + (data.note ? '<div class="ops-plan-n">' + escapeHtml(data.note) + '</div>' : '');
+    log.scrollTop = log.scrollHeight;
+  }
+
   /** One chat row. `who` is user | agent | tool | err. */
   function add(who, text) {
     var d = document.createElement('div');
@@ -4121,6 +4145,13 @@
     cancel.classList.remove('hidden');
     hint.textContent = 'thinking…';
     es = new EventSource('/api/opsroom/ask?prompt=' + encodeURIComponent(prompt));
+    /* The plan replaces itself rather than accumulating: it is one checklist
+       being revised, not a series of announcements. */
+    es.addEventListener('plan', function (e) {
+      var data;
+      try { data = JSON.parse(e.data); } catch (x) { return; }
+      renderPlan(data);
+    });
     es.addEventListener('output', function (e) {
       out.textContent += (out.textContent ? '\n' : '') + e.data;
       log.scrollTop = log.scrollHeight;

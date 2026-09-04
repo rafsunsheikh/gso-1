@@ -1148,6 +1148,31 @@ body[data-shell="web"] .gso-tb-lights { width: 12px; }
 .lib-sync[data-d="up"]   { background: var(--warn-soft); color: var(--warn-text); }
 .lib-sync[data-d="down"] { background: var(--primary-soft); color: var(--primary-text); }
 
+/* The agent's checklist in the dock. One box, revised in place, so a long task
+   shows where it has got to instead of a spinner and a guess. */
+.ops-plan {
+  margin: 10px 0; padding: 11px 12px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+}
+.ops-plan-h {
+  display: flex; align-items: baseline; gap: 8px;
+  font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--label);
+  margin-bottom: 8px;
+}
+.ops-plan-h span { margin-left: auto; letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.ops-plan-s {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12px; line-height: 1.5; color: var(--text-2);
+  padding: 2px 0; overflow-wrap: anywhere;
+}
+.ops-plan-m { flex: none; width: 14px; text-align: center; color: var(--text-3); }
+.ops-plan-s[data-s="completed"] { color: var(--text-3); }
+.ops-plan-s[data-s="completed"] .ops-plan-m { color: var(--live-text); }
+.ops-plan-s[data-s="in_progress"] { color: var(--text); font-weight: 600; }
+.ops-plan-s[data-s="in_progress"] .ops-plan-m { color: var(--primary-text); }
+.ops-plan-n { margin-top: 8px; font-size: 11px; color: var(--text-3); }
+
 /* Choosing the Ops Room's brain. Two cards rather than a dropdown, because the
    trade between them, free and private versus stronger and billed, is the whole
    decision and a select box hides it. */

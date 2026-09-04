@@ -10,12 +10,10 @@ import "./env.ts"; // must be first: loads <repo>/.env into process.env
 
 import { Agent } from "@earendil-works/pi-agent-core";
 import { assertModelMatches, assertReady, buildModels, describeModel, PROVIDER } from "./model.ts";
-import { M1_TOOLS } from "./tools.ts";
-import { M2_TOOLS } from "./fstools.ts";
 import { describePolicy } from "./policy.ts";
+import { SEARCH_ENABLED } from "./websearch.ts";
+import { allTools } from "./toolset.ts";
 import * as sessionStore from "./session.ts";
-import { M3_TOOLS, SEARCH_ENABLED } from "./websearch.ts";
-import { M4_TOOLS } from "./buildtools.ts";
 
 const SYSTEM_PROMPT = `You are Ops Room, an assistant embedded in GSO-1: a local
 application registry running on the user's Mac.
@@ -60,6 +58,11 @@ You can modify and rebuild yourself. The sequence is strict:
 If verify_release fails, do NOT promote. Report what failed and either fix the
 edit and build again, or stop. Never promote an unverified or failed release.
 
+For anything that takes several steps, call update_plan with the whole plan
+before you start, then again as each step finishes. The operator watches those
+steps; without them a long task is a blank panel. One step in_progress at a
+time. Do not write a plan for work that is one tool call.
+
 Be concise and factual. Lead with the direct answer, then a short list. When a
 list is long, give the total and show the largest few. If a tool fails, say so
 rather than guessing.`;
@@ -93,7 +96,7 @@ async function main(): Promise<number> {
   const served = await assertModelMatches();   // also adopts the served name
   const { models, model } = buildModels();
 
-  const tools = [...M1_TOOLS, ...M2_TOOLS, ...M3_TOOLS, ...M4_TOOLS];
+  const tools = allTools();
 
   if (fresh) sessionStore.clear(session);
   const history = sessionStore.load(session);

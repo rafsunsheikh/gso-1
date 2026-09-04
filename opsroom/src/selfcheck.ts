@@ -31,17 +31,12 @@ async function main(): Promise<number> {
   const names: string[] = [];
 
   try {
-    const m1 = await import("./tools.ts");
-    const m2 = await import("./fstools.ts");
-    const m3 = await import("./websearch.ts");
-    const m4 = await import("./buildtools.ts");
-
-    for (const set of [m1.M1_TOOLS, m2.M2_TOOLS, m3.M3_TOOLS, m4.M4_TOOLS]) {
-      for (const t of set ?? []) {
-        if (!t?.name) throw new Error("a tool has no name");
-        if (typeof t.execute !== "function") throw new Error(`${t.name} has no execute()`);
-        names.push(t.name);
-      }
+    // Whatever the agent is given, not a list maintained beside it.
+    const { allTools } = await import("./toolset.ts");
+    for (const t of allTools()) {
+      if (!t?.name) throw new Error("a tool has no name");
+      if (typeof t.execute !== "function") throw new Error(`${t.name} has no execute()`);
+      names.push(t.name);
     }
 
     // The policy module must load and expose a sandbox root, or the guards
@@ -79,13 +74,8 @@ async function main(): Promise<number> {
   // Structure is now proven. Behaviour is not: a tool can load perfectly and
   // still return nonsense (see smoke.ts for the incident that motivated this).
   const { checkEndpoints, smokeTools } = await import("./smoke.ts");
-  const allTools = [
-    ...((await import("./tools.ts")).M1_TOOLS ?? []),
-    ...((await import("./fstools.ts")).M2_TOOLS ?? []),
-    ...((await import("./buildtools.ts")).M4_TOOLS ?? []),
-  ];
-
-  const failures = [...(await checkEndpoints()), ...(await smokeTools(allTools))];
+  const { smokeableTools } = await import("./toolset.ts");
+  const failures = [...(await checkEndpoints()), ...(await smokeTools(smokeableTools()))];
   if (failures.length) {
     for (const f of failures) console.error(`selfcheck FAIL [${f.check}]: ${f.detail}`);
     return 1;
