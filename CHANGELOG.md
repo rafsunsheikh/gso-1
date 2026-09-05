@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "that lives in the desktop app" is no longer the answer.
 
 ### Fixed
+- **A long Ops Room conversation would have started failing every turn.** A
+  tool call and its result are two separate messages, and trimming the
+  transcript to fit the model's context could cut between them, leaving a
+  result answering nothing. Providers reject that outright, so the conversation
+  would have worked perfectly until it grew past the budget and then broken,
+  for a reason nothing in the error would connect to trimming. Orphaned results
+  are now dropped with the call they belonged to.
 - **Release verification was checking a different set of tools than the agent
   runs.** The list was written out by hand in two places, so a tool added to
   one was invisible to the other: verification reported sixteen tools while the

@@ -79,7 +79,53 @@ export function trim(messages: unknown[]): unknown[] {
     total -= size(kept[0]);
     kept = kept.slice(1);
   }
-  return kept;
+  return dropOrphanedResults(kept);
+}
+
+/**
+ * Remove tool results whose call was trimmed away.
+ *
+ * A tool call and its result are two messages. Cutting between them leaves a
+ * result answering nothing, which providers reject outright rather than
+ * ignore: the conversation would have been fine right up until it grew past
+ * the budget and then started failing every turn, for a reason nothing in the
+ * error would connect to trimming.
+ */
+function dropOrphanedResults(messages: unknown[]): unknown[] {
+  const called = new Set<string>();
+  const out: unknown[] = [];
+  for (const m of messages) {
+    const msg = m as { role?: string; content?: unknown };
+    const blocks = Array.isArray(msg?.content) ? (msg.content as Record<string, unknown>[]) : [];
+
+    if (msg?.role === "assistant") {
+      for (const b of blocks) {
+        const id = b?.toolCallId ?? b?.id;
+        if (b?.type === "toolCall" && typeof id === "string") called.add(id);
+      }
+      out.push(m);
+      continue;
+    }
+
+    if (msg?.role === "toolResult") {
+      // Match on id where there is one. Some shapes carry no id at all, in
+      // which case a result is only meaningful directly after a call.
+      const ids = blocks
+        .map((b) => b?.toolCallId ?? b?.id)
+        .filter((v): v is string => typeof v === "string");
+      const anon = ids.length === 0;
+      const prev = out[out.length - 1] as { role?: string; content?: unknown } | undefined;
+      const followsCall =
+        prev?.role === "assistant" &&
+        Array.isArray(prev.content) &&
+        (prev.content as Record<string, unknown>[]).some((b) => b?.type === "toolCall");
+      if (anon ? followsCall : ids.some((id) => called.has(id))) out.push(m);
+      continue;
+    }
+
+    out.push(m);
+  }
+  return out;
 }
 
 /** The stored transcript for a session, ready to seed `initialState.messages`. */
