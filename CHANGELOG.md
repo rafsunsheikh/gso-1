@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **On an iPhone home screen, GSO-1 was a screenshot of itself.** The icon was
+  offered to iOS as an SVG, which iOS does not accept for a home-screen icon,
+  so "Add to Home Screen" fell back to a picture of the page. It is a PNG now,
+  drawn full-bleed with square corners because iOS applies its own rounded
+  mask, and the web manifest carries PNGs alongside the SVG for everywhere
+  else.
+
 ### Added
 - **Start a new project without leaving GSO-1.** The Library has a "New folder"
   button: name it, choose which of your folders it goes in when there is more

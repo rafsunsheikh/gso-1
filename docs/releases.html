@@ -107,6 +107,10 @@ main{padding:10px 0 90px}
 <h2 class="rel-v">Unreleased</h2>
 <span class="rel-tag rel-tag-soft">in progress</span>
 </div>
+<h3 class="rel-s" data-tone="warn">Fixed</h3>
+<ul class="rel-list">
+<li><strong>On an iPhone home screen, GSO-1 was a screenshot of itself.</strong> The icon was offered to iOS as an SVG, which iOS does not accept for a home-screen icon, so "Add to Home Screen" fell back to a picture of the page. It is a PNG now, drawn full-bleed with square corners because iOS applies its own rounded mask, and the web manifest carries PNGs alongside the SVG for everywhere else.</li>
+</ul>
 <h3 class="rel-s" data-tone="ok">Added</h3>
 <ul class="rel-list">
 <li><strong>Start a new project without leaving GSO-1.</strong> The Library has a "New folder" button: name it, choose which of your folders it goes in when there is more than one, and it is created and opened in VSCode in one step, as a git repository on <code>main</code> unless you say otherwise. Creating somewhere GSO-1 does not watch was never the point, so it only offers the folders you have already told it about.</li>

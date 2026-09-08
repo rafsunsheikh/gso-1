@@ -109,7 +109,13 @@ def mobile_manifest() -> JSONResponse:
         "name": "GSO-1", "short_name": "GSO-1", "id": "/m",
         "start_url": "/m", "scope": "/", "display": "standalone",
         "background_color": "#09080f", "theme_color": "#09080f",
-        "icons": [{"src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml"}],
+        # The SVG scales best where it is understood; the PNGs are for
+        # everywhere that will not take one, iOS above all.
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml"},
+        ],
     })
 
 

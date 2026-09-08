@@ -11,7 +11,10 @@
   <meta name="theme-color" content="#09080f" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/favicon.svg" />
-  <link rel="apple-touch-icon" href="/static/favicon.svg" />
+  <!-- PNG, not the SVG: iOS ignores an SVG here and screenshots the page
+       instead, which is how this ended up on a home screen looking like a
+       bookmark of itself. Full bleed and square-cornered; iOS masks it. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icon-180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <!-- The token table is shared with the desktop app; only the layout differs. -->
