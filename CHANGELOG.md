@@ -45,6 +45,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   push, Push and Pull. Its logs and run configuration are there as well, so
   "that lives in the desktop app" is no longer the answer.
 
+### Changed
+- **GSO-1 stopped being a background process that costs you battery.** With the
+  dashboard open it spawned 28 helper processes every 100 seconds; it now
+  spawns 2. Most of that was `top`, run from scratch every 2.5 seconds to
+  produce one reading: 673 ms of the 1774 ms is start-up, paid over and over,
+  42% of wall-clock spent measuring the machine for a number a human glances
+  at. One `top` is now kept open and read frame by frame, at 1.4%.
+- **Asking whether the model server is up cost a quarter-second every time.**
+  Finding out which process holds the port ran `lsof`, which walks every open
+  file descriptor on the machine, 267 ms a call, on every status check from the
+  desktop, the phone and the Ops Room, several times a minute. It is now asked
+  the cheap way first, a connection attempt on the port, so a machine with no
+  model running, which is most machines most of the time, never pays for `lsof`
+  at all; when something is listening the answer is cached until it stops.
+- **Closing the dashboard now actually stops the sampling.** Opening it once
+  started a loop that ran for the life of the process, whether or not anybody
+  was looking. Nothing samples unless something is asking, and a window you
+  cannot see stops asking, so a backgrounded or hidden GSO-1 no longer holds a
+  `top` open on the other end. Coming back to the window refreshes it at once
+  rather than showing you what was true when you left.
+- **The scheduler sleeps until there is something to do.** It woke every 30
+  seconds around the clock, 2,880 times a day, to notice that two daily reports
+  were still hours away. It now waits until the next job is actually due, 97
+  wakeups a day, and edits to the schedule wake it immediately rather than
+  waiting out the interval. Jobs still run at the minute they are set for.
+
 ### Fixed
 - **A long Ops Room conversation would have started failing every turn.** A
   tool call and its result are two separate messages, and trimming the

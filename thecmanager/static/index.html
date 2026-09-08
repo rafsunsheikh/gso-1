@@ -269,6 +269,27 @@
   
   <script>
 
+    // ---- recurring polls, but only while somebody is looking --------------
+    // A window nobody can see has no reason to ask anything. This matters more
+    // than the renderer's own wakeups: the metrics poll is what holds the
+    // sampler open on the server, so a backgrounded GSO-1 that kept polling
+    // kept a `top` running on the other end for nothing.
+    //
+    // On return it fires once immediately, so coming back to the window shows
+    // current numbers rather than whatever was true when you left.
+    window.everyVisible = function (fn, ms) {
+      let id = null;
+      const start = () => { if (id === null) id = setInterval(fn, ms); };
+      const stop = () => { if (id !== null) { clearInterval(id); id = null; } };
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) { stop(); return; }
+        try { fn(); } catch (e) { /* a failed catch-up must not kill the timer */ }
+        start();
+      });
+      if (!document.hidden) start();
+      return { start, stop, running: () => id !== null };
+    };
+
     // ---- accessibility helpers -------------------------------------------
     let _announceTimer = null;
     function announce(msg) {
@@ -471,7 +492,7 @@
     let activeView = "opsroom";  // home shows favourites by default
     let setupPoll = null;           // interval id for the running setup job
     let llmPoll = null;             // interval id for llm status/log polling
-    let metricsPoll = null;         // interval id for system load polling
+    let metricsPoll = null;         // everyVisible handle for system load polling
     let modelsLoaded = false;       // lazy-load the model list once
 
     const TYPE_COLORS = {
@@ -2145,7 +2166,7 @@
     function startMetrics() {
       if (metricsPoll) return;   // one sampler for the whole session
       pollMetrics();
-      metricsPoll = setInterval(pollMetrics, 3000);
+      metricsPoll = everyVisible(pollMetrics, 5000);
     }
 
     async function pollMetrics() {
@@ -3930,7 +3951,7 @@
     // The Ops Room dock's Machine card is visible on every view, so sampling
     // runs for the whole session rather than only while Local LLM is open.
     startMetrics();
-    setInterval(() => {
+    everyVisible(() => {
       // Don't auto-reload while a drawer/modal is open or on the LLM/Planner/
       // Chat views (it would reset inputs / drag state); those self-refresh.
       const busy = $("#drawer").dataset.open === "1"
@@ -4215,7 +4236,7 @@
 
   try { setOpen(localStorage.getItem('opsPanelOpen') === '1'); } catch (e) { setOpen(false); }
   refreshStatus();
-  setInterval(refreshStatus, 15000);
+  everyVisible(refreshStatus, 15000);
 })();
 </script>
 <script>

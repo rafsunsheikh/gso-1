@@ -1,18 +1,39 @@
 """System resource monitor (CPU / GPU / RAM) for macOS, no extra deps.
 
 Uses native tools that work without sudo:
-  * `top -l 2`   -> system CPU%, PhysMem, and per-process CPU%/MEM (2nd sample)
+  * `top`        -> system CPU%, PhysMem, and per-process CPU%/MEM
   * `ioreg`      -> Apple Silicon GPU "Device Utilization %" + GPU memory in use
   * `sysctl`     -> logical CPU count, total physical memory
 
-Sampling `top` blocks ~2-3s, so a background thread keeps a cached snapshot
-fresh while the panel is being watched; the API returns the cache instantly.
 Per-process GPU usage is NOT exposed by macOS without elevated privileges, so
 GPU is reported system-wide only (with the model offloaded via -ngl, that
 activity is essentially the LLM).
+
+Measured 2026-09-08, because a monitor that costs more than the thing it
+watches is not a monitor, it is a load:
+
+    top -l 1        673 ms    almost all of it start-up
+    top -l 2       1774 ms    673 ms of start-up, 1 s of waiting, ~90 ms of work
+    ioreg            22 ms
+    vm_stat           2 ms
+    sysctl            2 ms
+
+This module used to run `top -l 2` every 2.5 seconds, paying that 673 ms of
+start-up over and over purely to obtain one delta: 42% of wall-clock spent
+sampling, for a panel updating a number a human reads once. It now keeps a
+single `top -l 0 -s N` alive and reads frames off it, so the start-up is paid
+once per viewing session and each further frame costs ~70 ms. Same numbers,
+1.4% duty cycle, roughly thirty times less CPU.
+
+The other half is that it stops. The old idle branch slept two seconds and
+looped, forever, whether or not a soul was watching, which on a laptop is
+43,200 pointless wakeups a day holding the CPU out of its deep idle states.
+Nothing here runs unless `get_snapshot` has been called recently; when it has
+not, the stream is torn down and the thread exits.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import threading
@@ -34,6 +55,26 @@ _snapshot: Optional[dict] = None
 _last_access = 0.0
 _llm_pid: Optional[int] = None
 _thread: Optional[threading.Thread] = None
+
+# How often `top` emits a frame while somebody is watching. The panel is read
+# by a human, not a profiler; five seconds is the difference between a live
+# number and a stale one, and each step down multiplies the cost.
+_SAMPLE_SECONDS = max(2, int(os.environ.get("MANAGER_SYSMON_INTERVAL", "5") or 5))
+
+# Stop sampling this long after the last read. The UI polls every few seconds,
+# so anything above that is comfortably "still watching"; close the tab and the
+# stream is gone within one window.
+_IDLE_AFTER = 25.0
+
+# Sorted by memory so the real RAM consumers (including a GPU-offloaded
+# llama-server, whose weights never show up in rss) are the ones captured.
+_TOP_ARGS = ["-o", "mem", "-n", "12", "-stats", "pid,cpu,mem,command"]
+
+# A llama-server holding gigabytes is always in a list sorted by memory, so the
+# direct per-pid lookup below is a rare fallback, but "rare" was once per frame
+# whenever it did fire, at 673 ms a go. [when, last_row]
+_LLM_PROBE_EVERY = 30.0
+_llm_probe: list = [0.0, None]
 
 
 def _to_bytes(s: str) -> int:
@@ -146,22 +187,27 @@ def _gpu() -> dict:
     return best
 
 
-def _collect() -> dict:
+def _collect(out: Optional[str] = None) -> dict:
+    """Turn one `top` frame into a snapshot.
+
+    `out` is a frame taken off the long-lived stream. Passing None runs a
+    one-off `top -l 2` instead, for the callers that want a single reading and
+    are not worth keeping a stream alive for; two samples because the first
+    reports averages since boot and only the second is live.
+    """
     pid = _llm_pid
     cpu_user = cpu_sys = cpu_idle = 0.0
     mem_used = mem_unused = mem_wired = 0
     procs: list[dict] = []
 
-    try:
-        # Sort by memory so the real RAM consumers (incl. the GPU-offloaded
-        # llama-server) are captured; the 2nd sample still gives live CPU%.
-        out = subprocess.run(
-            ["top", "-l", "2", "-o", "mem", "-n", "12",
-             "-stats", "pid,cpu,mem,command"],
-            capture_output=True, text=True, timeout=15,
-        ).stdout
-    except Exception:
-        out = ""
+    if out is None:
+        try:
+            out = subprocess.run(
+                ["top", "-l", "2", *_TOP_ARGS],
+                capture_output=True, text=True, timeout=15,
+            ).stdout
+        except Exception:
+            out = ""
 
     lines = out.splitlines()
     # Use the LAST CPU usage / PhysMem lines (the 2nd, live sample).
@@ -204,7 +250,8 @@ def _collect() -> dict:
     # ps rss): for a GPU-offloaded model the weights are Metal/wired memory
     # that rss omits entirely (~6MB), while top's MEM matches Activity
     # Monitor's physical footprint (e.g. 6.5GB).
-    if pid and not llm:
+    if pid and not llm and time.time() - _llm_probe[0] > _LLM_PROBE_EVERY:
+        _llm_probe[0] = time.time()
         try:
             out2 = subprocess.run(
                 ["top", "-l", "1", "-pid", str(pid),
@@ -226,6 +273,14 @@ def _collect() -> dict:
                     break
         except Exception:
             pass
+
+    if llm is not None:
+        _llm_probe[1] = llm
+    elif pid and _llm_probe[1] and _llm_probe[1].get("pid") == pid:
+        # Between probes, reuse the last direct reading rather than dropping
+        # the LLM row out of the panel every other frame.
+        llm = _llm_probe[1]
+        procs.append(llm)
 
     llm_cpu = llm["cpu_share"] if llm else 0.0
     llm_mem = llm["mem_bytes"] if llm else 0
@@ -275,24 +330,75 @@ def _collect() -> dict:
     }
 
 
-def _loop() -> None:
-    """Sole collector. Runs one sample, then repeats while being watched."""
-    global _snapshot
-    while True:
-        if time.time() - _last_access < 25:
+def _stream() -> None:
+    """Read frames off one long-lived `top` for as long as somebody is watching.
+
+    Ends by itself once nothing has asked for a snapshot in `_IDLE_AFTER`
+    seconds, killing the child and clearing `_thread` so the next reader starts
+    a fresh one. An idle GSO-1 runs no sampler at all, which is the point.
+    """
+    global _snapshot, _thread
+
+    # One immediate reading, so the panel has numbers now rather than after two
+    # frames of the stream. This is the expensive call; it happens once when
+    # somebody starts watching, not every two and a half seconds.
+    try:
+        snap = _collect()
+        with _lock:
+            _snapshot = snap
+    except Exception:
+        pass
+
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            ["top", "-l", "0", "-s", str(_SAMPLE_SECONDS), *_TOP_ARGS],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, bufsize=1,
+        )
+        frame: list[str] = []
+        seen = 0
+        for line in proc.stdout:  # type: ignore[union-attr]
+            if not line.startswith("Processes:"):
+                frame.append(line)
+                continue
+            # A frame is only known to be complete when the next one starts.
+            seen += 1
+            if seen > 2 and frame:
+                # `top`'s first frame reports CPU averaged since boot; from the
+                # second on it is a delta against the frame before, which is
+                # what the panel means by "CPU now".
+                try:
+                    snap = _collect("".join(frame))
+                    with _lock:
+                        _snapshot = snap
+                except Exception:
+                    pass
+            frame = [line]
+            if time.time() - _last_access > _IDLE_AFTER:
+                break
+    except Exception:
+        pass
+    finally:
+        if proc is not None:
             try:
-                snap = _collect()
-                with _lock:
-                    _snapshot = snap
+                proc.terminate()
+                proc.wait(timeout=5)
             except Exception:
-                pass
-            time.sleep(2.5)
-        else:
-            time.sleep(2)  # idle: nobody watching, stay cheap
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        with _lock:
+            _thread = None
 
 
 def sample(llm_pid: Optional[int]) -> dict:
-    """Synchronous one-off sample (blocks ~2-3s). Used by non-polling callers."""
+    """Synchronous one-off sample (blocks ~2 s). Used by non-polling callers.
+
+    Does not start or touch the stream: a caller that wants one reading every
+    few hours should not leave a sampler running behind it.
+    """
     global _llm_pid
     _llm_pid = llm_pid
     return _collect()
@@ -315,8 +421,10 @@ def get_snapshot(llm_pid: Optional[int]) -> Optional[dict]:
     global _last_access, _llm_pid, _thread
     _last_access = time.time()
     _llm_pid = llm_pid
-    if _thread is None:
-        _thread = threading.Thread(target=_loop, daemon=True)
-        _thread.start()
     with _lock:
+        # The stream shuts itself down when unwatched, so this both starts the
+        # first one and revives it after an idle spell.
+        if _thread is None or not _thread.is_alive():
+            _thread = threading.Thread(target=_stream, name="sysmon", daemon=True)
+            _thread.start()
         return _snapshot

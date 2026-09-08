@@ -208,8 +208,39 @@ def _props(port: int) -> dict:
         return {}
 
 
+def _listening(port: int) -> bool:
+    """Is anything accepting connections on `port`? ~0.1 ms on loopback.
+
+    The point of asking cheaply first: `lsof` costs 267 ms because it walks
+    every open file descriptor on the machine, and `status()` is called several
+    times a minute by the dashboard, the phone and the Ops Room. On a machine
+    with no model running, which is most of them most of the time, that was
+    267 ms spent discovering that a port nobody is listening on has no pid.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.25)
+            return sock.connect_ex((host(), port)) == 0
+    except Exception:
+        return False
+
+
+# A listener's pid changes only when the server starts or stops, and both of
+# those invalidate this explicitly. The TTL is a backstop for a server started
+# by someone else.
+_PIDS_TTL = 20.0
+_pids_cache: dict[int, tuple[float, list[int]]] = {}
+
+
+def _forget_port_pids() -> None:
+    _pids_cache.clear()
+
+
 def _port_pids(port: int) -> list[int]:
-    """PIDs listening on `port` (via lsof)."""
+    """PIDs listening on `port` (via lsof), cached briefly."""
+    hit = _pids_cache.get(port)
+    if hit is not None and time.time() - hit[0] < _PIDS_TTL:
+        return hit[1]
     try:
         out = subprocess.run(
             ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
@@ -217,9 +248,22 @@ def _port_pids(port: int) -> list[int]:
             text=True,
             timeout=5,
         ).stdout
-        return [int(x) for x in out.split()]
+        pids = [int(x) for x in out.split()]
+        _pids_cache[port] = (time.time(), pids)
+        return pids
     except Exception:
         return []
+
+
+def _listener_pid(p, managed_alive: bool, healthy: bool, port: int):
+    """The pid holding `port`, without paying for lsof when nothing holds it."""
+    if managed_alive:
+        return p.popen.pid
+    # `healthy` already proves something is listening; otherwise ask cheaply
+    # before reaching for lsof.
+    if not healthy and not _listening(port):
+        return None
+    return (_port_pids(port)[:1] or [None])[0]
 
 
 def status() -> dict:
@@ -260,7 +304,7 @@ def status() -> dict:
         "host": host(),
         "model": model_name,
         "ctx": ctx,
-        "pid": (p.popen.pid if managed_alive else (_port_pids(port)[:1] or [None])[0]),
+        "pid": _listener_pid(p, managed_alive, healthy, port),
         "uptime_seconds": int(time.time() - p.started_at) if managed_alive else None,
         "server_bin": server_bin(),
         "url": f"http://{host()}:{port}",
@@ -384,6 +428,7 @@ def start(
             started_at=time.time(),
             log_file=str(lp),
         )
+    _forget_port_pids()   # a new listener owns the port now
     return {"ok": True, "message": f"Starting {Path(model_path).stem} (loading…)."}
 
 
@@ -403,8 +448,10 @@ def stop() -> dict:
         with _lock:
             _proc = None
 
-    # Also catch an externally-started server on the port.
+    # Also catch an externally-started server on the port. Deliberately not
+    # from the cache: this decides what gets a SIGTERM.
     if not killed:
+        _forget_port_pids()
         pids = _port_pids(port)
         for pid in pids:
             try:
@@ -421,6 +468,7 @@ def stop() -> dict:
         if not _health(port):
             break
         time.sleep(0.1)
+    _forget_port_pids()
     return {"ok": True, "message": "Server stopped."}
 
 

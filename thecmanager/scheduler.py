@@ -36,9 +36,20 @@ STATE_FILE = config.DATA_DIR / "schedule_state.json"
 
 _thread: Optional[threading.Thread] = None
 _stop = threading.Event()
+_wake = threading.Event()
 _lock = threading.Lock()
 
-TICK_SECONDS = 30
+# The longest the loop will sleep when nothing is due. It used to wake every 30
+# seconds around the clock to notice that two daily reports were still hours
+# away: 2,880 wakeups a day to start two jobs. It now sleeps until the next job
+# is actually due, so this is only a backstop against a schedule edited outside
+# the app, or a clock that jumped. Edits made through save_jobs wake it at once.
+MAX_SLEEP_SECONDS = 900
+
+# Fallback cadence for a job that says it is due but never records having run.
+# Deliberately the old fixed tick: that failure used to be harmless and should
+# stay harmless.
+RETRY_SECONDS = 30
 # A daily job that missed its slot (machine asleep, app restarting) still fires
 # if we are within this window; beyond that it waits for tomorrow rather than
 # firing a stale report at a random hour.
@@ -95,6 +106,7 @@ def load_jobs() -> list[dict]:
 
 def save_jobs(jobs: list[dict]) -> None:
     _write_json(SCHEDULE_FILE, jobs)
+    _wake.set()   # the loop may be asleep until tomorrow; this is now its cue
 
 
 def _state() -> dict:
@@ -160,6 +172,71 @@ def due(job: dict, now: Optional[datetime] = None) -> bool:
         return now - slot <= timedelta(minutes=CATCHUP_MINUTES)
 
     return False
+
+
+def next_due(job: dict, now: Optional[datetime] = None) -> Optional[datetime]:
+    """When this job wants to run next, or None if it never will.
+
+    The counterpart to `due`, and it has to agree with it: the loop sleeps until
+    the earliest time this returns, so a job whose moment is not reported here
+    is a job that does not run. Both read the same last_run and the same specs.
+    """
+    if not job.get("enabled", True):
+        return None
+    now = now or datetime.now()
+    last_raw = _state().get(job.get("id", ""), {}).get("last_run")
+    last = None
+    if last_raw:
+        try:
+            last = datetime.fromisoformat(last_raw)
+        except ValueError:
+            last = None
+
+    if job.get("every"):
+        delta = _parse_every(job["every"])
+        if not delta:
+            return None
+        return now if last is None else last + delta
+
+    at = job.get("daily_at")
+    if at:
+        try:
+            hh, mm = (int(x) for x in at.split(":", 1))
+        except ValueError:
+            return None
+        slot = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if now < slot:
+            return slot
+        # Past today's slot: due now if it has not run and is still inside the
+        # catch-up window, otherwise tomorrow.
+        if (last is None or last < slot) and now - slot <= timedelta(minutes=CATCHUP_MINUTES):
+            return now
+        return slot + timedelta(days=1)
+
+    return None
+
+
+def _sleep_seconds(now: Optional[datetime] = None) -> float:
+    """How long the loop may sleep before some job needs attention."""
+    now = now or datetime.now()
+    soonest: Optional[datetime] = None
+    try:
+        for job in load_jobs():
+            nxt = next_due(job, now)
+            if nxt is not None and (soonest is None or nxt < soonest):
+                soonest = nxt
+    except Exception:  # noqa: BLE001
+        return float(MAX_SLEEP_SECONDS)
+    if soonest is None:
+        return float(MAX_SLEEP_SECONDS)          # nothing enabled
+    delta = (soonest - now).total_seconds()
+    if delta <= 0:
+        # Due jobs are run immediately before this is called, so a job still
+        # wanting "now" is one whose last_run did not advance, a state file
+        # that could not be written, say. Retry at the old fixed tick instead
+        # of spinning at one second for the whole catch-up window.
+        return float(RETRY_SECONDS)
+    return max(1.0, min(float(MAX_SLEEP_SECONDS), delta))
 
 
 # --------------------------------------------------------------- job bodies
@@ -316,7 +393,11 @@ def _loop() -> None:
                     run_job(job)
         except Exception:  # noqa: BLE001
             print(f"[scheduler] tick failed:\n{traceback.format_exc()}")
-        _stop.wait(TICK_SECONDS)
+        # Sleep until the next job is due rather than ticking at a fixed rate.
+        # `_wake` is set by save_jobs and by stop, so an edited schedule or a
+        # shutdown is picked up immediately instead of at the end of the wait.
+        _wake.clear()
+        _wake.wait(_sleep_seconds())
     print("[scheduler] stopped")
 
 
@@ -328,12 +409,14 @@ def start() -> None:
         config.DATA_DIR.mkdir(parents=True, exist_ok=True)
         load_jobs()  # materialise defaults on first run
         _stop.clear()
+        _wake.clear()
         _thread = threading.Thread(target=_loop, name="scheduler", daemon=True)
         _thread.start()
 
 
 def stop() -> None:
     _stop.set()
+    _wake.set()
 
 
 def status() -> dict:
@@ -343,6 +426,6 @@ def status() -> dict:
         jobs.append({**job, "last": st.get(job.get("id", ""), {}), "due_now": due(job)})
     return {
         "running": bool(_thread and _thread.is_alive()),
-        "tick_seconds": TICK_SECONDS,
+        "next_check_seconds": round(_sleep_seconds()),
         "jobs": jobs,
     }
