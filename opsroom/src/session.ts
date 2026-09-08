@@ -134,10 +134,78 @@ export function load(key: string): unknown[] {
   return Array.isArray(entry?.messages) ? entry.messages : [];
 }
 
-/** Replace a session's transcript with what the agent now holds. */
-export function save(key: string, messages: unknown[]): void {
+/**
+ * Turn the oldest part of a transcript into a paragraph, keeping the rest.
+ *
+ * Summarising is what you want and forgetting is what you can afford, and
+ * which of those is true depends on the model. A summary costs a whole extra
+ * call: on a 2.5 GB local model that is thirty seconds to produce a worse
+ * record than the messages it replaces, so there the honest move is to forget.
+ * On Claude it is a second or two for something that actually preserves the
+ * thread, and the conversation stops losing its beginning.
+ *
+ * Hence a summariser is passed in rather than assumed. No summariser, or one
+ * that fails, means trimming: compaction is an improvement on forgetting and
+ * never a precondition for saving.
+ */
+export type Summariser = (messages: unknown[]) => Promise<string | null>;
+
+/** How much of an over-budget transcript to fold into the summary. The rest
+ *  stays verbatim, because a follow-up almost always refers to it. */
+const COMPACT_RATIO = 0.5;
+
+/** A summary is only worth its own call if it replaces a reasonable amount. */
+const MIN_TO_COMPACT = 6;
+
+function makeSummaryMessage(text: string): unknown {
+  // Stored as a user message, marked as a summary. It could be neither role
+  // honestly: making it an assistant message would have the model believe it
+  // said things it did not, which is worse than the small oddity of the user
+  // appearing to narrate. The bracketed label keeps it unambiguous either way.
+  return {
+    role: "user",
+    content: [{ type: "text", text: `[Earlier conversation, summarised: ${text}]` }],
+  };
+}
+
+export async function compact(
+  messages: unknown[],
+  summarise: Summariser,
+): Promise<unknown[]> {
+  const size = (m: unknown) => JSON.stringify(m ?? "").length;
+  const total = messages.reduce((n, m) => n + size(m), 0);
+  if (total <= BUDGET_CHARS || messages.length < MIN_TO_COMPACT) return trim(messages);
+
+  const cut = Math.max(2, Math.floor(messages.length * COMPACT_RATIO));
+  const older = messages.slice(0, cut);
+  const recent = messages.slice(cut);
+
+  let summary: string | null = null;
+  try {
+    summary = await summarise(older);
+  } catch {
+    summary = null;
+  }
+  if (!summary || !summary.trim()) return trim(messages);
+
+  // The summary replaces messages that may have contained tool calls, so the
+  // repair still matters: a result in `recent` whose call was just folded away
+  // would be an orphan exactly as if it had been trimmed.
+  return trim([makeSummaryMessage(summary.trim()), ...recent]);
+}
+
+/** Replace a session's transcript with what the agent now holds.
+ *
+ *  With a summariser the oldest half is folded into a paragraph once the
+ *  transcript outgrows the budget; without one it is simply dropped. */
+export async function save(
+  key: string,
+  messages: unknown[],
+  summarise?: Summariser | null,
+): Promise<void> {
+  const kept = summarise ? await compact(messages, summarise) : trim(messages);
   const all = readAll();
-  all[key] = { key, updated: Date.now(), messages: trim(messages) };
+  all[key] = { key, updated: Date.now(), messages: kept };
   writeAll(all);
 }
 

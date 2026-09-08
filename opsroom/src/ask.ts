@@ -68,6 +68,50 @@ Be concise and factual. Lead with the direct answer, then a short list. When a
 list is long, give the total and show the largest few. If a tool fails, say so
 rather than guessing.`;
 
+/**
+ * A summariser, but only where one is worth the call.
+ *
+ * On the local provider this returns null and the transcript is trimmed
+ * instead: a small model spends thirty seconds producing a summary worse than
+ * the messages it would replace, and the user is waiting for their answer, not
+ * for housekeeping. On Claude the call is quick and the summary is good, so the
+ * conversation keeps its thread instead of losing its beginning.
+ */
+function makeSummariser(models: any, model: any): sessionStore.Summariser | null {
+  if (PROVIDER !== "anthropic") return null;
+  return async (older: unknown[]) => {
+    const transcript = older
+      .map((m) => {
+        const msg = m as { role?: string; content?: unknown };
+        const text = Array.isArray(msg.content)
+          ? (msg.content as Record<string, unknown>[])
+              .map((b) => (b?.type === "text" ? String(b.text ?? "")
+                : b?.type === "toolCall" ? `[called ${String(b.name ?? "a tool")}]` : ""))
+              .filter(Boolean).join(" ")
+          : String(msg.content ?? "");
+        return text ? `${msg.role}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 40000);
+    if (!transcript) return null;
+
+    const res = await models.complete(model, {
+      systemPrompt:
+        "Summarise this portion of a conversation between an operator and an "
+        + "agent that manages their machine. Keep what a follow-up question "
+        + "would depend on: which repositories and files were discussed, what "
+        + "was changed, what was decided, and anything the operator asked for "
+        + "that is not finished. Drop pleasantries and tool mechanics. Write a "
+        + "single dense paragraph, no preamble.",
+      messages: [{ role: "user", content: transcript, timestamp: Date.now() }],
+    });
+    const parts = (res?.content ?? []) as Array<{ type?: string; text?: string }>;
+    const out = parts.filter((b) => b?.type === "text").map((b) => b.text ?? "").join(" ").trim();
+    return out || null;
+  };
+}
+
 function parseArgs(argv: string[]) {
   const verbose = argv.includes("--verbose");
   // --session names the conversation this question belongs to; --fresh starts
@@ -166,7 +210,8 @@ async function main(): Promise<number> {
   // back are both part of what happened, and dropping them makes the next
   // question refer to something the agent has no record of.
   try {
-    sessionStore.save(session, agent.state.messages as unknown[]);
+    await sessionStore.save(session, agent.state.messages as unknown[],
+                            makeSummariser(models, model));
   } catch (err) {
     console.error(`ops-room: could not save the conversation, ${(err as Error).message}`);
   }
