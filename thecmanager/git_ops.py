@@ -213,6 +213,24 @@ def checkout(path: Path, branch: str) -> dict:
     return {"ok": rc == 0, "output": out or f"Switched to {branch}."}
 
 
+def init(path: Path, branch: str = "main") -> dict:
+    """Make `path` a git repository, if it is not one already.
+
+    `-b` names the initial branch rather than accepting whatever `init.default\
+Branch` happens to be, so a repo created here starts on `main` and not on a
+    `master` the user will rename five minutes later. Git has supported it
+    since 2.28; older ones fall back and keep their own default rather than
+    failing the whole thing over a branch name.
+    """
+    path = Path(path)
+    if is_repo(path):
+        return {"ok": True, "output": "Already a git repository.", "nochange": True}
+    rc, out = _run(path, "init", "-b", branch)
+    if rc != 0 and "-b" in out:
+        rc, out = _run(path, "init")
+    return {"ok": rc == 0, "output": out or "(initialised)"}
+
+
 def update(path: Path) -> dict:
     """git pull on the current branch."""
     path = Path(path)

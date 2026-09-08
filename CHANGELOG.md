@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Start a new project without leaving GSO-1.** The Library has a "New folder"
+  button: name it, choose which of your folders it goes in when there is more
+  than one, and it is created and opened in VSCode in one step, as a git
+  repository on `main` unless you say otherwise. Creating somewhere GSO-1 does
+  not watch was never the point, so it only offers the folders you have already
+  told it about.
+
+
 ## [0.1.6] — 2026-09-08
 
 ### Added

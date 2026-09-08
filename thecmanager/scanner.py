@@ -171,3 +171,92 @@ def effective_config(name: str) -> dict:
         "has_override": bool(override),
         "favourite": bool(override.get("favourite")),
     }
+
+
+# --------------------------------------------------------------- creating one
+
+# Characters that make a directory name a problem rather than a name: path
+# separators, the traversal pair, and the leading dot that would hide the
+# folder from the very scan that is supposed to list it.
+# (the name is stripped before this runs, so leading/trailing space is not here)
+_BAD_NAME = re.compile(r"[/\\]|^\.|\x00")
+
+
+def root_for_label(label: str | None) -> Path:
+    """The configured root a label names, defaulting to the primary one."""
+    if label:
+        for lbl, root in config.PROJECT_ROOTS:
+            if lbl == label:
+                return root
+    return config.PROJECTS_DIRS[0]
+
+
+def create_project(name: str, root_label: str | None = None,
+                   git_init: bool = False) -> dict:
+    """Make a new project folder in one of the configured roots.
+
+    Every check here is about the name being a *name* and not a path. A folder
+    called `../../.ssh` would otherwise be created wherever that resolves to,
+    and this endpoint is reachable from the phone: the resolved target is
+    required to sit directly inside the chosen root, which is the check that
+    holds even if the pattern above misses something.
+    """
+    from . import git_ops                      # local: avoids an import cycle
+
+    name = (name or "").strip()
+    if not name:
+        return {"ok": False, "message": "Give the folder a name."}
+    if len(name) > 120:
+        return {"ok": False, "message": "That name is too long."}
+    if _BAD_NAME.search(name) or name in {".", ".."}:
+        return {"ok": False, "message":
+                "Use a plain folder name: no slashes, and not starting with a dot."}
+    if name in config.IGNORED_NAMES or name.startswith(config.IGNORED_PREFIXES):
+        return {"ok": False, "message":
+                f"GSO-1 skips folders called \"{name}\", so it would never appear."}
+
+    root = root_for_label(root_label)
+    target = root / name
+    try:
+        resolved_root = root.resolve()
+        resolved = (root / name).resolve()
+    except OSError as e:
+        return {"ok": False, "message": f"Could not resolve that path: {e}"}
+    if resolved.parent != resolved_root:
+        return {"ok": False, "message": "That name would land outside the folder."}
+
+    if target.exists():
+        where = root_label or config.PROJECT_ROOTS[0][0]
+        return {"ok": False, "message": f"\"{name}\" already exists in {where}."}
+
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        target.mkdir()
+    except OSError as e:
+        return {"ok": False, "message": f"Could not create it: {e}"}
+
+    git = None
+    if git_init:
+        git = git_ops.init(target)
+
+    # The library caches detection per name; without this the new folder can be
+    # listed with a previous same-named project's detected config.
+    invalidate()
+    return {
+        "ok": True,
+        "name": name,
+        "path": str(target),
+        "root": root_label or root_label_for_path(target),
+        "git": git,
+        "message": f"Created {name}.",
+    }
+
+
+def root_label_for_path(path: Path) -> str:
+    for label, root in config.PROJECT_ROOTS:
+        try:
+            if Path(path).resolve().parent == root.resolve():
+                return label
+        except OSError:
+            continue
+    return config.PROJECT_ROOTS[0][0]

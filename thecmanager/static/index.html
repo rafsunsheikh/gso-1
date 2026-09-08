@@ -194,6 +194,18 @@
       <input id="ask-input" type="text" autocomplete="off" spellcheck="false"
              style="width:100%;padding:9px 12px;font-size:.9rem;border-radius:9px;
                     background:var(--bg);color:var(--text);border:1px solid var(--line)"/>
+      <label id="ask-select-wrap" style="display:none;margin-top:10px">
+        <span style="display:block;font-size:.75rem;color:var(--text-dim);margin-bottom:4px"
+              id="ask-select-label"></span>
+        <select id="ask-select"
+                style="width:100%;padding:9px 12px;font-size:.9rem;border-radius:9px;
+                       background:var(--bg);color:var(--text);border:1px solid var(--line)"></select>
+      </label>
+      <label id="ask-check-wrap" style="display:none;align-items:center;gap:8px;margin-top:12px;
+                                        font-size:.85rem;color:var(--text)">
+        <input id="ask-check" type="checkbox" style="width:15px;height:15px;accent-color:var(--primary)"/>
+        <span id="ask-check-label"></span>
+      </label>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button id="ask-cancel" class="lib-act" data-tone="neutral">Cancel</button>
         <button id="ask-ok" class="lib-act">OK</button>
@@ -1058,6 +1070,8 @@
           aria-pressed="${activeView === ch.id ? "true" : "false"}">
           ${escapeHtml(ch.label)}${ch.n !== undefined && ch.n !== null ? ` ${ch.n}` : ""}</button>`).join("")}
         <span class="lib-sort">Sort: name</span>
+        <button class="lib-chip" id="lib-new" title="Create a folder and open it in VSCode"
+          style="margin-left:auto">+ New folder</button>
       </div>`;
 
       const bulk = `<div class="lib-bulk" id="lib-bulk" data-on="${libSel.size ? "1" : "0"}">
@@ -1161,6 +1175,8 @@
         pageApps.forEach(a => every ? libSel.delete(a.name) : libSel.add(a.name));
         render();
       };
+      const newBtn = $("#lib-new");
+      if (newBtn) newBtn.onclick = newProject;
       gridEl.querySelectorAll("[data-bulk]").forEach(b => b.onclick = async () => {
         const names = [...libSel];
         if (b.dataset.bulk === "clear") { libSel.clear(); return render(); }
@@ -2527,7 +2543,11 @@
     /* Stands in for window.prompt, which Electron does not implement. Same
        contract: resolves to the string, or null when cancelled, so call sites
        keep their `if (name === null) return` shape. */
-    function ask(title, { note = "", value = "", ok = "OK", placeholder = "" } = {}) {
+    // `select` and `check` are optional extras: pass them and the dialog grows a
+    // dropdown and/or a checkbox, and resolves to an object instead of a bare
+    // string. Every existing caller passes neither and still gets the string.
+    function ask(title, { note = "", value = "", ok = "OK", placeholder = "",
+                          select = null, check = null } = {}) {
       return new Promise(resolve => {
         const modal = $("#ask-modal"), input = $("#ask-input");
         $("#ask-title").textContent = title;
@@ -2537,16 +2557,45 @@
         input.value = value;
         input.placeholder = placeholder;
         $("#ask-ok").textContent = ok;
+
+        const selWrap = $("#ask-select-wrap"), sel = $("#ask-select");
+        if (select && select.options && select.options.length) {
+          $("#ask-select-label").textContent = select.label || "";
+          sel.innerHTML = select.options
+            .map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+          sel.value = select.value || select.options[0];
+          selWrap.style.display = "block";
+        } else {
+          selWrap.style.display = "none";
+        }
+
+        const chkWrap = $("#ask-check-wrap"), chk = $("#ask-check");
+        if (check) {
+          $("#ask-check-label").textContent = check.label || "";
+          chk.checked = !!check.value;
+          chkWrap.style.display = "flex";
+        } else {
+          chkWrap.style.display = "none";
+        }
+
         modal.style.display = "flex";
         input.focus();
         input.select();
 
+        const rich = !!(select || check);
         const close = (result) => {
           modal.style.display = "none";
           document.removeEventListener("keydown", onKey, true);
           resolve(result);
         };
-        const submit = () => close(input.value);
+        const submit = () => close(
+          rich ? {
+            value: input.value,
+            // A hidden dropdown means "no choice offered", not "whatever was
+            // chosen last time this dialog was used".
+            select: selWrap.style.display === "none" ? null : sel.value,
+            check: chkWrap.style.display === "none" ? null : chk.checked,
+          } : input.value);
         const onKey = (e) => {
           if (e.key === "Escape") { e.preventDefault(); close(null); }
           if (e.key === "Enter") { e.preventDefault(); submit(); }
@@ -2557,6 +2606,40 @@
         // A click on the backdrop is a cancel, the same as Escape.
         modal.onclick = (e) => { if (e.target === modal) close(null); };
       });
+    }
+
+    // Create a folder in one of the configured roots and open it in VSCode.
+    // The root picker only appears when there is a choice to make.
+    async function newProject() {
+      const roots = ROOTS.length ? ROOTS : [];
+      const answer = await ask("New folder", {
+        note: "Creates the folder and opens it in VSCode.",
+        placeholder: "my-new-project",
+        ok: "Create",
+        select: roots.length > 1 ? { label: "Where", options: roots } : null,
+        check: { label: "Initialise a git repository", value: true },
+      });
+      if (!answer) return;
+      const name = (answer.value || "").trim();
+      if (!name) return;
+
+      const r = await api("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          root: answer.select || null,
+          git_init: !!answer.check,
+          open_in_vscode: true,
+        }),
+      }).catch(e => ({ ok: false, message: e.message || String(e) }));
+
+      if (!r || !r.ok) {
+        toast((r && r.message) || "Could not create it.", "error");
+        return;
+      }
+      toast(r.message, r.opened && !r.opened.ok ? "warn" : "success");
+      await load();
     }
 
     async function newBoard() {

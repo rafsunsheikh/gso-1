@@ -530,6 +530,39 @@ def vscode_folders() -> JSONResponse:
     )
 
 
+class NewProjectBody(BaseModel):
+    name: str
+    root: str | None = None
+    git_init: bool = False
+    open_in_vscode: bool = True
+
+
+@app.post("/api/projects")
+def create_project(body: NewProjectBody) -> JSONResponse:
+    """Create a project folder in one of the configured roots, and open it.
+
+    Making the folder and opening the editor are one action here because they
+    are one intention: the reason to create a workspace from GSO-1 rather than
+    from a terminal is to start working in it. Opening is still reported
+    separately, so a machine without the VS Code CLI gets its folder and an
+    honest note rather than a failure.
+    """
+    result = scanner.create_project(
+        body.name, root_label=body.root, git_init=body.git_init
+    )
+    if not result["ok"]:
+        return JSONResponse(result, status_code=400)
+
+    if body.open_in_vscode:
+        opened = vscode.open_project(result["path"], new_window=True)
+        result["opened"] = opened
+        if not opened["ok"]:
+            result["message"] = f"{result['message']} {opened['message']}"
+
+    events.record("app", result["name"], "created a new folder")
+    return JSONResponse(result)
+
+
 class FocusBody(BaseModel):
     path: str
 
