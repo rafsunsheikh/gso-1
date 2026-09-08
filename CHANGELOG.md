@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-09-08
+
 ### Fixed
 - **On an iPhone home screen, GSO-1 was a screenshot of itself.** The icon was
   offered to iOS as an SVG, which iOS does not accept for a home-screen icon,
@@ -423,7 +425,8 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.7
 [0.1.6]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.6
 [0.1.5]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.5
 [0.1.4]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.4
