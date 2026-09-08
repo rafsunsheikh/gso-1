@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-09-08
+
 ### Added
 - **The Ops Room can be taught new things without writing code.** A skill is a
   folder with a `SKILL.md`: a line saying what it is for, the binaries it
@@ -404,7 +406,8 @@ Everything below only ever worked on the original author's machine:
 - iPhone companion at `/m`, gated behind a shared token for remote access.
 - launchd integration for start-on-login and crash restart.
 
-[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/rafsunsheikh/gso-1/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.6
 [0.1.5]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.5
 [0.1.4]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.4
 [0.1.3]: https://github.com/rafsunsheikh/gso-1/releases/tag/v0.1.3
