@@ -18,9 +18,9 @@ from pydantic import BaseModel
 
 from . import __version__
 from . import (
-    claudebridge, config, events, git_ops, health, llm, llmproxy, llmusage,
-    modelsetup, planner, remoteauth, runner, scanner, summarize, sysmon,
-    telegrambot, vscode,
+    agents, claudebridge, config, events, git_ops, health, llm, llmproxy,
+    llmusage, modelsetup, planner, remoteauth, runner, scanner, summarize,
+    sysmon, telegrambot, vscode,
 )
 from . import scheduler
 from . import opsroom as opsroom_bridge
@@ -517,6 +517,18 @@ def vscode_focus(name: str) -> JSONResponse:
     _require(name)
     result = vscode.focus_project(scanner.app_path(name))
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.get("/api/agents")
+def list_agents(activity: bool = True) -> JSONResponse:
+    """Every Claude Code session running on this machine, and what it is doing.
+
+    GSO-1 could only ever see the sessions it started itself. These are all of
+    them, read from the registry Claude Code already maintains, mapped onto the
+    projects GSO-1 already watches. `activity=false` skips the transcripts when
+    a caller only needs to know who exists.
+    """
+    return JSONResponse(agents.snapshot(with_activity=activity))
 
 
 @app.get("/api/vscode/folders")
