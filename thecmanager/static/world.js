@@ -23,6 +23,8 @@
  */
 
 import * as THREE from "./vendor/three/three.module.js";
+import { GLTFLoader } from "./vendor/three/addons/GLTFLoader.js";
+import { clone as cloneSkinned } from "./vendor/three/addons/SkeletonUtils.js";
 
 /** Still swinging: a tool call this recently means visibly at work. */
 const ACTIVE_SECONDS = 30;
@@ -35,9 +37,9 @@ const PRESENT_SECONDS = 300;
 // machine. State is carried in how a plot looks, not in whether it exists.
 
 const COL = {
-  sky: 0x07070c,
-  ground: 0x0d0c14,
-  terrain: 0x1c1b2b,      // the dormant 271
+  sky: 0x8fd0f5,
+  ground: 0x6aa84f,
+  terrain: 0x5d9440,      // the dormant 271
   plot: 0x272442,
   plotStale: 0x1e1c30,
   plotEdge: 0x4b4580,
@@ -177,15 +179,31 @@ function makeLabel(text, font = 30) {
 async function loadParts(url) {
   const data = await fetch(url).then(r => r.json());
   const parts = new Map();
+  const texCache = loadParts._tex || (loadParts._tex = new Map());
   for (const p of data.parts) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(p.positions, 3));
+    if (p.index) geo.setIndex(p.index);
+    if (p.uvs) geo.setAttribute("uv", new THREE.Float32BufferAttribute(p.uvs, 2));
     geo.computeVertexNormals();
+    let map = null;
+    if (p.tex) {
+      // One Texture per file, shared by every part that uses it: the packs
+      // repeat the same atlas in every model, which is why they are so large.
+      map = texCache.get(p.tex);
+      if (!map) {
+        map = new THREE.TextureLoader().load("/static/models/tex/" + p.tex);
+        map.colorSpace = THREE.SRGBColorSpace;
+        map.flipY = false;                       // glTF UV convention
+        texCache.set(p.tex, map);
+      }
+    }
     // Blender writes linear base colours, which is what three works in.
     const colour = new THREE.Color().setRGB(p.color[0], p.color[1], p.color[2],
                                             THREE.LinearSRGBColorSpace);
     parts.set(p.name, {
       geo,
+      map,
       colour,
       pivot: new THREE.Vector3(p.pivot[0], p.pivot[1], p.pivot[2]),
     });
@@ -199,20 +217,82 @@ function instance(parts, name, opts = {}) {
   const p = parts.get(name);
   if (!p) return null;
   const mesh = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({
-    color: opts.colour || p.colour.clone(),
+    color: opts.colour || (p.map ? new THREE.Color(0xffffff) : p.colour.clone()),
+    map: p.map || null,
+    // Foliage atlases are cut-outs; without this every leaf card is a square.
+    alphaTest: p.map ? 0.5 : 0,
+    transparent: false,
+    side: p.map ? THREE.DoubleSide : THREE.FrontSide,
     roughness: opts.roughness ?? 0.72,
-    flatShading: true,
+    flatShading: !p.map,
   }));
   mesh.position.copy(p.pivot);
   return mesh;
 }
 
 export async function createWorld(canvas) {
-  const [workerParts, propParts, kitParts] = await Promise.all([
+  const [workerParts, propParts, kitParts, groundParts, agentGltf] = await Promise.all([
     loadParts("/static/models/worker.json"),
     loadParts("/static/models/props.json"),
     loadParts("/static/models/kit.json"),
+    loadParts("/static/models/ground.json"),
+    // The agent is a rigged character with seventeen animation clips, which is
+    // the one thing the JSON pipeline cannot express: skinning needs real
+    // glTF, so GLTFLoader is vendored for this and only this.
+    new GLTFLoader().loadAsync("/static/models/agent.glb").catch(() => null),
   ]);
+
+  /**
+   * How an agent's state reads as an animation.
+   *
+   * The clips came with the model, so the mapping is a matter of picking the
+   * honest one: an agent editing files is picking things up and putting them
+   * down, an agent running a command is doing something percussive, and an
+   * agent that has been quiet for hours is lying on the floor.
+   */
+  const CLIP_FOR = {
+    walk: "Walk", run: "Run", idle: "Idle",
+    Edit: "Pickup", Write: "Pickup", NotebookEdit: "Pickup",
+    Bash: "Shoot_Small", Task: "Dance",
+    Read: "Yes", Grep: "No", Glob: "No",
+    WebSearch: "No", WebFetch: "No",
+  };
+
+  const agentClips = new Map();
+  if (agentGltf) {
+    for (const c of agentGltf.animations) {
+      agentClips.set((c.name || "").split("|").pop(), c);
+    }
+  }
+
+  /** One character: a skinned clone with its own mixer and actions. */
+  function makeAgent(tint) {
+    if (!agentGltf) return null;
+    const root = cloneSkinned(agentGltf.scene);
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone();
+      if (tint) o.material.color = new THREE.Color(tint);
+      o.frustumCulled = false;       // skinned bounds go stale as it animates
+    });
+    const mixer = new THREE.AnimationMixer(root);
+    const actions = new Map();
+    for (const [name, clip] of agentClips) {
+      actions.set(name, mixer.clipAction(clip));
+    }
+    return { root, mixer, actions, current: null };
+  }
+
+  /** Cross-fade to a clip. Cheap when it is already playing. */
+  function playClip(agent, name, fade = 0.25) {
+    if (!agent || agent.current === name) return;
+    const next = agent.actions.get(name) || agent.actions.get("Idle");
+    if (!next) return;
+    const prev = agent.current && agent.actions.get(agent.current);
+    next.reset().setEffectiveWeight(1).fadeIn(fade).play();
+    if (prev) prev.fadeOut(fade);
+    agent.current = name;
+  }
 
   /** A whole kit model: its parts are one group per material, named
    *  `name__0`, `name__1`, and so on. */
@@ -228,10 +308,10 @@ export async function createWorld(canvas) {
   }
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-  renderer.setClearColor(COL.sky, 1);
+  renderer.setClearColor(0xcfe6f7, 1);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(COL.sky, 40, 165);
+  scene.fog = new THREE.Fog(0xcfe6f7, 160, 760);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 300);
   // Fixed three-quarter view: the Clash of Clans angle. Orbiting is a later
@@ -239,61 +319,250 @@ export async function createWorld(canvas) {
   camera.position.set(12.5, 11.5, 14);
   camera.lookAt(0, 0, 0);
 
-  scene.add(new THREE.HemisphereLight(0x9a93ff, 0x0a0910, 1.1));
-  const key = new THREE.DirectionalLight(0xffffff, 1.5);
-  key.position.set(10, 18, 8);
-  scene.add(key);
+  scene.add(new THREE.HemisphereLight(0xbfe3ff, 0x5a7a3a, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff6e0, 2.1);
+  sun.position.set(60, 90, 40);
+  scene.add(sun);
 
-  // A sky dome so the horizon fades instead of ending in black. Rendered on the
-  // inside, unlit, and it never moves, so it costs one draw call and no thought.
+  // A daylight sky: deep blue overhead easing to a pale haze at the horizon,
+  // which is what makes distant hills read as distance rather than as fog.
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(300, 24, 12),
+    new THREE.SphereGeometry(1200, 32, 16),
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false,
       uniforms: {
-        top: { value: new THREE.Color(0x0a0913) },
-        bottom: { value: new THREE.Color(0x1d1b30) },
+        top: { value: new THREE.Color(0x2f7fd4) },
+        bottom: { value: new THREE.Color(0xdff0fb) },
       },
       vertexShader: `varying float h;
         void main(){ h = normalize(position).y;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `varying float h; uniform vec3 top; uniform vec3 bottom;
-        void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.1, 0.5, h)), 1.0); }`,
+        void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.05, 0.55, h)), 1.0); }`,
     }),
   );
   scene.add(sky);
 
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(130, 64),
-    new THREE.MeshStandardMaterial({ color: COL.ground, roughness: 1 }),
+  /**
+   * Rolling ground.
+   *
+   * A flat disc reads as a table with things on it. Three octaves of cheap
+   * value noise give hills to walk over and horizons to walk towards, and the
+   * same function answers "how high is the ground here?" so everything else,
+   * villages, trees and your own feet, can sit on it.
+   */
+  const TERRAIN = { size: 900, seg: 300, height: 34 };
+
+  function noise2(x, z) {
+    const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  function smoothNoise(x, z) {
+    const xi = Math.floor(x), zi = Math.floor(z);
+    const xf = x - xi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+    const a = noise2(xi, zi), b = noise2(xi + 1, zi);
+    const c = noise2(xi, zi + 1), d = noise2(xi + 1, zi + 1);
+    return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
+  }
+  function groundHeight(x, z) {
+    let h = 0, amp = 1, freq = 0.008, sum = 0;
+    for (let o = 0; o < 4; o++) {
+      h += smoothNoise(x * freq, z * freq) * amp;
+      sum += amp;
+      amp *= 0.5; freq *= 2.1;
+    }
+    h /= sum;
+    // Push the middle down into a valley so villages sit in open ground and
+    // the hills rise around them.
+    const d = Math.hypot(x, z) / (TERRAIN.size * 0.5);
+    // Ring of mountains around the rim, a broad valley in the middle.
+    return (h - 0.5) * TERRAIN.height + Math.pow(Math.min(d, 1.5), 2.6) * 70;
+  }
+
+  const groundGeo = new THREE.PlaneGeometry(
+    TERRAIN.size, TERRAIN.size, TERRAIN.seg, TERRAIN.seg);
+  groundGeo.rotateX(-Math.PI / 2);
+  {
+    const pos = groundGeo.attributes.position;
+    const colours = new Float32Array(pos.count * 3);
+    const lowland = new THREE.Color(0x74b04a);
+    const upland = new THREE.Color(0x4e8c3a);
+    const rock = new THREE.Color(0x8d8f96);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const y = groundHeight(x, z);
+      pos.setY(i, y);
+      // Grass in the valley, darker green on the slopes, bare rock up high.
+      const t = Math.max(0, Math.min(1, (y + 8) / 26));
+      c.copy(lowland).lerp(upland, t);
+      if (y > 16) c.lerp(rock, Math.min(1, (y - 16) / 16));
+      // A beach where the land meets the water.
+      if (y < -7.0) c.lerp(new THREE.Color(0xd8cc9a), Math.min(1, (-7.0 - y) / 3.5));
+      colours[i * 3] = c.r; colours[i * 3 + 1] = c.g; colours[i * 3 + 2] = c.b;
+    }
+    groundGeo.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+    groundGeo.computeVertexNormals();
+  }
+  /**
+   * Water.
+   *
+   * A single plane at the height the valley floor falls below. Everywhere the
+   * terrain dips under it becomes a lake, which means the lakes are wherever
+   * the land actually is lowest rather than somewhere they were placed, and
+   * they cost one draw call however many of them there are.
+   */
+  const WATER_LEVEL = -9.5;
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(TERRAIN.size, TERRAIN.size, 1, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0x2e86c7, roughness: 0.18, metalness: 0.25,
+      transparent: true, opacity: 0.86,
+    }),
   );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.02;
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = WATER_LEVEL;
+  scene.add(water);
+
+  const ground = new THREE.Mesh(
+    groundGeo,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }),
+  );
   scene.add(ground);
 
   // ---- the dormant library, as terrain -------------------------------------
   // One InstancedMesh for all of them: 271 separate objects would be 271 draw
   // calls to say "nothing is happening here".
+  // The dormant library used to be a field of little blocks. The landscape
+  // itself is the scenery now, so there is nothing to stand in for it.
   let terrain = null;
-  function setTerrain(names) {
-    if (terrain) { scene.remove(terrain); terrain.geometry.dispose(); terrain.material.dispose(); }
-    if (!names.length) { terrain = null; return; }
-    const geo = new THREE.BoxGeometry(0.7, 0.35, 0.7);
-    const mat = new THREE.MeshStandardMaterial({ color: COL.terrain, roughness: 1 });
-    terrain = new THREE.InstancedMesh(geo, mat, names.length);
-    const m = new THREE.Object3D();
-    names.forEach((name, i) => {
-      // A ring well outside the active plots, so the middle stays readable.
-      const a = hash(name) * Math.PI * 2;
-      const r = 26 + hash(name + "r") * 88;
-      m.position.set(Math.cos(a) * r, 0.17, Math.sin(a) * r);
-      m.rotation.y = hash(name + "y") * Math.PI;
-      m.updateMatrix();
-      terrain.setMatrixAt(i, m.matrix);
-    });
-    terrain.instanceMatrix.needsUpdate = true;
-    scene.add(terrain);
+  function setTerrain() { /* the ground is the world */ }
+
+  /**
+   * Scatter the landscape with trees and rocks.
+   *
+   * One InstancedMesh per material of each model: a few thousand separate
+   * objects would be a few thousand draw calls to draw a wood. Placement is
+   * deterministic, so the forest is in the same place every time you look, and
+   * anything that lands too close to a village is dropped so the settlements
+   * keep their clearings.
+   */
+  function scatterNature(clearings) {
+    for (const g of scatterGroups) {
+      scene.remove(g);
+      g.geometry?.dispose?.();
+    }
+    scatterGroups.length = 0;
+
+    const spread = TERRAIN.size * 0.46;
+
+    // A seeded PRNG, not the string hash. Hashing "tree_x_1", "tree_x_2" and so
+    // on gave correlated values for sequential inputs, and the forest came out
+    // in visible rows. mulberry32 decorrelates properly and is still
+    // deterministic, so the wood is random-looking but in the same place every
+    // time you come back.
+    const rng = (seed) => () => {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    // Ground cover first, then the things that stand up out of it. `from`
+    // picks the kit each model lives in: the fantasy buildings have no
+    // textures, the nature ground cover does.
+    const plans = [
+      { from: groundParts, model: "Grass",             count: 3000, scale: [1.6, 3.2],  maxHeight: 16 },
+      { from: groundParts, model: "Grass Wispy",       count: 1800, scale: [1.6, 3.0],  maxHeight: 14 },
+      { from: groundParts, model: "Flower Group",      count: 900,  scale: [1.2, 2.4],  maxHeight: 10 },
+      { from: groundParts, model: "Bush",              count: 700,  scale: [2.4, 5.0],  maxHeight: 18 },
+      { from: groundParts, model: "Bush with Flowers", count: 320,  scale: [2.4, 4.4],  maxHeight: 12 },
+      { from: groundParts, model: "Fern",              count: 500,  scale: [1.6, 3.4],  maxHeight: 14 },
+      { from: groundParts, model: "Mushroom",          count: 180,  scale: [1.0, 2.2],  maxHeight: 10 },
+      { from: groundParts, model: "Pebble Round",      count: 380,  scale: [1.0, 2.6],  maxHeight: 30 },
+      { from: kitParts,    model: "tree",              count: 1100, scale: [9, 19],     maxHeight: 24 },
+      { from: kitParts,    model: "trees",             count: 500,  scale: [8, 16],     maxHeight: 20 },
+      { from: kitParts,    model: "rock",              count: 500,  scale: [2, 8],      maxHeight: 70 },
+      { from: kitParts,    model: "logs",              count: 110,  scale: [1.6, 3.0],  maxHeight: 12 },
+      // The rim. Big enough to read as mountains from the valley floor.
+      { from: kitParts,    model: "mountain",          count: 150,  scale: [45, 110],   minHeight: 20 },
+      { from: kitParts,    model: "mountain2",         count: 90,   scale: [55, 130],   minHeight: 26 },
+    ];
+
+    for (const plan of plans) {
+      // Plants grow in company. Rather than sprinkling uniformly, most of each
+      // species is drawn around a handful of thickets with the rest wandering
+      // loose, which is what stops a wood looking like an orchard.
+      const rand = rng(hash(plan.model) * 1e9 | 0);
+      const clumps = [];
+      const nClumps = Math.max(3, Math.round(plan.count / 40));
+      for (let i = 0; i < nClumps; i++) {
+        clumps.push({
+          x: (rand() - 0.5) * 2 * spread,
+          z: (rand() - 0.5) * 2 * spread,
+          r: 14 + rand() * 52,
+        });
+      }
+      const spots = [];
+      for (let i = 0; i < plan.count * 6 && spots.length < plan.count; i++) {
+        let x, z;
+        if (rand() < 0.78 && clumps.length) {
+          const c = clumps[(rand() * clumps.length) | 0];
+          // Square-rooted radius: dense in the middle, thinning at the edge.
+          const a = rand() * Math.PI * 2;
+          const d = Math.sqrt(rand()) * c.r;
+          x = c.x + Math.cos(a) * d;
+          z = c.z + Math.sin(a) * d;
+        } else {
+          x = (rand() - 0.5) * 2 * spread;
+          z = (rand() - 0.5) * 2 * spread;
+        }
+        if (Math.abs(x) > spread || Math.abs(z) > spread) continue;
+        const y = groundHeight(x, z);
+        if (y < WATER_LEVEL + 1.2) continue;           // nothing grows in the lake
+        if (plan.maxHeight !== undefined && y > plan.maxHeight) continue;
+        if (plan.minHeight !== undefined && y < plan.minHeight) continue;
+        if (clearings.some(c => Math.hypot(x - c.x, z - c.z) < 22)) continue;
+        // Vary size and lean as well as position: identical copies on a grid
+        // is the other half of why scatter reads as artificial.
+        spots.push({
+          x, y, z,
+          s: plan.scale[0] + Math.pow(rand(), 1.7) * (plan.scale[1] - plan.scale[0]),
+          r: rand() * Math.PI * 2,
+          tilt: (rand() - 0.5) * 0.14,
+        });
+      }
+      if (!spots.length) continue;
+
+      for (const key of plan.from.keys()) {
+        if (!key.startsWith(plan.model + "__")) continue;
+        const part = plan.from.get(key);
+        const mesh = new THREE.InstancedMesh(
+          part.geo,
+          new THREE.MeshStandardMaterial({
+            color: part.map ? new THREE.Color(0xffffff) : part.colour.clone(),
+            map: part.map || null,
+            alphaTest: part.map ? 0.5 : 0,
+            side: part.map ? THREE.DoubleSide : THREE.FrontSide,
+            roughness: 0.85, flatShading: !part.map }),
+          spots.length,
+        );
+        const m = new THREE.Object3D();
+        spots.forEach((sp, i) => {
+          m.position.set(sp.x, sp.y, sp.z);
+          m.rotation.set(sp.tilt || 0, sp.r, (sp.tilt || 0) * 0.6);
+          m.scale.set(sp.s * (0.85 + (sp.tilt || 0) + 0.15), sp.s, sp.s);
+          m.updateMatrix();
+          mesh.setMatrixAt(i, m.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.frustumCulled = false;
+        scene.add(mesh);
+        scatterGroups.push(mesh);
+      }
+    }
   }
+  const scatterGroups = [];
 
   // ---- the active plots ----------------------------------------------------
   const plots = new Map();       // project -> { group, figure, arm, target, t }
@@ -301,23 +570,10 @@ export async function createWorld(canvas) {
   function buildPlot(project) {
     const group = new THREE.Group();
 
-    const pad = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.6, 2.8, 0.5, 6),
-      new THREE.MeshStandardMaterial({ color: COL.plot, roughness: 0.85 }),
-    );
-    pad.position.y = 0.25;
-    group.add(pad);
-
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(2.62, 0.05, 8, 6),
-      new THREE.MeshStandardMaterial({
-        color: themeFor(meta.get(project)).roof, roughness: 0.6 }),
-    );
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.5;
-    group.add(rim);
-    // Kept so selection can light the edge of the chosen plot.
-    const rimRef = rim;
+    // No pad. A village stands on the ground like anything else; the hexagon
+    // made every project look like an exhibit on a plinth.
+    const pad = { material: { color: { setHex() {} } } };   // kept for old callers
+    const rimRef = { material: { color: { setHex() {} } } };
 
     // The village. Placed from a hash of the project name, so a plot looks
     // the same every time you come back to it rather than reshuffling.
@@ -337,19 +593,26 @@ export async function createWorld(canvas) {
       return m;
     };
 
-    place("house", -0.55, -0.6, 0.62, (hash(project + "h") - 0.5) * 0.9);
-    place("hut", 1.05, -0.75, 0.62, hash(project + "s") * 3);
-    if (hash(project + "w") > 0.55) {
-      place("windmill", 1.35, 0.85, 0.42, hash(project + "wr") * 3);
-    } else {
-      place("tower", 1.5, 0.8, 0.5, hash(project + "tr") * 3);
-    }
-    const tree = place("tree", -1.5, 1.25, 0.42, hash(project + "t") * 3);
-    place("logs", 0.35, 1.35, 0.75, hash(project + "l") * 3);
-    for (let i = 0; i < 2 + Math.floor(hash(project + "c") * 3); i++) {
+    // A settlement, not a diorama: a hall, outbuildings, a market and a wall
+    // of trees, spread over enough ground that you can walk between them.
+    place("towncenter", 0, -4, 9, (hash(project + "h") - 0.5) * 0.9);
+    place("house", -7, -2, 7, hash(project + "h2") * 3);
+    place("house", 6.5, 3.5, 6.4, hash(project + "h3") * 3);
+    place("hut", -4.5, 5.5, 5, hash(project + "s") * 3);
+    place("storage", 4, 7, 5.5, hash(project + "st") * 3);
+    place("market", 0, 4.5, 6, hash(project + "mk") * 3);
+    if (hash(project + "w") > 0.5) place("windmill", 10, -5, 8, hash(project + "wr") * 3);
+    else place("tower", 10, -5, 8, hash(project + "tr") * 3);
+    if (hash(project + "f") > 0.55) place("farm", -11, 6, 8, hash(project + "fr") * 3);
+    if (hash(project + "tp") > 0.7) place("temple", -9, -8, 7, hash(project + "tpr") * 3);
+    const tree = place("tree", -13, 2, 12, hash(project + "t") * 3);
+    place("tree", 13, 6, 11, hash(project + "t2") * 3);
+    place("logs", 2.5, 8.5, 2.4, hash(project + "l") * 3);
+    for (let i = 0; i < 4 + Math.floor(hash(project + "c") * 4); i++) {
       const a = hash(project + "c" + i) * Math.PI * 2;
-      place("rock", Math.cos(a) * 1.75, Math.sin(a) * 1.75,
-            0.5 + hash(project + "rs" + i) * 0.5, hash(project + "rr" + i) * 3);
+      const rr = 9 + hash(project + "cd" + i) * 6;
+      place("rock", Math.cos(a) * rr, Math.sin(a) * rr,
+            1.5 + hash(project + "rs" + i) * 3, hash(project + "rr" + i) * 3);
     }
 
     // The banner stays ours: it is the one thing on the plot that has to carry
@@ -359,27 +622,33 @@ export async function createWorld(canvas) {
     const cloth = instance(propParts, "flag_cloth", { colour: new THREE.Color(theme.trim) });
     if (pole) flag.add(pole);
     if (cloth) flag.add(cloth);
-    flag.position.set(0.15, 0, -1.55);
+    flag.position.set(3.5, 0, -1.5);
     village.add(flag);
 
-    village.position.y = 0.5;
+    village.position.y = 0;
     group.add(village);
 
-    // The agent: separate parts, each turning about its own joint.
+    // The agent. A rigged character when the model loaded, the old jointed
+    // boxes if it did not, so the World still works without the asset.
     const figure = new THREE.Group();
+    const character = makeAgent(null);
     const limb = {};
-    for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
-      const m = instance(workerParts, n);
-      if (m) { figure.add(m); limb[n] = m; }
+    if (character) {
+      character.root.scale.setScalar(1.5);
+      figure.add(character.root);
+    } else {
+      for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
+        const m = instance(workerParts, n);
+        if (m) { figure.add(m); limb[n] = m; }
+      }
     }
     const bodyMat = limb.torso ? limb.torso.material : new THREE.MeshStandardMaterial();
-    figure.position.set(0.1, 0, 0.95);
-    figure.scale.setScalar(1.05);
+    figure.position.set(1.5, 0, 6);
 
     // Somewhere to work, somewhere to rest, and room to move between them.
     const anchors = {
-      work:  new THREE.Vector2(-0.75, 0.45),
-      sleep: new THREE.Vector2(-0.92, 1.52),
+      work:  new THREE.Vector2(-2.5, 1.5),
+      sleep: new THREE.Vector2(-3.0, 5.0),
     };
     const walker = {
       pos: new THREE.Vector2(0.4, 0.7),
@@ -388,10 +657,11 @@ export async function createWorld(canvas) {
       mode: "wander",
       wait: 0,
       step: 0,
+      settleFacing: null,
     };
 
     const figureBase = new THREE.Group();
-    figureBase.position.y = 0.5;
+    figureBase.position.y = 0;
     figureBase.add(figure);
     group.add(figureBase);
 
@@ -399,20 +669,20 @@ export async function createWorld(canvas) {
     // and used as a sprite: three.js has no text of its own, and pulling in a
     // font loader to write six short words would not be worth its weight.
     const label = makeLabel(project);
-    label.position.y = 2.9;
+    label.position.y = 15;
     group.add(label);
     const labelRef = label;
 
     // What it is doing, right now, over its head. Rebuilt only when the tool
     // changes: a new canvas texture every frame would be absurd.
     const tool = makeLabel(" ", 22);
-    tool.position.y = 2.0;
+    tool.position.y = 12.5;
     tool.visible = false;
     group.add(tool);
 
     group.userData = { project };
     scene.add(group);
-    return { group, figure, base: figureBase, limb, flag, label: labelRef,
+    return { group, figure, base: figureBase, limb, character, flag, label: labelRef,
              rimColour: themeFor(meta.get(project)).roof,
              anchors, walker, tree,
              body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
@@ -427,15 +697,23 @@ export async function createWorld(canvas) {
       // Golden-angle spiral: even spacing, no two plots on top of each other,
       // and a given project keeps its place as neighbours come and go.
       const n = i + 1;
-      const a = n * 2.399963 + hash(k) * 0.6;
-      const r = 7.5 * Math.sqrt(n) + 4;
+      // The spiral spaces villages evenly; the jitter stops them looking placed.
+      let a = n * 2.399963 + hash(k) * 1.5;
+      let r = (34 * Math.sqrt(n) + 16) * (0.78 + hash(k + "r") * 0.5);
+      // Nudge round the spiral until the site is dry land.
+      for (let t = 0; t < 24; t++) {
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (groundHeight(x, z) > WATER_LEVEL + 2.5) break;
+        a += 0.32;
+      }
       p.target = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     });
     // Frame the ring as it grows, but stop the moment somebody takes the
     // camera themselves: nothing is more irritating than a view that argues.
-    const spread = keys.length ? 7.5 * Math.sqrt(keys.length) + 6 : 8;
+    const spread = keys.length ? 34 * Math.sqrt(keys.length) + 24 : 40;
     if (!orbit.userMoved && !roam.on) {
-      orbit.dist = 14 + spread * 1.15;
+      orbit.dist = 60 + spread * 1.35;
+      orbit.pol = 1.32;
       applyCamera();
     }
   }
@@ -490,9 +768,9 @@ export async function createWorld(canvas) {
     }
     if (changed) layout();
 
-    // Terrain is everything in the library that is not currently inhabited.
-    if (allProjects && (changed || !terrain)) {
-      setTerrain(allProjects.filter(n => !plots.has(n)));
+    if (changed || !scatterGroups.length) {
+      scatterNature([...plots.values()].map(
+        (p) => p.target || new THREE.Vector3()));
     }
     agents = next;
     needsFrame = true;
@@ -506,7 +784,7 @@ export async function createWorld(canvas) {
   // makes it much easier to tell where you are relative to a village.
   const roam = {
     on: false,
-    pos: new THREE.Vector3(0, 0, 26),
+    pos: new THREE.Vector3(0, 0, 40),
     vel: new THREE.Vector3(),
     yaw: Math.PI,
     pitch: 0.32,
@@ -514,21 +792,29 @@ export async function createWorld(canvas) {
     keys: new Set(),
     avatar: null,
     limb: {},
+    character: null,
   };
 
   const WALK = 7.5, RUN = 15.0, EYE = 3.4, TRAIL = 10.5;
 
   function buildAvatar() {
     const g = new THREE.Group();
-    const limb = {};
-    for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
-      const m = instance(workerParts, n, n === "torso"
-        ? { colour: new THREE.Color(0x00e0b7) }      // you are the teal one
-        : {});
-      if (m) { g.add(m); limb[n] = m; }
+    const ch = makeAgent(0x00e0b7);        // you are the teal one
+    if (ch) {
+      ch.root.scale.setScalar(0.85);
+      g.add(ch.root);
+      roam.character = ch;
+      roam.limb = {};
+    } else {
+      const limb = {};
+      for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
+        const m = instance(workerParts, n,
+                           n === "torso" ? { colour: new THREE.Color(0x00e0b7) } : {});
+        if (m) { g.add(m); limb[n] = m; }
+      }
+      g.scale.setScalar(1.15);
+      roam.limb = limb;
     }
-    g.scale.setScalar(1.15);
-    roam.limb = limb;
     scene.add(g);
     return g;
   }
@@ -562,17 +848,18 @@ export async function createWorld(canvas) {
   window.addEventListener("keydown", keyDown);
   window.addEventListener("keyup", keyUp);
 
-  document.addEventListener("pointerlockchange", () => {
-    // Losing the pointer drops you out of roaming rather than leaving you
-    // walking blind.
-    if (roam.on && document.pointerLockElement !== canvas) setRoam(false);
-  });
-
+  // Pointer lock is a convenience, not a requirement. Browsers refuse it for
+  // all sorts of reasons, and tying roaming to it meant a denied request threw
+  // you straight back out with no way to walk at all. Locked, the mouse looks
+  // freely; unlocked, you hold a button and drag to look. Either way WASD works.
   function onRoamMouse(e) {
-    if (!roam.on || document.pointerLockElement !== canvas) return;
-    roam.yaw -= e.movementX * 0.0022;
-    roam.pitch = Math.max(-0.25, Math.min(0.95, roam.pitch + e.movementY * 0.0018));
+    if (!roam.on) return;
+    const locked = document.pointerLockElement === canvas;
+    if (!locked && !(e.buttons & 1)) return;
+    roam.yaw -= (e.movementX || 0) * 0.0022;
+    roam.pitch = Math.max(-0.25, Math.min(0.95, roam.pitch + (e.movementY || 0) * 0.0018));
     needsFrame = true;
+    kick();
   }
   document.addEventListener("mousemove", onRoamMouse);
 
@@ -599,21 +886,30 @@ export async function createWorld(canvas) {
       const d = new THREE.Vector2(roam.pos.x - p.group.position.x,
                                   roam.pos.z - p.group.position.z);
       const len = d.length();
-      if (len < 2.0 && len > 0.0001) {
-        d.multiplyScalar((2.0 - len) / len);
+      if (len < 7.0 && len > 0.0001) {
+        d.multiplyScalar((7.0 - len) / len);
         roam.pos.x += d.x;
         roam.pos.z += d.y;
       }
     }
-    const bound = 120;
+    const bound = 430;
     roam.pos.x = Math.max(-bound, Math.min(bound, roam.pos.x));
     roam.pos.z = Math.max(-bound, Math.min(bound, roam.pos.z));
 
     const a = roam.avatar;
     if (a) {
-      a.position.set(roam.pos.x, 0, roam.pos.z);
+      a.position.set(roam.pos.x, groundHeight(roam.pos.x, roam.pos.z), roam.pos.z);
       const moving2 = roam.vel.lengthSq() > 0.5;
-      if (moving2) {
+      if (roam.character) {
+        // Walk, run or stand, chosen from how fast you are actually going.
+        // No early return here: the camera is positioned at the end of this
+        // function, and returning skipped it, which left the view stuck on the
+        // overview while the avatar walked away underneath it.
+        const sp = roam.vel.length();
+        playClip(roam.character, sp > 10 ? "Run" : sp > 0.7 ? "Walk" : "Idle", 0.18);
+        roam.character.mixer.update(dt);
+        if (moving2) a.rotation.y = Math.atan2(roam.vel.x, roam.vel.z);
+      } else if (moving2) {
         a.rotation.y = Math.atan2(roam.vel.x, roam.vel.z);
         roam.step += dt * (roam.vel.length() * 0.9);
         const sw = Math.sin(roam.step);
@@ -633,12 +929,14 @@ export async function createWorld(canvas) {
     // Camera trails behind and above, looking where you are looking.
     const back = new THREE.Vector3(Math.sin(roam.yaw), 0, Math.cos(roam.yaw))
       .multiplyScalar(-TRAIL);
+    const gy = groundHeight(roam.pos.x, roam.pos.z);
+    const bx = roam.pos.x + back.x, bz = roam.pos.z + back.z;
     camera.position.set(
-      roam.pos.x + back.x,
-      EYE + roam.pitch * 7.0,
-      roam.pos.z + back.z,
+      bx,
+      Math.max(groundHeight(bx, bz) + 1.6, gy + EYE + roam.pitch * 7.0),
+      bz,
     );
-    camera.lookAt(roam.pos.x + fwd.x * 6, 1.6 - roam.pitch * 2.6, roam.pos.z + fwd.z * 6);
+    camera.lookAt(roam.pos.x + fwd.x * 6, gy + 1.6 - roam.pitch * 2.6, roam.pos.z + fwd.z * 6);
     return walking || roam.vel.lengthSq() > 0.02;
   }
 
@@ -657,7 +955,7 @@ export async function createWorld(canvas) {
   // Hand-rolled rather than vendoring OrbitControls: this needs drag-to-turn
   // and wheel-to-zoom and nothing else, and it has to be able to hand control
   // back to the auto-framing when the world changes shape.
-  const orbit = { az: 0.86, pol: 1.0, dist: 18, userMoved: false };
+  const orbit = { az: 0.86, pol: 1.32, dist: 70, userMoved: false };
 
   function applyCamera() {
     const d = orbit.dist;
@@ -666,7 +964,7 @@ export async function createWorld(canvas) {
       Math.cos(orbit.pol) * d,
       Math.cos(orbit.az) * Math.sin(orbit.pol) * d,
     );
-    camera.lookAt(0, 0.6, 0);
+    camera.lookAt(0, 4, 0);
     needsFrame = true;
   }
 
@@ -679,7 +977,7 @@ export async function createWorld(canvas) {
     if (!dragging) return;
     orbit.az -= (e.clientX - dragging.x) * 0.008;
     // Clamped so you cannot end up under the ground or looking straight down.
-    orbit.pol = Math.max(0.22, Math.min(1.32, orbit.pol - (e.clientY - dragging.y) * 0.006));
+    orbit.pol = Math.max(0.22, Math.min(1.45, orbit.pol - (e.clientY - dragging.y) * 0.006));
     dragging = { x: e.clientX, y: e.clientY };
     orbit.userMoved = true;
     applyCamera();
@@ -749,18 +1047,16 @@ export async function createWorld(canvas) {
       (p) => p.info && (p.info.working || p.info.present));
 
     for (const [, p] of plots) {
-      // Plots rise when they appear rather than popping into existence.
+      // Villages fade up where they stand rather than rising out of the floor.
       if (p.rise < 1) {
-        p.rise = Math.min(1, p.rise + dt * 1.8);
+        p.rise = Math.min(1, p.rise + dt * 1.6);
         moving = true;
       }
       const ease = 1 - Math.pow(1 - p.rise, 3);
       if (p.target) {
-        p.group.position.x = p.target.x;
-        p.group.position.z = p.target.z;
-        p.group.position.y = -2.2 * (1 - ease);
+        p.group.position.set(p.target.x, groundHeight(p.target.x, p.target.z), p.target.z);
       }
-      p.group.scale.setScalar(0.6 + 0.4 * ease);
+      p.group.scale.setScalar(0.55 + 0.45 * ease);
 
       const info = p.info || {};
       const working = info.working;
@@ -768,20 +1064,24 @@ export async function createWorld(canvas) {
       // Where should this agent be? Working at the workshop, resting under the
       // tree, or wandering its plot between the two.
       const w = p.walker;
-      const wantMode = working ? "work" : (info.present ? "wander" : "sleep");
+      // An idle agent stands about rather than falling over: it waits, strolls
+      // a short way, and waits again. Lying down read as "collapsed" more than
+      // "resting", and an agent that has merely gone quiet has not died.
+      const wantMode = working ? "work" : "wander";
       if (w.mode !== wantMode) {
         w.mode = wantMode;
         w.wait = 0;
         if (wantMode === "work") w.target.copy(p.anchors.work);
-        else if (wantMode === "sleep") w.target.copy(p.anchors.sleep);
-        w.settleFacing = wantMode === "sleep" ? 1.9 : null;
+        w.settleFacing = null;
       }
+      // The longer it has been quiet, the less it moves.
+      const restless = info.present ? 1 : 0.35;
 
       const toTarget = w.target.clone().sub(w.pos);
       const dist = toTarget.length();
-      const walking = dist > 0.06;
+      const walking = dist > 0.25;
       if (walking) {
-        const speed = (w.mode === "work" ? 1.5 : 0.8) * dt;
+        const speed = (w.mode === "work" ? 5.0 : 2.6) * dt;
         w.pos.addScaledVector(toTarget.normalize(), Math.min(speed, dist));
         // Face where you are going, turning the short way round.
         const want = Math.atan2(toTarget.x, toTarget.y);
@@ -799,9 +1099,10 @@ export async function createWorld(canvas) {
         w.wait -= dt;
         if (w.wait <= 0) {
           const a = Math.random() * Math.PI * 2;
-          const r = 0.5 + Math.random() * 1.3;
+          const r = (2 + Math.random() * 6) * restless;
           w.target.set(Math.cos(a) * r, Math.sin(a) * r);
-          w.wait = 1.5 + Math.random() * 3;
+          // Quiet agents pause for much longer between strolls.
+          w.wait = (2 + Math.random() * 4) / restless;
         }
         moving = true;      // it is about to set off again
       }
@@ -811,7 +1112,33 @@ export async function createWorld(canvas) {
       p.body.color.setHex(
         working ? COL.body : (info.present ? COL.bodyIdle : COL.bodyStale));
       p.pad.material.color.setHex(info.present ? COL.plot : COL.plotStale);
-      if (working && !walking) {
+      // With a rigged character the pose comes from a clip; the hand-posed
+      // limbs below are only for the fallback figure.
+      if (p.character) {
+        if (working) {
+          if (p.toolText !== info.tool) {
+            p.toolText = info.tool;
+            p.group.remove(p.tool);
+            p.tool = makeLabel(toolLabel(info.tool) || " ", 22);
+            p.tool.position.y = 12.5;
+            p.group.add(p.tool);
+          }
+          p.tool.visible = true;
+        } else {
+          p.tool.visible = false;
+        }
+        const clip =
+          walking ? CLIP_FOR.walk
+          : working ? (CLIP_FOR[info.tool] || "Pickup")
+          : CLIP_FOR.idle;
+        playClip(p.character, clip);
+        p.character.mixer.update(dt);
+        // An Idle clip loops for ever, so it must not be a reason to keep the
+        // render loop open: the same rule as the sleepers' breathing.
+        if (walking || working || anyAwake) moving = true;
+        p.base.position.y = 0;
+        p.figure.rotation.x = 0;
+      } else if (working && !walking) {
         const m = motionFor(info.tool);
         const swing = Math.sin(t * m.rate);
         const kind = m.kind;
@@ -860,7 +1187,9 @@ export async function createWorld(canvas) {
         p.tool.visible = false;
         const k = Math.min(1, dt * 5);
 
-        if (walking) {
+        if (p.character) {
+          /* the clip above is the whole pose */
+        } else if (walking) {
           // A walk cycle: legs opposed, arms counter-swinging, a little bounce.
           const sw = Math.sin(w.step);
           p.limb.legL && (p.limb.legL.rotation.x = sw * 0.55);
@@ -918,12 +1247,12 @@ export async function createWorld(canvas) {
       const d = camera.position.distanceTo(p.group.position);
       for (const sp of [p.label, p.tool]) {
         if (!sp || !sp.visible) continue;
-        const k = d * 0.026;
+        const k = d * 0.02;
         sp.scale.set((sp.userData.aspect || 3) * k, k, 1);
       }
     }
 
-    if (roam.on && stepRoam(dt)) moving = true;
+    if (roam.on) { stepRoam(dt); moving = true; }
 
     renderer.render(scene, camera);
     needsFrame = false;

@@ -2679,7 +2679,7 @@
             <button class="world-roam" id="world-roam">Walk the world</button>
             <div class="world-hud" id="world-hud" hidden>
               <span><b>WASD</b> move</span><span><b>Shift</b> run</span>
-              <span><b>Mouse</b> look</span><span><b>Esc</b> leave</span>
+              <span><b>Mouse</b> look (or drag)</span><span><b>Esc</b> leave</span>
               <span id="world-near"></span>
             </div>
           </div>
@@ -2720,11 +2720,16 @@
         worldPanel(hit);
       };
       const roamBtn = $("#world-roam");
-      if (roamBtn) roamBtn.onclick = async () => {
-        // Pointer lock is what turns mouse movement into looking around. It
-        // needs a real click to grant, and Escape hands it back.
-        try { await canvas.requestPointerLock(); } catch (e) { /* denied */ }
+      if (roamBtn) roamBtn.onclick = () => {
+        // Roam first, then ask for pointer lock. A denied or dropped lock used
+        // to leave you unable to walk at all; now it only costs free-look, and
+        // dragging with the mouse held still turns the camera.
         worldSetRoam(true);
+        canvas.focus?.();
+        try {
+          const r = canvas.requestPointerLock();
+          if (r && r.catch) r.catch(() => {});
+        } catch (e) { /* look by dragging instead */ }
       };
 
       worldResize();
