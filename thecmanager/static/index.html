@@ -2692,10 +2692,20 @@
         WORLD_GEN++;                       // retires any loop on the old scene
         if (WORLD_RAF !== null) { cancelAnimationFrame(WORLD_RAF); WORLD_RAF = null; }
         if (WORLD) WORLD.dispose();
-        WORLD = WORLD_MOD.createWorld(canvas);
+        WORLD = await WORLD_MOD.createWorld(canvas);   // loads the models
         WORLD.canvas = canvas;
+        // Dragging the camera must redraw even when no agent is working.
+        WORLD.onNeedsFrame(() => worldKick());
       }
-      canvas.onclick = (e) => {
+      // The canvas orbits on drag, so a click is only a selection if the
+      // pointer barely moved between down and up.
+      let downAt = null;
+      canvas.onpointerdown = (e) => { downAt = { x: e.clientX, y: e.clientY }; };
+      canvas.onpointerup = (e) => {
+        if (!downAt) return;
+        const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+        downAt = null;
+        if (moved > 5) return;
         const hit = WORLD.pick(e.clientX, e.clientY);
         WORLD.select(hit);
         worldKick();

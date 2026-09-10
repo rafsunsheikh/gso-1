@@ -57,18 +57,18 @@ const COL = {
  * the arm travels, `bob` how much the whole figure moves with it.
  */
 const TOOL_MOTION = {
-  Edit:      { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
-  Write:     { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
-  NotebookEdit: { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
-  Bash:      { rate: 6.0, arc: 0.85, bob: 0.05, tint: 0x00e0b7 },
-  Read:      { rate: 2.2, arc: 0.35, bob: 0.02, tint: 0x6f6af8 },
-  Grep:      { rate: 4.0, arc: 0.5,  bob: 0.03, tint: 0x6f6af8 },
-  Glob:      { rate: 4.0, arc: 0.5,  bob: 0.03, tint: 0x6f6af8 },
-  WebSearch: { rate: 3.0, arc: 0.45, bob: 0.03, tint: 0x9b97ff },
-  WebFetch:  { rate: 3.0, arc: 0.45, bob: 0.03, tint: 0x9b97ff },
-  Task:      { rate: 5.0, arc: 0.7,  bob: 0.06, tint: 0xf5b642 },
+  Edit:      { kind: "strike", rate: 9.0, arc: 1.3,  bob: 0.09, tint: 0x502ce7 },
+  Write:     { kind: "strike", rate: 8.0, arc: 1.2,  bob: 0.08, tint: 0x502ce7 },
+  NotebookEdit: { kind: "strike", rate: 8.0, arc: 1.2, bob: 0.08, tint: 0x502ce7 },
+  Bash:      { kind: "crank",  rate: 5.5, arc: 0.9,  bob: 0.05, tint: 0x00e0b7 },
+  Read:      { kind: "search", rate: 1.4, arc: 0.3,  bob: 0.01, tint: 0x6f6af8 },
+  Grep:      { kind: "search", rate: 2.6, arc: 0.4,  bob: 0.02, tint: 0x6f6af8 },
+  Glob:      { kind: "search", rate: 2.6, arc: 0.4,  bob: 0.02, tint: 0x6f6af8 },
+  WebSearch: { kind: "search", rate: 1.9, arc: 0.4,  bob: 0.02, tint: 0x9b97ff },
+  WebFetch:  { kind: "search", rate: 1.9, arc: 0.4,  bob: 0.02, tint: 0x9b97ff },
+  Task:      { kind: "wave",   rate: 4.0, arc: 0.8,  bob: 0.07, tint: 0xf5b642 },
 };
-const DEFAULT_MOTION = { rate: 7.0, arc: 1.0, bob: 0.06, tint: 0x502ce7 };
+const DEFAULT_MOTION = { kind: "crank", rate: 6.0, arc: 0.9, bob: 0.05, tint: 0x502ce7 };
 
 /** What to write on the chip. An MCP tool is `mcp__<server>__<tool>`, which
  *  truncates to gibberish over a figure's head; the tool is the useful half. */
@@ -134,12 +134,64 @@ function makeLabel(text, font = 30) {
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
+  // Kept so frame() can hold the label at a constant size on screen.
+  sprite.userData.aspect = c.width / c.height;
   const h = c.height / 56 * 0.9;
   sprite.scale.set(c.width / 56 * 0.9, h, 1);
   return sprite;
 }
 
-export function createWorld(canvas) {
+/**
+ * Load a model exported by tools/blender_models.py.
+ *
+ * Plain JSON rather than glTF: these are flat-shaded boxes with no skinning,
+ * textures or animation clips, and GLTFLoader would have meant vendoring it
+ * plus BufferGeometryUtils and SkeletonUtils, about 190 KB of machinery, and an
+ * import map, to read six cubes. Normals are not shipped either; three derives
+ * flat faces from non-indexed geometry, which is the look we want anyway.
+ *
+ * Each part's vertices are relative to its own origin, and that origin is the
+ * joint it turns about, so animation is a rotation and nothing else.
+ */
+async function loadParts(url) {
+  const data = await fetch(url).then(r => r.json());
+  const parts = new Map();
+  for (const p of data.parts) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(p.positions, 3));
+    geo.computeVertexNormals();
+    // Blender writes linear base colours, which is what three works in.
+    const colour = new THREE.Color().setRGB(p.color[0], p.color[1], p.color[2],
+                                            THREE.LinearSRGBColorSpace);
+    parts.set(p.name, {
+      geo,
+      colour,
+      pivot: new THREE.Vector3(p.pivot[0], p.pivot[1], p.pivot[2]),
+    });
+  }
+  return parts;
+}
+
+/** One instance of a loaded part, at its joint, with its own material so it
+ *  can be tinted per agent without touching the others. */
+function instance(parts, name, opts = {}) {
+  const p = parts.get(name);
+  if (!p) return null;
+  const mesh = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({
+    color: opts.colour || p.colour.clone(),
+    roughness: opts.roughness ?? 0.72,
+    flatShading: true,
+  }));
+  mesh.position.copy(p.pivot);
+  return mesh;
+}
+
+export async function createWorld(canvas) {
+  const [workerParts, propParts] = await Promise.all([
+    loadParts("/static/models/worker.json"),
+    loadParts("/static/models/props.json"),
+  ]);
+
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setClearColor(COL.sky, 1);
 
@@ -212,38 +264,70 @@ export function createWorld(canvas) {
     // Kept so selection can light the edge of the chosen plot.
     const rimRef = rim;
 
-    // The figure: a body, a head, and an arm that swings while it works.
+    // The village. Placed from a hash of the project name, so a plot looks
+    // the same every time you come back to it rather than reshuffling.
+    const village = new THREE.Group();
+    const hut = new THREE.Group();
+    for (const n of ["hut_base", "hut_wall", "hut_roof", "hut_door"]) {
+      const m = instance(propParts, n);
+      if (m) hut.add(m);
+    }
+    hut.position.set(-0.75, 0, -0.55);
+    hut.rotation.y = (hash(project + "hut") - 0.5) * 0.7;
+    village.add(hut);
+
+    const store = new THREE.Group();
+    for (const n of ["store_base", "store_wall", "store_roof"]) {
+      const m = instance(propParts, n);
+      if (m) store.add(m);
+    }
+    store.position.set(0.95, 0, -0.85);
+    store.rotation.y = hash(project + "store") * 2;
+    village.add(store);
+
+    const flag = new THREE.Group();
+    const pole = instance(propParts, "flag_pole");
+    const cloth = instance(propParts, "flag_cloth");
+    if (pole) flag.add(pole);
+    if (cloth) flag.add(cloth);
+    flag.position.set(1.35, 0, 0.75);
+    village.add(flag);
+
+    for (let i = 0; i < 2 + Math.floor(hash(project + "c") * 2); i++) {
+      const crate = instance(propParts, "crate");
+      if (!crate) break;
+      const a = hash(project + "c" + i) * Math.PI * 2;
+      crate.position.x += Math.cos(a) * 1.5;
+      crate.position.z += Math.sin(a) * 1.5;
+      crate.rotation.y = hash(project + "r" + i) * 3;
+      village.add(crate);
+    }
+    village.position.y = 0.5;
+    group.add(village);
+
+    // The agent: separate parts, each turning about its own joint.
     const figure = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: COL.bodyIdle, roughness: 0.5 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.55, 4, 10), bodyMat);
-    body.position.y = 0.95;
-    figure.add(body);
+    const limb = {};
+    for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
+      const m = instance(workerParts, n);
+      if (m) { figure.add(m); limb[n] = m; }
+    }
+    const bodyMat = limb.torso ? limb.torso.material : new THREE.MeshStandardMaterial();
+    figure.position.set(0.1, 0, 0.95);
+    figure.scale.setScalar(1.05);
 
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 16, 12),
-      new THREE.MeshStandardMaterial({ color: COL.head, roughness: 0.4 }),
-    );
-    head.position.y = 1.52;
-    figure.add(head);
-
-    const arm = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.09, 0.42, 3, 8),
-      new THREE.MeshStandardMaterial({ color: COL.body, roughness: 0.5 }),
-    );
-    // Pivot at the shoulder so a rotation reads as a swing, not a slide.
-    arm.geometry.translate(0, -0.26, 0);
-    arm.position.set(0.32, 1.2, 0.05);
-    figure.add(arm);
-
-    figure.position.y = 0.5;
-    group.add(figure);
+    const figureBase = new THREE.Group();
+    figureBase.position.y = 0.5;
+    figureBase.add(figure);
+    group.add(figureBase);
 
     // A name plate, so a plot is a place rather than a shape. Drawn to a canvas
     // and used as a sprite: three.js has no text of its own, and pulling in a
     // font loader to write six short words would not be worth its weight.
     const label = makeLabel(project);
-    label.position.y = 2.5;
+    label.position.y = 2.9;
     group.add(label);
+    const labelRef = label;
 
     // What it is doing, right now, over its head. Rebuilt only when the tool
     // changes: a new canvas texture every frame would be absurd.
@@ -254,8 +338,8 @@ export function createWorld(canvas) {
 
     group.userData = { project };
     scene.add(group);
-    return { group, figure, arm, body: bodyMat, rim: rimRef, pad,
-             tool, toolText: null, rise: 0 };
+    return { group, figure, base: figureBase, limb, flag, label: labelRef,
+             body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
   }
 
   function layout() {
@@ -264,15 +348,16 @@ export function createWorld(canvas) {
     keys.forEach((k, i) => {
       const p = plots.get(k);
       const a = (i / Math.max(keys.length, 1)) * Math.PI * 2;
-      const r = keys.length <= 1 ? 0 : 3.4 + keys.length * 0.78;
+      const r = keys.length <= 1 ? 0 : 3.2 + keys.length * 0.62;
       p.target = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     });
-    // Pull back as the ring grows, so six plots frame as well as one does.
-    const spread = keys.length <= 1 ? 0 : 3.4 + keys.length * 0.78;
-    const d = 11 + spread * 1.15;
-    camera.position.set(d * 0.62, d * 0.58, d * 0.72);
-    camera.lookAt(0, 0.6, 0);
-    needsFrame = true;
+    // Frame the ring as it grows, but stop the moment somebody takes the
+    // camera themselves: nothing is more irritating than a view that argues.
+    const spread = keys.length <= 1 ? 0 : 3.2 + keys.length * 0.62;
+    if (!orbit.userMoved) {
+      orbit.dist = 10 + spread * 1.02;
+      applyCamera();
+    }
   }
 
   let agents = new Map();        // project -> { idle, name, tool }
@@ -329,6 +414,57 @@ export function createWorld(canvas) {
     needsFrame = true;
     return [...next.values()].some(a => a.working) || changed;
   }
+
+  // ---- orbit ------------------------------------------------------------
+  // Hand-rolled rather than vendoring OrbitControls: this needs drag-to-turn
+  // and wheel-to-zoom and nothing else, and it has to be able to hand control
+  // back to the auto-framing when the world changes shape.
+  const orbit = { az: 0.86, pol: 1.0, dist: 18, userMoved: false };
+
+  function applyCamera() {
+    const d = orbit.dist;
+    camera.position.set(
+      Math.sin(orbit.az) * Math.sin(orbit.pol) * d,
+      Math.cos(orbit.pol) * d,
+      Math.cos(orbit.az) * Math.sin(orbit.pol) * d,
+    );
+    camera.lookAt(0, 0.6, 0);
+    needsFrame = true;
+  }
+
+  let dragging = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    dragging = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    orbit.az -= (e.clientX - dragging.x) * 0.008;
+    // Clamped so you cannot end up under the ground or looking straight down.
+    orbit.pol = Math.max(0.22, Math.min(1.32, orbit.pol - (e.clientY - dragging.y) * 0.006));
+    dragging = { x: e.clientX, y: e.clientY };
+    orbit.userMoved = true;
+    applyCamera();
+    kick();
+  });
+  const endDrag = (e) => {
+    dragging = null;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    orbit.dist = Math.max(7, Math.min(70, orbit.dist * (1 + Math.sign(e.deltaY) * 0.1)));
+    orbit.userMoved = true;
+    applyCamera();
+    kick();
+  }, { passive: false });
+
+  // The scene owns its own wake-up: a drag has to redraw even when no agent is
+  // working, and the page's loop only restarts when something asks it to.
+  let kick = () => {};
+  function onNeedsFrame(fn) { kick = fn; }
 
   // ---- picking --------------------------------------------------------------
   // Raycast against the plot groups so a click lands on a place, not a pixel.
@@ -388,24 +524,76 @@ export function createWorld(canvas) {
       p.pad.material.color.setHex(info.present ? COL.plot : COL.plotStale);
       if (working) {
         const m = motionFor(info.tool);
-        p.arm.rotation.x = Math.sin(t * m.rate) * m.arc - 0.3;
-        p.figure.position.y = 0.5 + Math.abs(Math.sin(t * m.rate)) * m.bob;
-        p.figure.rotation.y = Math.sin(t * 0.8) * 0.25;
+        const swing = Math.sin(t * m.rate);
+        const kind = m.kind;
+
+        // Each tool reads as a different job. Hammering is two arms and a
+        // forward lean; searching is the head turning and the body still.
+        if (kind === "strike") {
+          p.limb.armR && (p.limb.armR.rotation.x = swing * m.arc - 1.5);
+          p.limb.armL && (p.limb.armL.rotation.x = swing * m.arc * 0.5 - 0.8);
+          p.figure.rotation.x = 0.12 + swing * 0.05;
+          p.limb.head && (p.limb.head.rotation.x = 0.25);
+        } else if (kind === "crank") {
+          p.limb.armR && (p.limb.armR.rotation.x = swing * m.arc - 0.9);
+          p.limb.armL && (p.limb.armL.rotation.x = -swing * m.arc * 0.6 - 0.4);
+          p.figure.rotation.x = 0.05;
+          p.limb.head && (p.limb.head.rotation.x = 0.1);
+        } else if (kind === "search") {
+          // Barely moves: reading and grepping are not physical work.
+          p.limb.head && (p.limb.head.rotation.y = Math.sin(t * m.rate) * 0.7);
+          p.limb.armR && (p.limb.armR.rotation.x = -0.55);
+          p.limb.armL && (p.limb.armL.rotation.x = -0.55);
+          p.figure.rotation.x = 0.16;
+        } else {
+          p.limb.armR && (p.limb.armR.rotation.x = swing * m.arc - 0.4);
+          p.limb.armL && (p.limb.armL.rotation.x = -swing * m.arc - 0.4);
+          p.figure.rotation.x = 0;
+        }
+        // A small weight shift keeps it alive without looking like marching.
+        p.limb.legL && (p.limb.legL.rotation.x = Math.sin(t * m.rate * 0.5) * 0.08);
+        p.limb.legR && (p.limb.legR.rotation.x = -Math.sin(t * m.rate * 0.5) * 0.08);
+        p.base.position.y = 0.5 + Math.abs(swing) * m.bob;
+        p.base.rotation.y = Math.sin(t * 0.5) * 0.12;
         p.body.color.setHex(m.tint);
+        if (p.flag) p.flag.rotation.y = Math.sin(t * 1.6) * 0.25;
+
         if (p.toolText !== info.tool) {
           p.toolText = info.tool;
           p.group.remove(p.tool);
           p.tool = makeLabel(toolLabel(info.tool) || " ", 22);
-          p.tool.position.y = 2.0;
+          p.tool.position.y = 2.35;
           p.group.add(p.tool);
         }
         p.tool.visible = true;
         moving = true;
       } else {
         p.tool.visible = false;
-        p.arm.rotation.x += (0 - p.arm.rotation.x) * Math.min(1, dt * 6);
-        p.figure.position.y += (0.5 - p.figure.position.y) * Math.min(1, dt * 6);
-        if (Math.abs(p.arm.rotation.x) > 0.01) moving = true;
+        // Settle back to standing rather than snapping.
+        const k = Math.min(1, dt * 5);
+        let rest = 0;
+        for (const [name, part] of Object.entries(p.limb)) {
+          const target = name === "head" ? 0 : (info.present ? 0 : 0.06);
+          part.rotation.x += (target - part.rotation.x) * k;
+          if (name === "head") part.rotation.y += (0 - part.rotation.y) * k;
+          rest += Math.abs(part.rotation.x - target);
+        }
+        p.figure.rotation.x += (0 - p.figure.rotation.x) * k;
+        p.base.position.y += (0.5 - p.base.position.y) * k;
+        p.body.color.setHex(info.present ? COL.bodyIdle : COL.bodyStale);
+        if (rest > 0.02 || Math.abs(p.base.position.y - 0.5) > 0.002) moving = true;
+      }
+    }
+
+    // A world-space sprite grows as you approach it, so the nearest plot's name
+    // ended up several times the size of the far ones and dominated the picture.
+    // Rescaling by distance each frame holds every label steady on screen.
+    for (const [, p] of plots) {
+      const d = camera.position.distanceTo(p.group.position);
+      for (const sp of [p.label, p.tool]) {
+        if (!sp || !sp.visible) continue;
+        const k = d * 0.026;
+        sp.scale.set((sp.userData.aspect || 3) * k, k, 1);
       }
     }
 
@@ -431,7 +619,10 @@ export function createWorld(canvas) {
     renderer.dispose();
   }
 
-  return { update, frame, resize, dispose, pick, select,
+  applyCamera();
+
+  return { update, frame, resize, dispose, pick, select, onNeedsFrame,
+           resetCamera: () => { orbit.userMoved = false; layout(); },
            get selected() { return selected; },
            get agents() { return agents; },
            get pending() { return needsFrame; } };
