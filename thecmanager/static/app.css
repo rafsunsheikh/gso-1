@@ -38,3 +38,22 @@
   background: var(--bg); color: var(--text); border: 1px solid var(--line); }
 .world-card[data-tone="warm"] { border-color: #502ce755; }
 .world-card[data-tone="idle"] { opacity: .72; }
+
+/* ---- World: roaming ---------------------------------------------------- */
+.world-stage { position: relative; }
+.world-roam {
+  position: absolute; left: 14px; bottom: 14px; z-index: 2;
+  padding: 9px 16px; font-size: .85rem; font-weight: 600; border-radius: 10px;
+  background: var(--primary); color: #fff; border: 0; cursor: pointer;
+}
+.world-roam:hover { filter: brightness(1.1); }
+.world-hud {
+  position: absolute; left: 14px; bottom: 14px; right: 14px; z-index: 2;
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  padding: 9px 14px; border-radius: 10px; font-size: .78rem;
+  background: rgba(8,7,14,.72); color: var(--text-dim);
+  border: 1px solid var(--line); backdrop-filter: blur(6px);
+}
+.world-hud[hidden] { display: none !important; }
+.world-hud b { color: var(--text); font-weight: 650; }
+#world-near { margin-left: auto; color: var(--live, #00e0b7); font-weight: 600; }

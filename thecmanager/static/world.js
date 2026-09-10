@@ -217,7 +217,7 @@ export async function createWorld(canvas) {
   renderer.setClearColor(COL.sky, 1);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(COL.sky, 26, 80);
+  scene.fog = new THREE.Fog(COL.sky, 40, 165);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 300);
   // Fixed three-quarter view: the Clash of Clans angle. Orbiting is a later
@@ -230,8 +230,27 @@ export async function createWorld(canvas) {
   key.position.set(10, 18, 8);
   scene.add(key);
 
+  // A sky dome so the horizon fades instead of ending in black. Rendered on the
+  // inside, unlit, and it never moves, so it costs one draw call and no thought.
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(300, 24, 12),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      uniforms: {
+        top: { value: new THREE.Color(0x0a0913) },
+        bottom: { value: new THREE.Color(0x1d1b30) },
+      },
+      vertexShader: `varying float h;
+        void main(){ h = normalize(position).y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `varying float h; uniform vec3 top; uniform vec3 bottom;
+        void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.1, 0.5, h)), 1.0); }`,
+    }),
+  );
+  scene.add(sky);
+
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(70, 48),
+    new THREE.CircleGeometry(130, 64),
     new THREE.MeshStandardMaterial({ color: COL.ground, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
@@ -252,7 +271,7 @@ export async function createWorld(canvas) {
     names.forEach((name, i) => {
       // A ring well outside the active plots, so the middle stays readable.
       const a = hash(name) * Math.PI * 2;
-      const r = 15 + hash(name + "r") * 44;
+      const r = 26 + hash(name + "r") * 88;
       m.position.set(Math.cos(a) * r, 0.17, Math.sin(a) * r);
       m.rotation.y = hash(name + "y") * Math.PI;
       m.updateMatrix();
@@ -392,19 +411,23 @@ export async function createWorld(canvas) {
   }
 
   function layout() {
-    // A ring, ordered by name so a plot does not jump when a neighbour leaves.
+    // Villages sit where their name puts them, on a landscape big enough to
+    // walk across. A ring was fine to look down on; you cannot roam a ring.
     const keys = [...plots.keys()].sort();
     keys.forEach((k, i) => {
       const p = plots.get(k);
-      const a = (i / Math.max(keys.length, 1)) * Math.PI * 2;
-      const r = keys.length <= 1 ? 0 : 3.2 + keys.length * 0.62;
+      // Golden-angle spiral: even spacing, no two plots on top of each other,
+      // and a given project keeps its place as neighbours come and go.
+      const n = i + 1;
+      const a = n * 2.399963 + hash(k) * 0.6;
+      const r = 7.5 * Math.sqrt(n) + 4;
       p.target = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     });
     // Frame the ring as it grows, but stop the moment somebody takes the
     // camera themselves: nothing is more irritating than a view that argues.
-    const spread = keys.length <= 1 ? 0 : 3.2 + keys.length * 0.62;
-    if (!orbit.userMoved) {
-      orbit.dist = 10 + spread * 1.02;
+    const spread = keys.length ? 7.5 * Math.sqrt(keys.length) + 6 : 8;
+    if (!orbit.userMoved && !roam.on) {
+      orbit.dist = 14 + spread * 1.15;
       applyCamera();
     }
   }
@@ -466,6 +489,160 @@ export async function createWorld(canvas) {
     agents = next;
     needsFrame = true;
     return [...next.values()].some(a => a.working) || changed;
+  }
+
+  // ---- free roam ----------------------------------------------------------
+  // You walk the landscape yourself: WASD to move, mouse to look, shift to run.
+  // The camera trails an avatar rather than sitting behind your eyes, because
+  // this is a world you are visiting, not a shooter, and a third-person view
+  // makes it much easier to tell where you are relative to a village.
+  const roam = {
+    on: false,
+    pos: new THREE.Vector3(0, 0, 26),
+    vel: new THREE.Vector3(),
+    yaw: Math.PI,
+    pitch: 0.32,
+    step: 0,
+    keys: new Set(),
+    avatar: null,
+    limb: {},
+  };
+
+  const WALK = 7.5, RUN = 15.0, EYE = 3.4, TRAIL = 10.5;
+
+  function buildAvatar() {
+    const g = new THREE.Group();
+    const limb = {};
+    for (const n of ["torso", "head", "armL", "armR", "legL", "legR"]) {
+      const m = instance(workerParts, n, n === "torso"
+        ? { colour: new THREE.Color(0x00e0b7) }      // you are the teal one
+        : {});
+      if (m) { g.add(m); limb[n] = m; }
+    }
+    g.scale.setScalar(1.15);
+    roam.limb = limb;
+    scene.add(g);
+    return g;
+  }
+
+  function setRoam(on) {
+    roam.on = on;
+    if (on && !roam.avatar) roam.avatar = buildAvatar();
+    if (roam.avatar) roam.avatar.visible = on;
+    if (!on) roam.keys.clear();
+    needsFrame = true;
+    kick();
+    return roam.on;
+  }
+
+  const KEY_MAP = {
+    KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b",
+    KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r",
+    ShiftLeft: "run", ShiftRight: "run",
+  };
+
+  function onKey(e, down) {
+    if (!roam.on) return;
+    const k = KEY_MAP[e.code];
+    if (!k) return;
+    e.preventDefault();
+    if (down) roam.keys.add(k); else roam.keys.delete(k);
+    kick();
+  }
+  const keyDown = (e) => onKey(e, true);
+  const keyUp = (e) => onKey(e, false);
+  window.addEventListener("keydown", keyDown);
+  window.addEventListener("keyup", keyUp);
+
+  document.addEventListener("pointerlockchange", () => {
+    // Losing the pointer drops you out of roaming rather than leaving you
+    // walking blind.
+    if (roam.on && document.pointerLockElement !== canvas) setRoam(false);
+  });
+
+  function onRoamMouse(e) {
+    if (!roam.on || document.pointerLockElement !== canvas) return;
+    roam.yaw -= e.movementX * 0.0022;
+    roam.pitch = Math.max(-0.25, Math.min(0.95, roam.pitch + e.movementY * 0.0018));
+    needsFrame = true;
+  }
+  document.addEventListener("mousemove", onRoamMouse);
+
+  /** Move the avatar and put the camera behind it. Returns true while moving. */
+  function stepRoam(dt) {
+    const k = roam.keys;
+    const speed = k.has("run") ? RUN : WALK;
+    const fwd = new THREE.Vector3(Math.sin(roam.yaw), 0, Math.cos(roam.yaw));
+    const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    const want = new THREE.Vector3();
+    if (k.has("f")) want.add(fwd);
+    if (k.has("b")) want.sub(fwd);
+    if (k.has("r")) want.add(right);
+    if (k.has("l")) want.sub(right);
+
+    const walking = want.lengthSq() > 0;
+    if (walking) want.normalize().multiplyScalar(speed);
+    // Ease in and out so it does not start and stop like a chess piece.
+    roam.vel.lerp(want, Math.min(1, dt * 9));
+    roam.pos.addScaledVector(roam.vel, dt);
+
+    // Villages are solid. Push out of any plot you walk into.
+    for (const [, p] of plots) {
+      const d = new THREE.Vector2(roam.pos.x - p.group.position.x,
+                                  roam.pos.z - p.group.position.z);
+      const len = d.length();
+      if (len < 2.0 && len > 0.0001) {
+        d.multiplyScalar((2.0 - len) / len);
+        roam.pos.x += d.x;
+        roam.pos.z += d.y;
+      }
+    }
+    const bound = 120;
+    roam.pos.x = Math.max(-bound, Math.min(bound, roam.pos.x));
+    roam.pos.z = Math.max(-bound, Math.min(bound, roam.pos.z));
+
+    const a = roam.avatar;
+    if (a) {
+      a.position.set(roam.pos.x, 0, roam.pos.z);
+      const moving2 = roam.vel.lengthSq() > 0.5;
+      if (moving2) {
+        a.rotation.y = Math.atan2(roam.vel.x, roam.vel.z);
+        roam.step += dt * (roam.vel.length() * 0.9);
+        const sw = Math.sin(roam.step);
+        roam.limb.legL && (roam.limb.legL.rotation.x = sw * 0.62);
+        roam.limb.legR && (roam.limb.legR.rotation.x = -sw * 0.62);
+        roam.limb.armL && (roam.limb.armL.rotation.x = -sw * 0.5);
+        roam.limb.armR && (roam.limb.armR.rotation.x = sw * 0.5);
+        a.position.y = Math.abs(Math.sin(roam.step * 2)) * 0.05;
+      } else {
+        for (const part of Object.values(roam.limb)) {
+          part.rotation.x += (0 - part.rotation.x) * Math.min(1, dt * 8);
+        }
+        a.position.y += (0 - a.position.y) * Math.min(1, dt * 8);
+      }
+    }
+
+    // Camera trails behind and above, looking where you are looking.
+    const back = new THREE.Vector3(Math.sin(roam.yaw), 0, Math.cos(roam.yaw))
+      .multiplyScalar(-TRAIL);
+    camera.position.set(
+      roam.pos.x + back.x,
+      EYE + roam.pitch * 7.0,
+      roam.pos.z + back.z,
+    );
+    camera.lookAt(roam.pos.x + fwd.x * 6, 1.6 - roam.pitch * 2.6, roam.pos.z + fwd.z * 6);
+    return walking || roam.vel.lengthSq() > 0.02;
+  }
+
+  /** Which village are you standing next to? Drives the panel while roaming. */
+  function nearestPlot(maxDist = 6.5) {
+    let best = null, bestD = maxDist;
+    for (const [name, p] of plots) {
+      const d = Math.hypot(roam.pos.x - p.group.position.x,
+                           roam.pos.z - p.group.position.z);
+      if (d < bestD) { bestD = d; best = name; }
+    }
+    return best;
   }
 
   // ---- orbit ------------------------------------------------------------
@@ -737,6 +914,8 @@ export async function createWorld(canvas) {
       }
     }
 
+    if (roam.on && stepRoam(dt)) moving = true;
+
     renderer.render(scene, camera);
     needsFrame = false;
     return moving;
@@ -752,6 +931,9 @@ export async function createWorld(canvas) {
   }
 
   function dispose() {
+    window.removeEventListener("keydown", keyDown);
+    window.removeEventListener("keyup", keyUp);
+    document.removeEventListener("mousemove", onRoamMouse);
     scene.traverse(o => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
@@ -762,6 +944,7 @@ export async function createWorld(canvas) {
   applyCamera();
 
   return { update, frame, resize, dispose, pick, select, onNeedsFrame,
+           setRoam, nearestPlot, get roaming() { return roam.on; },
            resetCamera: () => { orbit.userMoved = false; layout(); },
            get selected() { return selected; },
            get agents() { return agents; },

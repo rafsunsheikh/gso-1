@@ -2674,7 +2674,15 @@
               <span><i class="world-dot" style="background:#1c1b2b"></i>no agent</span>
             </div>
           </div>
-          <canvas id="world-canvas" class="world-canvas"></canvas>
+          <div class="world-stage">
+            <canvas id="world-canvas" class="world-canvas"></canvas>
+            <button class="world-roam" id="world-roam">Walk the world</button>
+            <div class="world-hud" id="world-hud" hidden>
+              <span><b>WASD</b> move</span><span><b>Shift</b> run</span>
+              <span><b>Mouse</b> look</span><span><b>Esc</b> leave</span>
+              <span id="world-near"></span>
+            </div>
+          </div>
           <div class="world-panel" id="world-panel" hidden></div>
           <div class="world-list" id="world-list"></div>
         </section>`;
@@ -2711,9 +2719,42 @@
         worldKick();
         worldPanel(hit);
       };
+      const roamBtn = $("#world-roam");
+      if (roamBtn) roamBtn.onclick = async () => {
+        // Pointer lock is what turns mouse movement into looking around. It
+        // needs a real click to grant, and Escape hands it back.
+        try { await canvas.requestPointerLock(); } catch (e) { /* denied */ }
+        worldSetRoam(true);
+      };
+
       worldResize();
       await worldPoll();
       worldStartPolling();
+    }
+
+    let WORLD_NEAR = null;
+    function worldSetRoam(on) {
+      if (!WORLD) return;
+      WORLD.setRoam(on);
+      const hud = $("#world-hud"), btn = $("#world-roam");
+      if (hud) hud.hidden = !on;
+      if (btn) btn.hidden = on;
+      if (!on && document.pointerLockElement) document.exitPointerLock();
+      worldKick();
+    }
+
+    // While roaming, the panel follows your feet: walk up to a village and it
+    // opens, walk away and it closes. No clicking required.
+    function worldRoamProximity() {
+      if (!WORLD || !WORLD.roaming) return;
+      const near = WORLD.nearestPlot();
+      const label = $("#world-near");
+      if (label) label.textContent = near ? "near " + near : "";
+      if (near !== WORLD_NEAR) {
+        WORLD_NEAR = near;
+        WORLD.select(near);
+        worldPanel(near);
+      }
     }
 
     function worldResize() {
@@ -2723,6 +2764,9 @@
       worldKick();
     }
     window.addEventListener("resize", () => { if (activeView === "world") worldResize(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && WORLD && WORLD.roaming) worldSetRoam(false);
+    });
 
     // The render loop runs only while something is actually moving, and stops
     // itself when the scene settles. An idle world costs one frame, then zero.
@@ -2734,7 +2778,8 @@
         if (gen !== WORLD_GEN) return;     // a newer scene owns the screen now
         if (!WORLD || activeView !== "world" || document.hidden) return;
         const moving = WORLD.frame();
-        if (moving) WORLD_RAF = requestAnimationFrame(step);
+        if (WORLD.roaming) worldRoamProximity();
+        if (moving || WORLD.roaming) WORLD_RAF = requestAnimationFrame(step);
       };
       WORLD_RAF = requestAnimationFrame(step);
     }

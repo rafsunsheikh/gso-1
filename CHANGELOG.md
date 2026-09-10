@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repositories were invisible to it; it now finds all of them from what Claude
   Code already writes down, and shows what each has its hands on.
 
+  You can walk it. "Walk the world" drops you into the landscape as a figure
+  you drive with WASD, shift to run, mouse to look, escape to leave; villages
+  are solid, and walking up to one opens it without a click. The projects are
+  spread across a landscape rather than arranged in a ring, because a ring is
+  something you look down on and not somewhere you can go.
+
   Each plot is a village built from what the project actually is: GSO-1
   already detects the stack, so a Go service does not look like a Django app,
   and you can pick one out of a field without reading a label. The agent is a
