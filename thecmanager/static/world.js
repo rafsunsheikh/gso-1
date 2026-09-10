@@ -431,6 +431,39 @@ export async function createWorld(canvas) {
   );
   scene.add(ground);
 
+  /**
+   * The height of the ground *as drawn*, which is not the same number as
+   * groundHeight().
+   *
+   * The terrain is a grid of triangles three metres across, and a triangle is
+   * flat while the noise it samples is not: on any bump the analytic surface
+   * arches above the flat face drawn between its corners. Placing things by
+   * the formula therefore left them hovering, worst on the crests. This reads
+   * the same vertices the mesh uses and interpolates across the same triangle,
+   * so anything placed with it sits exactly on the visible surface.
+   */
+  const gPos = groundGeo.attributes.position;
+  const gStep = TERRAIN.size / TERRAIN.seg;
+  const gHalf = TERRAIN.size / 2;
+  function vertexY(ix, iy) {
+    const cx = Math.max(0, Math.min(TERRAIN.seg, ix));
+    const cy = Math.max(0, Math.min(TERRAIN.seg, iy));
+    return gPos.getY(cy * (TERRAIN.seg + 1) + cx);
+  }
+  function terrainY(x, z) {
+    const fx = (x + gHalf) / gStep;
+    const fz = (z + gHalf) / gStep;
+    const ix = Math.floor(fx), iz = Math.floor(fz);
+    const tx = fx - ix, tz = fz - iz;
+    const a = vertexY(ix, iz), b = vertexY(ix + 1, iz);
+    const c = vertexY(ix, iz + 1), d = vertexY(ix + 1, iz + 1);
+    // PlaneGeometry splits each quad along one diagonal; match it rather than
+    // bilinear, or things still float by a few centimetres on the seam.
+    return (tx + tz < 1)
+      ? a + (b - a) * tx + (c - a) * tz
+      : d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
+  }
+
   // ---- the dormant library, as terrain -------------------------------------
   // One InstancedMesh for all of them: 271 separate objects would be 271 draw
   // calls to say "nothing is happening here".
@@ -472,21 +505,21 @@ export async function createWorld(canvas) {
     // picks the kit each model lives in: the fantasy buildings have no
     // textures, the nature ground cover does.
     const plans = [
-      { from: groundParts, model: "Grass",             count: 3000, scale: [1.6, 3.2],  maxHeight: 16 },
-      { from: groundParts, model: "Grass Wispy",       count: 1800, scale: [1.6, 3.0],  maxHeight: 14 },
-      { from: groundParts, model: "Flower Group",      count: 900,  scale: [1.2, 2.4],  maxHeight: 10 },
-      { from: groundParts, model: "Bush",              count: 700,  scale: [2.4, 5.0],  maxHeight: 18 },
-      { from: groundParts, model: "Bush with Flowers", count: 320,  scale: [2.4, 4.4],  maxHeight: 12 },
-      { from: groundParts, model: "Fern",              count: 500,  scale: [1.6, 3.4],  maxHeight: 14 },
-      { from: groundParts, model: "Mushroom",          count: 180,  scale: [1.0, 2.2],  maxHeight: 10 },
-      { from: groundParts, model: "Pebble Round",      count: 380,  scale: [1.0, 2.6],  maxHeight: 30 },
-      { from: kitParts,    model: "tree",              count: 1100, scale: [9, 19],     maxHeight: 24 },
-      { from: kitParts,    model: "trees",             count: 500,  scale: [8, 16],     maxHeight: 20 },
-      { from: kitParts,    model: "rock",              count: 500,  scale: [2, 8],      maxHeight: 70 },
-      { from: kitParts,    model: "logs",              count: 110,  scale: [1.6, 3.0],  maxHeight: 12 },
+      { from: groundParts, model: "Grass",             count: 5200, scale: [1.6, 3.2],  maxHeight: 16 },
+      { from: groundParts, model: "Grass Wispy",       count: 3200, scale: [1.6, 3.0],  maxHeight: 14 },
+      { from: groundParts, model: "Flower Group",      count: 1500,  scale: [1.2, 2.4],  maxHeight: 10 },
+      { from: groundParts, model: "Bush",              count: 1500,  scale: [2.4, 5.0],  maxHeight: 18 },
+      { from: groundParts, model: "Bush with Flowers", count: 600,  scale: [2.4, 4.4],  maxHeight: 12 },
+      { from: groundParts, model: "Fern",              count: 1100,  scale: [1.6, 3.4],  maxHeight: 14 },
+      { from: groundParts, model: "Mushroom",          count: 340,  scale: [1.0, 2.2],  maxHeight: 10 },
+      { from: groundParts, model: "Pebble Round",      count: 700,  scale: [1.0, 2.6],  maxHeight: 30 },
+      { from: kitParts,    model: "tree",              count: 2600, scale: [9, 19],     maxHeight: 24 },
+      { from: kitParts,    model: "trees",             count: 1300,  scale: [8, 16],     maxHeight: 20 },
+      { from: kitParts,    model: "rock",              count: 800,  scale: [2, 8],      maxHeight: 70 },
+      { from: kitParts,    model: "logs",              count: 220,  scale: [1.6, 3.0],  maxHeight: 12 },
       // The rim. Big enough to read as mountains from the valley floor.
-      { from: kitParts,    model: "mountain",          count: 150,  scale: [45, 110],   minHeight: 20 },
-      { from: kitParts,    model: "mountain2",         count: 90,   scale: [55, 130],   minHeight: 26 },
+      { from: kitParts,    model: "mountain",          count: 220,  scale: [45, 110],   minHeight: 20 },
+      { from: kitParts,    model: "mountain2",         count: 140,   scale: [55, 130],   minHeight: 26 },
     ];
 
     for (const plan of plans) {
@@ -494,14 +527,23 @@ export async function createWorld(canvas) {
       // species is drawn around a handful of thickets with the rest wandering
       // loose, which is what stops a wood looking like an orchard.
       const rand = rng(hash(plan.model) * 1e9 | 0);
+      // Clump centres on a jittered grid rather than at random. Purely random
+      // centres leave whole quarters of the valley bare and pile the rest into
+      // one corner, which is what made the forest look lopsided; a jittered
+      // grid covers the ground evenly and still looks unplanned.
       const clumps = [];
-      const nClumps = Math.max(3, Math.round(plan.count / 40));
-      for (let i = 0; i < nClumps; i++) {
-        clumps.push({
-          x: (rand() - 0.5) * 2 * spread,
-          z: (rand() - 0.5) * 2 * spread,
-          r: 14 + rand() * 52,
-        });
+      const nClumps = Math.max(8, Math.round(plan.count / 22));
+      const cols = Math.ceil(Math.sqrt(nClumps));
+      const cell = (spread * 2) / cols;
+      for (let cy = 0; cy < cols; cy++) {
+        for (let cx = 0; cx < cols; cx++) {
+          if (clumps.length >= nClumps) break;
+          clumps.push({
+            x: -spread + (cx + 0.15 + rand() * 0.7) * cell,
+            z: -spread + (cy + 0.15 + rand() * 0.7) * cell,
+            r: cell * (0.35 + rand() * 0.55),
+          });
+        }
       }
       const spots = [];
       for (let i = 0; i < plan.count * 6 && spots.length < plan.count; i++) {
@@ -518,7 +560,7 @@ export async function createWorld(canvas) {
           z = (rand() - 0.5) * 2 * spread;
         }
         if (Math.abs(x) > spread || Math.abs(z) > spread) continue;
-        const y = groundHeight(x, z);
+        const y = terrainY(x, z);
         if (y < WATER_LEVEL + 1.2) continue;           // nothing grows in the lake
         if (plan.maxHeight !== undefined && y > plan.maxHeight) continue;
         if (plan.minHeight !== undefined && y < plan.minHeight) continue;
@@ -583,6 +625,10 @@ export async function createWorld(canvas) {
     // The buildings are Quaternius' CC0 fantasy RTS kit; they carry their own
     // palette, so the project's stack shows on the banner and the plot edge
     // rather than by repainting somebody else's model.
+    // A village sits on a slope, so each building needs its own ground height.
+    // The site is not known until layout() runs, so the offsets are recorded
+    // here and resolved there.
+    const props = [];
     const place = (name, x, z, scale, spin) => {
       const m = model(name);
       if (!m) return null;
@@ -590,6 +636,7 @@ export async function createWorld(canvas) {
       m.scale.setScalar(scale);
       m.rotation.y = spin;
       village.add(m);
+      props.push({ obj: m, x, z });
       return m;
     };
 
@@ -683,6 +730,7 @@ export async function createWorld(canvas) {
     group.userData = { project };
     scene.add(group);
     return { group, figure, base: figureBase, limb, character, flag, label: labelRef,
+             props,
              rimColour: themeFor(meta.get(project)).roof,
              anchors, walker, tree,
              body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
@@ -703,10 +751,15 @@ export async function createWorld(canvas) {
       // Nudge round the spiral until the site is dry land.
       for (let t = 0; t < 24; t++) {
         const x = Math.cos(a) * r, z = Math.sin(a) * r;
-        if (groundHeight(x, z) > WATER_LEVEL + 2.5) break;
+        if (terrainY(x, z) > WATER_LEVEL + 2.5) break;
         a += 0.32;
       }
       p.target = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
+      // Drop every building onto the ground beneath it.
+      const baseY = terrainY(p.target.x, p.target.z);
+      for (const pr of p.props || []) {
+        pr.obj.position.y = terrainY(p.target.x + pr.x, p.target.z + pr.z) - baseY;
+      }
     });
     // Frame the ring as it grows, but stop the moment somebody takes the
     // camera themselves: nothing is more irritating than a view that argues.
@@ -819,8 +872,37 @@ export async function createWorld(canvas) {
     return g;
   }
 
+  /** Walk out to the nearest dry ground. The spawn point is fixed, and the
+   *  lakes are wherever the noise put them, so sooner or later it is in one. */
+  function findDryGround(from) {
+    if (terrainY(from.x, from.z) > WATER_LEVEL + 1.5) return from;
+    for (let ring = 8; ring < 320; ring += 8) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const x = from.x + Math.cos(a) * ring;
+        const z = from.z + Math.sin(a) * ring;
+        if (terrainY(x, z) > WATER_LEVEL + 1.5) return new THREE.Vector3(x, 0, z);
+      }
+    }
+    return from;
+  }
+
   function setRoam(on) {
     roam.on = on;
+    if (on) {
+      // Start at the edge of a village. Villages keep a clearing around them,
+      // so you begin somewhere open and looking at something, rather than
+      // buried in a spruce or standing in a lake.
+      const first = [...plots.values()][0];
+      let start = roam.pos.clone();
+      if (first && first.target) {
+        start = new THREE.Vector3(first.target.x + 16, 0, first.target.z + 16);
+        roam.yaw = Math.atan2(first.target.x - start.x, first.target.z - start.z);
+      }
+      const dry = findDryGround(start);
+      roam.pos.set(dry.x, 0, dry.z);
+      roam.vel.set(0, 0, 0);
+    }
     if (on && !roam.avatar) roam.avatar = buildAvatar();
     if (roam.avatar) roam.avatar.visible = on;
     if (!on) roam.keys.clear();
@@ -892,13 +974,22 @@ export async function createWorld(canvas) {
         roam.pos.z += d.y;
       }
     }
+    // The shore stops you. Wading is one thing; walking along a lake bed with
+    // the camera underwater is just confusing.
+    if (terrainY(roam.pos.x, roam.pos.z) < WATER_LEVEL + 0.8) {
+      const dry = findDryGround(roam.pos);
+      roam.pos.x += (dry.x - roam.pos.x) * Math.min(1, dt * 6);
+      roam.pos.z += (dry.z - roam.pos.z) * Math.min(1, dt * 6);
+      roam.vel.multiplyScalar(0.5);
+    }
+
     const bound = 430;
     roam.pos.x = Math.max(-bound, Math.min(bound, roam.pos.x));
     roam.pos.z = Math.max(-bound, Math.min(bound, roam.pos.z));
 
     const a = roam.avatar;
     if (a) {
-      a.position.set(roam.pos.x, groundHeight(roam.pos.x, roam.pos.z), roam.pos.z);
+      a.position.set(roam.pos.x, terrainY(roam.pos.x, roam.pos.z), roam.pos.z);
       const moving2 = roam.vel.lengthSq() > 0.5;
       if (roam.character) {
         // Walk, run or stand, chosen from how fast you are actually going.
@@ -929,11 +1020,11 @@ export async function createWorld(canvas) {
     // Camera trails behind and above, looking where you are looking.
     const back = new THREE.Vector3(Math.sin(roam.yaw), 0, Math.cos(roam.yaw))
       .multiplyScalar(-TRAIL);
-    const gy = groundHeight(roam.pos.x, roam.pos.z);
+    const gy = terrainY(roam.pos.x, roam.pos.z);
     const bx = roam.pos.x + back.x, bz = roam.pos.z + back.z;
     camera.position.set(
       bx,
-      Math.max(groundHeight(bx, bz) + 1.6, gy + EYE + roam.pitch * 7.0),
+      Math.max(terrainY(bx, bz) + 1.6, gy + EYE + roam.pitch * 7.0),
       bz,
     );
     camera.lookAt(roam.pos.x + fwd.x * 6, gy + 1.6 - roam.pitch * 2.6, roam.pos.z + fwd.z * 6);
@@ -1054,7 +1145,7 @@ export async function createWorld(canvas) {
       }
       const ease = 1 - Math.pow(1 - p.rise, 3);
       if (p.target) {
-        p.group.position.set(p.target.x, groundHeight(p.target.x, p.target.z), p.target.z);
+        p.group.position.set(p.target.x, terrainY(p.target.x, p.target.z), p.target.z);
       }
       p.group.scale.setScalar(0.55 + 0.45 * ease);
 
@@ -1106,7 +1197,10 @@ export async function createWorld(canvas) {
         }
         moving = true;      // it is about to set off again
       }
-      p.figure.position.set(w.pos.x, 0, w.pos.y);
+      const vy = p.target
+        ? terrainY(p.target.x + w.pos.x, p.target.z + w.pos.y) - terrainY(p.target.x, p.target.z)
+        : 0;
+      p.figure.position.set(w.pos.x, vy, w.pos.y);
       p.figure.rotation.y = w.facing;
 
       p.body.color.setHex(
