@@ -173,6 +173,17 @@ def build_props():
     cylinder(coll, "flag_pole", 0.035, 1.15, (0, 0, 0.575), wood, verts=6)
     box (coll, "flag_cloth", (0.42, 0.03, 0.26), (0.23, 0, 1.00), teal, bevel=0.01)
     box (coll, "crate",      (0.26, 0.26, 0.26), (0, 0, 0.13), wood)
+
+    # A tree, because an agent that has stopped work should have somewhere to
+    # be. Idle ones sleep under it. Three stacked cones is the cheapest shape
+    # that still reads as a tree from this camera angle.
+    bark  = material("gso1_bark",  (0.24, 0.17, 0.13), 0.85)
+    leafA = material("gso1_leafA", (0.16, 0.42, 0.26), 0.85)
+    cylinder(coll, "tree_trunk", 0.10, 0.80, (0, 0, 0.40), bark, verts=6)
+    cone(coll, "tree_leaf1", 0.62, 0.70, (0, 0, 1.05), leafA, verts=6)
+    cone(coll, "tree_leaf2", 0.48, 0.60, (0, 0, 1.45), leafA, verts=6)
+    cone(coll, "tree_leaf3", 0.32, 0.50, (0, 0, 1.82), leafA, verts=6)
+
     return export("gso1_props", "props.json", "props")
 
 

@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repositories were invisible to it; it now finds all of them from what Claude
   Code already writes down, and shows what each has its hands on.
 
+  Each plot is a village built from what the project actually is: GSO-1
+  already detects the stack, so a Go service does not look like a Django app,
+  and you can pick one out of a field without reading a label. The agent is a
+  figure that walks its plot, goes to the workshop to work, and when it has
+  been quiet long enough, lies down under the tree and sleeps.
+
   Every session you have open gets a plot, whatever it is doing; how recently
   it did something decides how the land and the figure look, from lit and
   swinging through to dim and still. State is read from the transcript rather

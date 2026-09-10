@@ -70,6 +70,27 @@ const TOOL_MOTION = {
 };
 const DEFAULT_MOTION = { kind: "crank", rate: 6.0, arc: 0.9, bob: 0.05, tint: 0x502ce7 };
 
+/**
+ * What a project is, as a roof.
+ *
+ * GSO-1 already detects each project's stack, and a village whose buildings
+ * differ by language means you can pick your Go service out of a field of
+ * Python without reading a single label.
+ */
+const STACK_THEME = {
+  python:    { roof: 0x3572a5, trim: 0xffd343 },
+  django:    { roof: 0x0c4b33, trim: 0x44b78b },
+  streamlit: { roof: 0xff4b4b, trim: 0xffd0d0 },
+  node:      { roof: 0x3c873a, trim: 0x8cc84b },
+  go:        { roof: 0x00add8, trim: 0xb7e8f5 },
+  static:    { roof: 0x8a8aa3, trim: 0xd6d6e6 },
+  script:    { roof: 0xd08a2e, trim: 0xf3c98b },
+  unknown:   { roof: 0x502ce7, trim: 0x9b97ff },
+};
+function themeFor(kind) {
+  return STACK_THEME[kind] || STACK_THEME.unknown;
+}
+
 /** What to write on the chip. An MCP tool is `mcp__<server>__<tool>`, which
  *  truncates to gibberish over a figure's head; the tool is the useful half. */
 function toolLabel(tool) {
@@ -267,9 +288,11 @@ export async function createWorld(canvas) {
     // The village. Placed from a hash of the project name, so a plot looks
     // the same every time you come back to it rather than reshuffling.
     const village = new THREE.Group();
+    const theme = themeFor(meta.get(project));
     const hut = new THREE.Group();
     for (const n of ["hut_base", "hut_wall", "hut_roof", "hut_door"]) {
-      const m = instance(propParts, n);
+      const m = instance(propParts, n,
+                         n === "hut_roof" ? { colour: new THREE.Color(theme.roof) } : {});
       if (m) hut.add(m);
     }
     hut.position.set(-0.75, 0, -0.55);
@@ -278,7 +301,8 @@ export async function createWorld(canvas) {
 
     const store = new THREE.Group();
     for (const n of ["store_base", "store_wall", "store_roof"]) {
-      const m = instance(propParts, n);
+      const m = instance(propParts, n,
+                         n === "store_roof" ? { colour: new THREE.Color(theme.roof) } : {});
       if (m) store.add(m);
     }
     store.position.set(0.95, 0, -0.85);
@@ -287,11 +311,21 @@ export async function createWorld(canvas) {
 
     const flag = new THREE.Group();
     const pole = instance(propParts, "flag_pole");
-    const cloth = instance(propParts, "flag_cloth");
+    const cloth = instance(propParts, "flag_cloth", { colour: new THREE.Color(theme.trim) });
     if (pole) flag.add(pole);
     if (cloth) flag.add(cloth);
     flag.position.set(1.35, 0, 0.75);
     village.add(flag);
+
+    const tree = new THREE.Group();
+    for (const n of ["tree_trunk", "tree_leaf1", "tree_leaf2", "tree_leaf3"]) {
+      const m = instance(propParts, n);
+      if (m) tree.add(m);
+    }
+    tree.position.set(-1.45, 0, 1.15);
+    tree.rotation.y = hash(project + "tree") * 3;
+    tree.scale.setScalar(0.85 + hash(project + "ts") * 0.3);
+    village.add(tree);
 
     for (let i = 0; i < 2 + Math.floor(hash(project + "c") * 2); i++) {
       const crate = instance(propParts, "crate");
@@ -316,6 +350,20 @@ export async function createWorld(canvas) {
     figure.position.set(0.1, 0, 0.95);
     figure.scale.setScalar(1.05);
 
+    // Somewhere to work, somewhere to rest, and room to move between them.
+    const anchors = {
+      work:  new THREE.Vector2(-0.75, 0.45),
+      sleep: new THREE.Vector2(-0.92, 1.52),
+    };
+    const walker = {
+      pos: new THREE.Vector2(0.4, 0.7),
+      target: new THREE.Vector2(0.4, 0.7),
+      facing: 0,
+      mode: "wander",
+      wait: 0,
+      step: 0,
+    };
+
     const figureBase = new THREE.Group();
     figureBase.position.y = 0.5;
     figureBase.add(figure);
@@ -339,6 +387,7 @@ export async function createWorld(canvas) {
     group.userData = { project };
     scene.add(group);
     return { group, figure, base: figureBase, limb, flag, label: labelRef,
+             anchors, walker, tree,
              body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
   }
 
@@ -361,10 +410,14 @@ export async function createWorld(canvas) {
   }
 
   let agents = new Map();        // project -> { idle, name, tool }
+  const meta = new Map();        // project -> stack kind, for the theme
   let needsFrame = true;
 
   /** Feed it a /api/agents snapshot. Returns true if the scene must animate. */
-  function update(snapshot, allProjects) {
+  function update(snapshot, allProjects, projectMeta) {
+    if (projectMeta) {
+      for (const [k, v] of projectMeta) meta.set(k, v);
+    }
     const now = Date.now() / 1000;
     const next = new Map();
     for (const s of snapshot.sessions || []) {
@@ -502,6 +555,12 @@ export async function createWorld(canvas) {
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
     let moving = false;
+    // Sleepers breathe, which is charming and must never be a reason to hold
+    // the render loop open: a world of idle agents would then run at 60fps for
+    // ever. They breathe while somebody else is awake, and settle when the
+    // village does.
+    const anyAwake = [...plots.values()].some(
+      (p) => p.info && (p.info.working || p.info.present));
 
     for (const [, p] of plots) {
       // Plots rise when they appear rather than popping into existence.
@@ -519,10 +578,54 @@ export async function createWorld(canvas) {
 
       const info = p.info || {};
       const working = info.working;
+
+      // Where should this agent be? Working at the workshop, resting under the
+      // tree, or wandering its plot between the two.
+      const w = p.walker;
+      const wantMode = working ? "work" : (info.present ? "wander" : "sleep");
+      if (w.mode !== wantMode) {
+        w.mode = wantMode;
+        w.wait = 0;
+        if (wantMode === "work") w.target.copy(p.anchors.work);
+        else if (wantMode === "sleep") w.target.copy(p.anchors.sleep);
+        w.settleFacing = wantMode === "sleep" ? 1.9 : null;
+      }
+
+      const toTarget = w.target.clone().sub(w.pos);
+      const dist = toTarget.length();
+      const walking = dist > 0.06;
+      if (walking) {
+        const speed = (w.mode === "work" ? 1.5 : 0.8) * dt;
+        w.pos.addScaledVector(toTarget.normalize(), Math.min(speed, dist));
+        // Face where you are going, turning the short way round.
+        const want = Math.atan2(toTarget.x, toTarget.y);
+        let d = ((want - w.facing + Math.PI) % (Math.PI * 2)) - Math.PI;
+        w.facing += d * Math.min(1, dt * 7);
+        w.step += dt * 9;
+        moving = true;
+      } else if (w.mode === "sleep" && w.settleFacing !== null && w.settleFacing !== undefined) {
+        // Turn side-on once it arrives, so a lying figure is a silhouette and
+        // not a foreshortened smudge.
+        const d = ((w.settleFacing - w.facing + Math.PI) % (Math.PI * 2)) - Math.PI;
+        if (Math.abs(d) > 0.02) { w.facing += d * Math.min(1, dt * 4); moving = true; }
+      } else if (w.mode === "wander") {
+        // Stand a moment, then pick somewhere else on the plot to be.
+        w.wait -= dt;
+        if (w.wait <= 0) {
+          const a = Math.random() * Math.PI * 2;
+          const r = 0.5 + Math.random() * 1.3;
+          w.target.set(Math.cos(a) * r, Math.sin(a) * r);
+          w.wait = 1.5 + Math.random() * 3;
+        }
+        moving = true;      // it is about to set off again
+      }
+      p.figure.position.set(w.pos.x, 0, w.pos.y);
+      p.figure.rotation.y = w.facing;
+
       p.body.color.setHex(
         working ? COL.body : (info.present ? COL.bodyIdle : COL.bodyStale));
       p.pad.material.color.setHex(info.present ? COL.plot : COL.plotStale);
-      if (working) {
+      if (working && !walking) {
         const m = motionFor(info.tool);
         const swing = Math.sin(t * m.rate);
         const kind = m.kind;
@@ -569,19 +672,56 @@ export async function createWorld(canvas) {
         moving = true;
       } else {
         p.tool.visible = false;
-        // Settle back to standing rather than snapping.
         const k = Math.min(1, dt * 5);
-        let rest = 0;
-        for (const [name, part] of Object.entries(p.limb)) {
-          const target = name === "head" ? 0 : (info.present ? 0 : 0.06);
-          part.rotation.x += (target - part.rotation.x) * k;
-          if (name === "head") part.rotation.y += (0 - part.rotation.y) * k;
-          rest += Math.abs(part.rotation.x - target);
+
+        if (walking) {
+          // A walk cycle: legs opposed, arms counter-swinging, a little bounce.
+          const sw = Math.sin(w.step);
+          p.limb.legL && (p.limb.legL.rotation.x = sw * 0.55);
+          p.limb.legR && (p.limb.legR.rotation.x = -sw * 0.55);
+          p.limb.armL && (p.limb.armL.rotation.x = -sw * 0.42);
+          p.limb.armR && (p.limb.armR.rotation.x = sw * 0.42);
+          p.limb.head && (p.limb.head.rotation.y += (0 - p.limb.head.rotation.y) * k);
+          for (const part of Object.values(p.limb)) {
+            if (part.rotation.z) part.rotation.z += (0 - part.rotation.z) * k;
+          }
+          p.figure.rotation.x = 0.06;
+          p.base.position.y = 0.5 + Math.abs(Math.sin(w.step * 2)) * 0.045;
+          p.body.color.setHex(info.present ? COL.bodyIdle : COL.bodyStale);
+        } else if (w.mode === "sleep") {
+          // Lying down at the foot of the tree. The figure tips onto its back
+          // and the limbs go slack; the whole thing breathes, slowly.
+          const breathe = Math.sin(t * 1.1) * 0.02;
+          p.figure.rotation.x += (-Math.PI / 2 + 0.12 - p.figure.rotation.x) * k;
+          // Once the body is tipped on its back, a limb's own X rotation bends
+          // it upwards, so these stay small or the sleeper splays like a
+          // dropped puppet. The spread goes on Z instead, which reads as
+          // slack rather than stiff.
+          p.limb.legL && (p.limb.legL.rotation.x += (0.06 - p.limb.legL.rotation.x) * k);
+          p.limb.legR && (p.limb.legR.rotation.x += (-0.02 - p.limb.legR.rotation.x) * k);
+          p.limb.armL && (p.limb.armL.rotation.x += (0.10 - p.limb.armL.rotation.x) * k);
+          p.limb.armR && (p.limb.armR.rotation.x += (0.04 - p.limb.armR.rotation.x) * k);
+          p.limb.armL && (p.limb.armL.rotation.z += (0.34 - p.limb.armL.rotation.z) * k);
+          p.limb.armR && (p.limb.armR.rotation.z += (-0.28 - p.limb.armR.rotation.z) * k);
+          p.limb.head && (p.limb.head.rotation.y += (0.4 - p.limb.head.rotation.y) * k);
+          p.base.position.y += (0.66 + breathe - p.base.position.y) * k;
+          p.body.color.setHex(COL.bodyStale);
+          // Still settling into the pose, or kept alive by somebody working.
+          if (Math.abs(p.figure.rotation.x + Math.PI / 2 - 0.12) > 0.01) moving = true;
+          if (anyAwake) moving = true;
+        } else {
+          let rest = 0;
+          for (const [name, part] of Object.entries(p.limb)) {
+            part.rotation.x += (0 - part.rotation.x) * k;
+            if (part.rotation.z) part.rotation.z += (0 - part.rotation.z) * k;
+            if (name === "head") part.rotation.y += (0 - part.rotation.y) * k;
+            rest += Math.abs(part.rotation.x);
+          }
+          p.figure.rotation.x += (0 - p.figure.rotation.x) * k;
+          p.base.position.y += (0.5 - p.base.position.y) * k;
+          p.body.color.setHex(info.present ? COL.bodyIdle : COL.bodyStale);
+          if (rest > 0.02) moving = true;
         }
-        p.figure.rotation.x += (0 - p.figure.rotation.x) * k;
-        p.base.position.y += (0.5 - p.base.position.y) * k;
-        p.body.color.setHex(info.present ? COL.bodyIdle : COL.bodyStale);
-        if (rest > 0.02 || Math.abs(p.base.position.y - 0.5) > 0.002) moving = true;
       }
     }
 

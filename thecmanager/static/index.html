@@ -2743,7 +2743,10 @@
       const snap = await api("/api/agents").catch(() => null);
       if (!snap || !WORLD) return;
       const names = (ALL || []).map(a => a.name);
-      WORLD.update(snap, names);
+      // The village is built from what the project is: GSO-1 already detects
+      // each stack, so a Go service does not look like a Django app.
+      const meta = new Map((ALL || []).map(a => [a.name, a.type || "unknown"]));
+      WORLD.update(snap, names, meta);
       WORLD_ACTIVE = WORLD.agents.size;
       worldKick();
       worldPaint(snap);
