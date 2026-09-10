@@ -48,6 +48,44 @@ const COL = {
   active: 0x00e0b7,       // the teal, for the one that is working
 };
 
+/**
+ * How each tool reads as movement.
+ *
+ * The point of watching an agent rather than reading its log is that the shape
+ * of the work is visible at a glance: hammering is not the same as reading, and
+ * a push is not the same as a search. `rate` is the swing speed, `arc` how far
+ * the arm travels, `bob` how much the whole figure moves with it.
+ */
+const TOOL_MOTION = {
+  Edit:      { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
+  Write:     { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
+  NotebookEdit: { rate: 9.0, arc: 1.25, bob: 0.09, tint: 0x502ce7 },
+  Bash:      { rate: 6.0, arc: 0.85, bob: 0.05, tint: 0x00e0b7 },
+  Read:      { rate: 2.2, arc: 0.35, bob: 0.02, tint: 0x6f6af8 },
+  Grep:      { rate: 4.0, arc: 0.5,  bob: 0.03, tint: 0x6f6af8 },
+  Glob:      { rate: 4.0, arc: 0.5,  bob: 0.03, tint: 0x6f6af8 },
+  WebSearch: { rate: 3.0, arc: 0.45, bob: 0.03, tint: 0x9b97ff },
+  WebFetch:  { rate: 3.0, arc: 0.45, bob: 0.03, tint: 0x9b97ff },
+  Task:      { rate: 5.0, arc: 0.7,  bob: 0.06, tint: 0xf5b642 },
+};
+const DEFAULT_MOTION = { rate: 7.0, arc: 1.0, bob: 0.06, tint: 0x502ce7 };
+
+/** What to write on the chip. An MCP tool is `mcp__<server>__<tool>`, which
+ *  truncates to gibberish over a figure's head; the tool is the useful half. */
+function toolLabel(tool) {
+  if (!tool) return "";
+  const m = /^mcp__([^_]+(?:[-_][^_]+)*)__(.+)$/.exec(tool);
+  return m ? m[2] : tool;
+}
+
+function motionFor(tool) {
+  if (!tool) return DEFAULT_MOTION;
+  if (TOOL_MOTION[tool]) return TOOL_MOTION[tool];
+  // Anything unrecognised, an MCP tool for instance, still gets a character
+  // rather than falling back to the same generic swing as everything else.
+  return DEFAULT_MOTION;
+}
+
 /** Deterministic scatter: the same project sits in the same place every time,
  *  so the map is somewhere you can learn rather than a new shuffle each poll. */
 function hash(str) {
@@ -60,8 +98,8 @@ function hash(str) {
 }
 
 /** A text sprite. Kept small and power-of-two-ish; it is read, not admired. */
-function makeLabel(text) {
-  const pad = 16, font = 30, maxText = 380;
+function makeLabel(text, font = 30) {
+  const pad = font >= 28 ? 16 : 11, maxText = 380;
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d");
   const face = `600 ${font}px -apple-system, system-ui, sans-serif`;
@@ -79,24 +117,25 @@ function makeLabel(text) {
   }
   const w = Math.ceil(ctx.measureText(shown).width) + pad * 2;
   c.width = w;
-  c.height = 56;
+  c.height = Math.round(font * 1.85);
   const g = c.getContext("2d");
   g.font = `600 ${font}px -apple-system, system-ui, sans-serif`;
   g.fillStyle = "rgba(10,9,16,0.72)";
   g.beginPath();
   const r = 12;
-  g.roundRect(0, 4, c.width, 44, r);
+  g.roundRect(0, 3, c.width, c.height - 8, r);
   g.fill();
   g.fillStyle = "#e8e6f5";
   g.textBaseline = "middle";
-  g.fillText(shown, pad, 27);
+  g.fillText(shown, pad, c.height / 2);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
-  sprite.scale.set(c.width / 56 * 0.9, 0.9, 1);
+  const h = c.height / 56 * 0.9;
+  sprite.scale.set(c.width / 56 * 0.9, h, 1);
   return sprite;
 }
 
@@ -206,9 +245,17 @@ export function createWorld(canvas) {
     label.position.y = 2.5;
     group.add(label);
 
+    // What it is doing, right now, over its head. Rebuilt only when the tool
+    // changes: a new canvas texture every frame would be absurd.
+    const tool = makeLabel(" ", 22);
+    tool.position.y = 2.0;
+    tool.visible = false;
+    group.add(tool);
+
     group.userData = { project };
     scene.add(group);
-    return { group, figure, arm, body: bodyMat, rim: rimRef, pad, rise: 0 };
+    return { group, figure, arm, body: bodyMat, rim: rimRef, pad,
+             tool, toolText: null, rise: 0 };
   }
 
   function layout() {
@@ -340,12 +387,22 @@ export function createWorld(canvas) {
         working ? COL.body : (info.present ? COL.bodyIdle : COL.bodyStale));
       p.pad.material.color.setHex(info.present ? COL.plot : COL.plotStale);
       if (working) {
-        // Swing the arm and bob the body: visible work, at a readable rate.
-        p.arm.rotation.x = Math.sin(t * 7) * 1.1 - 0.3;
-        p.figure.position.y = 0.5 + Math.abs(Math.sin(t * 7)) * 0.06;
+        const m = motionFor(info.tool);
+        p.arm.rotation.x = Math.sin(t * m.rate) * m.arc - 0.3;
+        p.figure.position.y = 0.5 + Math.abs(Math.sin(t * m.rate)) * m.bob;
         p.figure.rotation.y = Math.sin(t * 0.8) * 0.25;
+        p.body.color.setHex(m.tint);
+        if (p.toolText !== info.tool) {
+          p.toolText = info.tool;
+          p.group.remove(p.tool);
+          p.tool = makeLabel(toolLabel(info.tool) || " ", 22);
+          p.tool.position.y = 2.0;
+          p.group.add(p.tool);
+        }
+        p.tool.visible = true;
         moving = true;
       } else {
+        p.tool.visible = false;
         p.arm.rotation.x += (0 - p.arm.rotation.x) * Math.min(1, dt * 6);
         p.figure.position.y += (0.5 - p.figure.position.y) * Math.min(1, dt * 6);
         if (Math.abs(p.arm.rotation.x) > 0.01) moving = true;
