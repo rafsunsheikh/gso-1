@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plot appears on the first tool call and stays for five minutes after the last
   one, so an agent thinking between tools does not make its land flicker.
 
+  Clicking a plot opens the agent: what it has said, and a box to give it
+  something to do. GSO-1 can only drive the agents it started itself, so one
+  you started in a terminal is shown as watch-only and the box says plainly
+  that sending would start a second, separate agent there. Asking for one in a
+  project where your own agent is already working takes a confirmation first,
+  because two agents editing the same files is how an afternoon gets lost.
+
   Nothing renders while nothing moves: the view stops its own render loop the
   moment the scene settles, and asks for nothing at all while the window is
   hidden.

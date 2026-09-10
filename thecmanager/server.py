@@ -18,9 +18,9 @@ from pydantic import BaseModel
 
 from . import __version__
 from . import (
-    agents, claudebridge, config, events, git_ops, health, llm, llmproxy,
-    llmusage, modelsetup, planner, remoteauth, runner, scanner, summarize,
-    sysmon, telegrambot, vscode,
+    agents, claudebridge, config, dispatch, events, git_ops, health, llm,
+    llmproxy, llmusage, modelsetup, planner, remoteauth, runner, scanner,
+    summarize, sysmon, telegrambot, vscode,
 )
 from . import scheduler
 from . import opsroom as opsroom_bridge
@@ -529,6 +529,38 @@ def list_agents(activity: bool = True) -> JSONResponse:
     a caller only needs to know who exists.
     """
     return JSONResponse(agents.snapshot(with_activity=activity))
+
+
+class WorldSend(BaseModel):
+    project: str
+    prompt: str
+    confirm_second_agent: bool = False
+
+
+@app.post("/api/world/send")
+def world_send(body: WorldSend) -> JSONResponse:
+    """Give an agent work in a project, starting GSO-1's own if there is none.
+
+    Only sessions GSO-1 started can be driven; see dispatch.py for why the ones
+    you started in a terminal are shown but never commanded.
+    """
+    result = dispatch.send(body.project, body.prompt,
+                           allow_second_agent=body.confirm_second_agent)
+    code = 200 if result.get("ok") or result.get("needs_confirm") else 400
+    if result.get("ok"):
+        events.record("app", body.project, f"agent asked: {body.prompt[:80]}")
+    return JSONResponse(result, status_code=code)
+
+
+@app.get("/api/world/output")
+def world_output(project: str) -> JSONResponse:
+    """What GSO-1's agent for this project has said since it started."""
+    return JSONResponse(dispatch.status(project))
+
+
+@app.post("/api/world/stop")
+def world_stop(project: str) -> JSONResponse:
+    return JSONResponse(dispatch.stop(project))
 
 
 @app.get("/api/vscode/folders")

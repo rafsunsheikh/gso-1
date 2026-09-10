@@ -2674,6 +2674,7 @@
             </div>
           </div>
           <canvas id="world-canvas" class="world-canvas"></canvas>
+          <div class="world-panel" id="world-panel" hidden></div>
           <div class="world-list" id="world-list"></div>
         </section>`;
 
@@ -2693,6 +2694,12 @@
         WORLD = WORLD_MOD.createWorld(canvas);
         WORLD.canvas = canvas;
       }
+      canvas.onclick = (e) => {
+        const hit = WORLD.pick(e.clientX, e.clientY);
+        WORLD.select(hit);
+        worldKick();
+        worldPanel(hit);
+      };
       worldResize();
       await worldPoll();
       worldStartPolling();
@@ -2752,6 +2759,89 @@
           <div class="world-card-m">${a.tool ? "last tool: " + escapeHtml(a.tool) : "\u2014"}
             \u00b7 ${a.idle < 60 ? a.idle + "s" : Math.round(a.idle / 60) + "m"} ago</div>
         </div>`).join("");
+    }
+
+    // Clicking a plot opens it. What you can do there depends on who started
+    // the agent: GSO-1 can drive its own, and can only watch yours.
+    let WORLD_SEL = null, WORLD_OUT = null;
+
+    async function worldPanel(project) {
+      WORLD_SEL = project;
+      const el = $("#world-panel");
+      if (!el) return;
+      if (!project) { el.hidden = true; el.innerHTML = ""; if (WORLD_OUT) { WORLD_OUT.stop(); WORLD_OUT = null; } return; }
+
+      const agent = WORLD.agents.get(project) || {};
+      const st = await api(`/api/world/output?project=${encodeURIComponent(project)}`)
+        .catch(() => ({ owned: false, lines: [] }));
+      el.hidden = false;
+      const mine = st.owned;
+      el.innerHTML = `
+        <div class="world-panel-h">
+          <strong>${escapeHtml(project)}</strong>
+          <span class="world-panel-m">${escapeHtml(agent.name || "")}${
+            agent.tool ? " \u00b7 " + escapeHtml(agent.tool) : ""}</span>
+          <button class="lib-act" data-tone="neutral" id="world-close">Close</button>
+        </div>
+        ${mine ? "" : `<p class="world-panel-note">This agent was started outside
+           GSO-1, so it can be watched but not given work. Sending below starts
+           <em>GSO-1's own</em> agent in this project.</p>`}
+        <pre class="world-out" id="world-out">${
+          (st.lines || []).map(l => escapeHtml(l.text)).join("\n") || "No output yet."}</pre>
+        <div class="world-send">
+          <input id="world-prompt" placeholder="Ask the agent to do something\u2026"
+                 autocomplete="off"/>
+          <button class="lib-act" id="world-go">Send</button>
+          ${mine ? '<button class="lib-act" data-tone="neutral" id="world-stop">Stop agent</button>' : ""}
+        </div>`;
+
+      $("#world-close").onclick = () => { WORLD.select(null); worldKick(); worldPanel(null); };
+      const go = $("#world-go"), input = $("#world-prompt");
+      const send = async (confirm) => {
+        const prompt = input.value.trim();
+        if (!prompt) return;
+        go.disabled = true;
+        const r = await api("/api/world/send", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project, prompt, confirm_second_agent: !!confirm }),
+        }).catch(e => ({ ok: false, message: e.message || String(e) }));
+        go.disabled = false;
+        if (r.needs_confirm) {
+          // A second agent in the same files is a decision, so it is asked for.
+          if (window.confirm(r.message)) return send(true);
+          return;
+        }
+        if (!r.ok) return toast(r.message || "Could not send.", "error");
+        input.value = "";
+        worldWatchOutput(project);
+      };
+      go.onclick = () => send(false);
+      input.onkeydown = (e) => { if (e.key === "Enter") send(false); };
+      const stopBtn = $("#world-stop");
+      if (stopBtn) stopBtn.onclick = async () => {
+        await api(`/api/world/stop?project=${encodeURIComponent(project)}`, { method: "POST" })
+          .catch(() => null);
+        worldPanel(project);
+      };
+      worldWatchOutput(project);
+    }
+
+    // Output arrives on the agent's own schedule, so it is polled while the
+    // panel is open and stopped the moment it closes.
+    function worldWatchOutput(project) {
+      if (WORLD_OUT) WORLD_OUT.stop();
+      WORLD_OUT = everyVisible(async () => {
+        if (activeView !== "world" || WORLD_SEL !== project) return;
+        const st = await api(`/api/world/output?project=${encodeURIComponent(project)}`)
+          .catch(() => null);
+        const out = $("#world-out");
+        if (!st || !out) return;
+        const text = (st.lines || []).map(l => l.text).join("\n") || "No output yet.";
+        if (out.textContent !== text) {
+          out.textContent = text;
+          out.scrollTop = out.scrollHeight;
+        }
+      }, 2000);
     }
 
     function worldStartPolling() {

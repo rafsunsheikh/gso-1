@@ -151,6 +151,8 @@ export function createWorld(canvas) {
     rim.rotation.x = Math.PI / 2;
     rim.position.y = 0.5;
     group.add(rim);
+    // Kept so selection can light the edge of the chosen plot.
+    const rimRef = rim;
 
     // The figure: a body, a head, and an arm that swings while it works.
     const figure = new THREE.Group();
@@ -187,7 +189,7 @@ export function createWorld(canvas) {
 
     group.userData = { project };
     scene.add(group);
-    return { group, figure, arm, body: bodyMat, rise: 0 };
+    return { group, figure, arm, body: bodyMat, rim: rimRef, rise: 0 };
   }
 
   function layout() {
@@ -242,6 +244,35 @@ export function createWorld(canvas) {
     agents = next;
     needsFrame = true;
     return [...next.values()].some(a => a.working) || changed;
+  }
+
+  // ---- picking --------------------------------------------------------------
+  // Raycast against the plot groups so a click lands on a place, not a pixel.
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+
+  function pick(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    pointer.x = ((clientX - r.left) / r.width) * 2 - 1;
+    pointer.y = -((clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects([...plots.values()].map(p => p.group), true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !o.userData.project) o = o.parent;
+      if (o) return o.userData.project;
+    }
+    return null;
+  }
+
+  let selected = null;
+  function select(project) {
+    selected = plots.has(project) ? project : null;
+    for (const [name, p] of plots) {
+      p.rim.material.color.setHex(name === selected ? COL.active : COL.plotEdge);
+    }
+    needsFrame = true;
+    return selected;
   }
 
   const clock = new THREE.Clock();
@@ -303,7 +334,9 @@ export function createWorld(canvas) {
     renderer.dispose();
   }
 
-  return { update, frame, resize, dispose, get agents() { return agents; },
+  return { update, frame, resize, dispose, pick, select,
+           get selected() { return selected; },
+           get agents() { return agents; },
            get pending() { return needsFrame; } };
 }
 
