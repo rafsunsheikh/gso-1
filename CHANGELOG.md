@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spread across a landscape rather than arranged in a ring, because a ring is
   something you look down on and not somewhere you can go.
 
+  The buildings are Quaternius' CC0 fantasy RTS models rather than boxes:
+  houses, huts, watchtowers, windmills, pines and rocks, laid out from the
+  project's name so a village keeps its shape between visits.
+
   Each plot is a village built from what the project actually is: GSO-1
   already detects the stack, so a Go service does not look like a Django app,
   and you can pick one out of a field without reading a label. The agent is a

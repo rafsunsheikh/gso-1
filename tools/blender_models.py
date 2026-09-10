@@ -127,6 +127,109 @@ def export(coll_name, filename, root):
     return path, os.path.getsize(path)
 
 
+# ------------------------------------------------ imported CC0 kits (glTF)
+
+def import_kit(coll_name, files, target_height=2.4):
+    """Import .glb models, one object each, sat on the origin at a known size.
+
+    Quaternius' packs arrive with arbitrary scale and their origin wherever the
+    author left it, so each model is scaled to a real height and its origin
+    moved to the centre of its base. Everything downstream can then just place
+    a prop at ground level and trust it to stand on the ground.
+    """
+    coll = fresh_collection(coll_name)
+    made = []
+    for name, path, height in files:
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        fresh = [o for o in set(bpy.data.objects) - before if o.type == 'MESH']
+        if not fresh:
+            continue
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in fresh:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = fresh[0]
+        if len(fresh) > 1:
+            bpy.ops.object.join()
+        ob = bpy.context.view_layer.objects.active
+        # Drop any parent transform the glTF scene graph imposed.
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        ob.parent = None
+        ob.name = name
+
+        dim = max(ob.dimensions.x, ob.dimensions.y, ob.dimensions.z) or 1.0
+        k = (height or target_height) / dim
+        ob.scale = (k, k, k)
+        bpy.ops.object.transform_apply(scale=True)
+
+        # Origin to the centre of the base, so it stands on the ground.
+        bb = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+        cx = (min(v.x for v in bb) + max(v.x for v in bb)) / 2
+        cy = (min(v.y for v in bb) + max(v.y for v in bb)) / 2
+        cz = min(v.z for v in bb)
+        bpy.context.scene.cursor.location = (cx, cy, cz)
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        ob.location = (0, 0, 0)
+
+        for c in list(ob.users_collection):
+            c.objects.unlink(ob)
+        coll.objects.link(ob)
+        # Empties and leftovers from the glTF scene graph.
+        for o in set(bpy.data.objects) - before - {ob}:
+            bpy.data.objects.remove(o, do_unlink=True)
+        made.append(ob.name)
+    bpy.context.scene.cursor.location = (0, 0, 0)
+    return made
+
+
+def export_by_material(coll_name, filename, root):
+    """Like export(), but one part per material.
+
+    The kit models carry up to seven materials each and no textures at all,
+    which is exactly the case this handles well: split the triangles by
+    material index and give each group its own flat colour. A texture pipeline
+    would buy nothing here and cost a great deal.
+    """
+    coll = bpy.data.collections[coll_name]
+    parts = []
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    for ob in sorted(coll.objects, key=lambda o: o.name):
+        if ob.type != 'MESH':
+            continue
+        me = bpy.data.meshes.new_from_object(ob.evaluated_get(depsgraph))
+        me.calc_loop_triangles()
+        groups = {}
+        for tri in me.loop_triangles:
+            bucket = groups.setdefault(tri.material_index, [])
+            for vi in tri.vertices:
+                v = me.vertices[vi].co
+                bucket += [round(v.x, 3), round(v.z, 3), round(-v.y, 3)]
+        for mi, pos in sorted(groups.items()):
+            colour = (0.6, 0.6, 0.6)
+            if mi < len(me.materials) and me.materials[mi]:
+                mat = me.materials[mi]
+                if mat.use_nodes:
+                    b = mat.node_tree.nodes.get("Principled BSDF")
+                    if b:
+                        colour = tuple(round(c, 3)
+                                       for c in b.inputs["Base Color"].default_value[:3])
+                else:
+                    colour = tuple(round(c, 3) for c in mat.diffuse_color[:3])
+            parts.append({
+                "name": f"{ob.name}__{mi}",
+                "pivot": [0, 0, 0],
+                "color": list(colour),
+                "positions": pos,
+            })
+        bpy.data.meshes.remove(me)
+
+    os.makedirs(OUT, exist_ok=True)
+    path = os.path.join(OUT, filename)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"root": root, "parts": parts}, fh, separators=(",", ":"))
+    return path, os.path.getsize(path)
+
+
 # ------------------------------------------------------------------- models
 
 def build_worker():

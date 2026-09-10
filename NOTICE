@@ -28,3 +28,18 @@ This distribution bundles third-party software under their own licenses:
 
 Full license texts for bundled dependencies ship inside the packaged
 application under `resources/licenses/`.
+
+--------------------------------------------------------------------------
+Third-party assets
+--------------------------------------------------------------------------
+
+thecmanager/static/models/kit.json contains geometry derived from the
+"Ultimate Fantasy RTS" pack by Quaternius (https://quaternius.com), obtained
+via Poly Pizza (https://poly.pizza) and released under CC0 1.0 Universal
+(public domain dedication). CC0 requires no attribution; the credit is
+recorded here because knowing where a file came from is worth more than the
+licence strictly demands.
+
+The geometry was imported, rescaled and re-exported by tools/blender_models.py;
+no textures are used. worker.json and props.json are original work under this
+repository's own licence.

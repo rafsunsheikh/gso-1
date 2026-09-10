@@ -208,10 +208,24 @@ function instance(parts, name, opts = {}) {
 }
 
 export async function createWorld(canvas) {
-  const [workerParts, propParts] = await Promise.all([
+  const [workerParts, propParts, kitParts] = await Promise.all([
     loadParts("/static/models/worker.json"),
     loadParts("/static/models/props.json"),
+    loadParts("/static/models/kit.json"),
   ]);
+
+  /** A whole kit model: its parts are one group per material, named
+   *  `name__0`, `name__1`, and so on. */
+  function model(name) {
+    const g = new THREE.Group();
+    let found = 0;
+    for (const key of kitParts.keys()) {
+      if (!key.startsWith(name + "__")) continue;
+      const m = instance(kitParts, key, { roughness: 0.78 });
+      if (m) { g.add(m); found++; }
+    }
+    return found ? g : null;
+  }
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setClearColor(COL.sky, 1);
@@ -296,7 +310,8 @@ export async function createWorld(canvas) {
 
     const rim = new THREE.Mesh(
       new THREE.TorusGeometry(2.62, 0.05, 8, 6),
-      new THREE.MeshStandardMaterial({ color: COL.plotEdge, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({
+        color: themeFor(meta.get(project)).roof, roughness: 0.6 }),
     );
     rim.rotation.x = Math.PI / 2;
     rim.position.y = 0.5;
@@ -308,53 +323,45 @@ export async function createWorld(canvas) {
     // the same every time you come back to it rather than reshuffling.
     const village = new THREE.Group();
     const theme = themeFor(meta.get(project));
-    const hut = new THREE.Group();
-    for (const n of ["hut_base", "hut_wall", "hut_roof", "hut_door"]) {
-      const m = instance(propParts, n,
-                         n === "hut_roof" ? { colour: new THREE.Color(theme.roof) } : {});
-      if (m) hut.add(m);
-    }
-    hut.position.set(-0.75, 0, -0.55);
-    hut.rotation.y = (hash(project + "hut") - 0.5) * 0.7;
-    village.add(hut);
 
-    const store = new THREE.Group();
-    for (const n of ["store_base", "store_wall", "store_roof"]) {
-      const m = instance(propParts, n,
-                         n === "store_roof" ? { colour: new THREE.Color(theme.roof) } : {});
-      if (m) store.add(m);
-    }
-    store.position.set(0.95, 0, -0.85);
-    store.rotation.y = hash(project + "store") * 2;
-    village.add(store);
+    // The buildings are Quaternius' CC0 fantasy RTS kit; they carry their own
+    // palette, so the project's stack shows on the banner and the plot edge
+    // rather than by repainting somebody else's model.
+    const place = (name, x, z, scale, spin) => {
+      const m = model(name);
+      if (!m) return null;
+      m.position.set(x, 0, z);
+      m.scale.setScalar(scale);
+      m.rotation.y = spin;
+      village.add(m);
+      return m;
+    };
 
+    place("house", -0.55, -0.6, 0.62, (hash(project + "h") - 0.5) * 0.9);
+    place("hut", 1.05, -0.75, 0.62, hash(project + "s") * 3);
+    if (hash(project + "w") > 0.55) {
+      place("windmill", 1.35, 0.85, 0.42, hash(project + "wr") * 3);
+    } else {
+      place("tower", 1.5, 0.8, 0.5, hash(project + "tr") * 3);
+    }
+    const tree = place("tree", -1.5, 1.25, 0.42, hash(project + "t") * 3);
+    place("logs", 0.35, 1.35, 0.75, hash(project + "l") * 3);
+    for (let i = 0; i < 2 + Math.floor(hash(project + "c") * 3); i++) {
+      const a = hash(project + "c" + i) * Math.PI * 2;
+      place("rock", Math.cos(a) * 1.75, Math.sin(a) * 1.75,
+            0.5 + hash(project + "rs" + i) * 0.5, hash(project + "rr" + i) * 3);
+    }
+
+    // The banner stays ours: it is the one thing on the plot that has to carry
+    // GSO-1's own meaning rather than the kit's.
     const flag = new THREE.Group();
     const pole = instance(propParts, "flag_pole");
     const cloth = instance(propParts, "flag_cloth", { colour: new THREE.Color(theme.trim) });
     if (pole) flag.add(pole);
     if (cloth) flag.add(cloth);
-    flag.position.set(1.35, 0, 0.75);
+    flag.position.set(0.15, 0, -1.55);
     village.add(flag);
 
-    const tree = new THREE.Group();
-    for (const n of ["tree_trunk", "tree_leaf1", "tree_leaf2", "tree_leaf3"]) {
-      const m = instance(propParts, n);
-      if (m) tree.add(m);
-    }
-    tree.position.set(-1.45, 0, 1.15);
-    tree.rotation.y = hash(project + "tree") * 3;
-    tree.scale.setScalar(0.85 + hash(project + "ts") * 0.3);
-    village.add(tree);
-
-    for (let i = 0; i < 2 + Math.floor(hash(project + "c") * 2); i++) {
-      const crate = instance(propParts, "crate");
-      if (!crate) break;
-      const a = hash(project + "c" + i) * Math.PI * 2;
-      crate.position.x += Math.cos(a) * 1.5;
-      crate.position.z += Math.sin(a) * 1.5;
-      crate.rotation.y = hash(project + "r" + i) * 3;
-      village.add(crate);
-    }
     village.position.y = 0.5;
     group.add(village);
 
@@ -406,6 +413,7 @@ export async function createWorld(canvas) {
     group.userData = { project };
     scene.add(group);
     return { group, figure, base: figureBase, limb, flag, label: labelRef,
+             rimColour: themeFor(meta.get(project)).roof,
              anchors, walker, tree,
              body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
   }
@@ -719,7 +727,8 @@ export async function createWorld(canvas) {
   function select(project) {
     selected = plots.has(project) ? project : null;
     for (const [name, p] of plots) {
-      p.rim.material.color.setHex(name === selected ? COL.active : COL.plotEdge);
+      // Deselecting restores the project's own colour, not a generic edge.
+      p.rim.material.color.setHex(name === selected ? COL.active : p.rimColour);
     }
     needsFrame = true;
     return selected;
