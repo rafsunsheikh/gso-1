@@ -57,3 +57,17 @@
 .world-hud[hidden] { display: none !important; }
 .world-hud b { color: var(--text); font-weight: 650; }
 #world-near { margin-left: auto; color: var(--live, #00e0b7); font-weight: 600; }
+.world-keys {
+  position: absolute; right: 14px; bottom: 14px; z-index: 2;
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  padding: 8px 13px; border-radius: 10px; font-size: .75rem;
+  background: rgba(8,7,14,.6); color: #cfd6e6;
+  border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
+}
+.world-keys[hidden] { display: none !important; }
+.world-keys b { color: #fff; font-weight: 650; }
+.world-keys button {
+  padding: 4px 10px; border-radius: 7px; font-size: .74rem; cursor: pointer;
+  background: rgba(255,255,255,.14); color: #fff; border: 0;
+}
+.world-keys button:hover { background: rgba(255,255,255,.24); }

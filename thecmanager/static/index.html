@@ -2677,6 +2677,13 @@
           <div class="world-stage">
             <canvas id="world-canvas" class="world-canvas"></canvas>
             <button class="world-roam" id="world-roam">Walk the world</button>
+            <div class="world-keys" id="world-keys">
+              <span><b>Drag</b> turn</span>
+              <span><b>Middle-drag</b> pan</span>
+              <span><b>Wheel</b> zoom</span>
+              <span><b>Click</b> a village</span>
+              <button id="world-reset">Reset view</button>
+            </div>
             <div class="world-hud" id="world-hud" hidden>
               <span><b>WASD</b> move</span><span><b>Shift</b> run</span>
               <span><b>Mouse</b> look (or drag)</span><span><b>Esc</b> leave</span>
@@ -2708,9 +2715,13 @@
       // The canvas orbits on drag, so a click is only a selection if the
       // pointer barely moved between down and up.
       let downAt = null;
-      canvas.onpointerdown = (e) => { downAt = { x: e.clientX, y: e.clientY }; };
+      canvas.onpointerdown = (e) => {
+        // Only the left button selects; middle pans and right belongs to the
+        // browser's own menu.
+        downAt = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+      };
       canvas.onpointerup = (e) => {
-        if (!downAt) return;
+        if (!downAt || e.button !== 0) return;
         const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
         downAt = null;
         if (moved > 5) return;
@@ -2732,6 +2743,12 @@
         } catch (e) { /* look by dragging instead */ }
       };
 
+      const resetBtn = $("#world-reset");
+      if (resetBtn) resetBtn.onclick = () => {
+        WORLD.resetCamera();
+        worldKick();
+      };
+
       worldResize();
       await worldPoll();
       worldStartPolling();
@@ -2741,9 +2758,10 @@
     function worldSetRoam(on) {
       if (!WORLD) return;
       WORLD.setRoam(on);
-      const hud = $("#world-hud"), btn = $("#world-roam");
+      const hud = $("#world-hud"), btn = $("#world-roam"), keys = $("#world-keys");
       if (hud) hud.hidden = !on;
       if (btn) btn.hidden = on;
+      if (keys) keys.hidden = on;
       if (!on && document.pointerLockElement) document.exitPointerLock();
       worldKick();
     }

@@ -307,7 +307,13 @@ export async function createWorld(canvas) {
     return found ? g : null;
   }
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({
+    canvas, antialias: true, alpha: false,
+    // Right-click, Save image as… reads the drawing buffer after the frame has
+    // been composited. Without this it is undefined by then and Chrome writes
+    // a black PNG, so the menu item works but the file is useless.
+    preserveDrawingBuffer: true,
+  });
   renderer.setClearColor(0xcfe6f7, 1);
 
   const scene = new THREE.Scene();
@@ -767,6 +773,7 @@ export async function createWorld(canvas) {
     if (!orbit.userMoved && !roam.on) {
       orbit.dist = 60 + spread * 1.35;
       orbit.pol = 1.32;
+      orbit.target.set(0, 4, 0);
       applyCamera();
     }
   }
@@ -1046,34 +1053,61 @@ export async function createWorld(canvas) {
   // Hand-rolled rather than vendoring OrbitControls: this needs drag-to-turn
   // and wheel-to-zoom and nothing else, and it has to be able to hand control
   // back to the auto-framing when the world changes shape.
-  const orbit = { az: 0.86, pol: 1.32, dist: 70, userMoved: false };
+  const orbit = {
+    az: 0.86, pol: 1.32, dist: 70, userMoved: false,
+    // What the camera looks at. Panning moves this rather than the camera, so
+    // rotating afterwards turns about the place you panned to.
+    target: new THREE.Vector3(0, 4, 0),
+  };
 
   function applyCamera() {
     const d = orbit.dist;
     camera.position.set(
-      Math.sin(orbit.az) * Math.sin(orbit.pol) * d,
-      Math.cos(orbit.pol) * d,
-      Math.cos(orbit.az) * Math.sin(orbit.pol) * d,
+      orbit.target.x + Math.sin(orbit.az) * Math.sin(orbit.pol) * d,
+      orbit.target.y + Math.cos(orbit.pol) * d,
+      orbit.target.z + Math.cos(orbit.az) * Math.sin(orbit.pol) * d,
     );
-    camera.lookAt(0, 4, 0);
+    camera.lookAt(orbit.target);
     needsFrame = true;
   }
 
   let dragging = null;
   canvas.addEventListener("pointerdown", (e) => {
-    dragging = { x: e.clientX, y: e.clientY };
+    if (roam.on) return;
+    // Left turns, middle drags the map about. Right is left alone so the
+    // browser's own menu, and Save image with it, still works.
+    if (e.button === 2) return;
+    dragging = { x: e.clientX, y: e.clientY, mode: e.button === 1 ? "pan" : "turn" };
+    if (e.button === 1) e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener("pointermove", (e) => {
     if (!dragging) return;
-    orbit.az -= (e.clientX - dragging.x) * 0.008;
-    // Clamped so you cannot end up under the ground or looking straight down.
-    orbit.pol = Math.max(0.22, Math.min(1.45, orbit.pol - (e.clientY - dragging.y) * 0.006));
-    dragging = { x: e.clientX, y: e.clientY };
+    const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
+    if (dragging.mode === "pan") {
+      // Move across the ground in the directions the screen is showing, and
+      // scale by distance so a drag covers the same amount of screen however
+      // far out you are zoomed.
+      const k = orbit.dist * 0.0016;
+      const right = new THREE.Vector3(Math.cos(orbit.az), 0, -Math.sin(orbit.az));
+      const fwd = new THREE.Vector3(-Math.sin(orbit.az), 0, -Math.cos(orbit.az));
+      orbit.target.addScaledVector(right, -dx * k);
+      orbit.target.addScaledVector(fwd, -dy * k);
+      const lim = TERRAIN.size * 0.55;
+      orbit.target.x = Math.max(-lim, Math.min(lim, orbit.target.x));
+      orbit.target.z = Math.max(-lim, Math.min(lim, orbit.target.z));
+    } else {
+      orbit.az -= dx * 0.008;
+      // Clamped so you cannot end up under the ground or looking straight down.
+      orbit.pol = Math.max(0.22, Math.min(1.45, orbit.pol - dy * 0.006));
+    }
+    dragging = { x: e.clientX, y: e.clientY, mode: dragging.mode };
     orbit.userMoved = true;
     applyCamera();
     kick();
   });
+  // Middle-click on a page normally starts autoscroll; not over the map.
+  canvas.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
   const endDrag = (e) => {
     dragging = null;
     try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -1082,7 +1116,7 @@ export async function createWorld(canvas) {
   canvas.addEventListener("pointercancel", endDrag);
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    orbit.dist = Math.max(7, Math.min(70, orbit.dist * (1 + Math.sign(e.deltaY) * 0.1)));
+    orbit.dist = Math.max(12, Math.min(520, orbit.dist * (1 + Math.sign(e.deltaY) * 0.12)));
     orbit.userMoved = true;
     applyCamera();
     kick();
@@ -1377,7 +1411,11 @@ export async function createWorld(canvas) {
 
   return { update, frame, resize, dispose, pick, select, onNeedsFrame,
            setRoam, nearestPlot, get roaming() { return roam.on; },
-           resetCamera: () => { orbit.userMoved = false; layout(); },
+           resetCamera: () => {
+             orbit.userMoved = false;
+             orbit.target.set(0, 4, 0);
+             layout();
+           },
            get selected() { return selected; },
            get agents() { return agents; },
            get pending() { return needsFrame; } };
