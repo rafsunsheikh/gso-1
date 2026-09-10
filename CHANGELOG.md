@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A World view: the machine's work as territory.** Every project with an
+  agent working in it becomes a plot of land with a figure standing on it,
+  swinging while the agent runs tools and going still when it stops; the rest
+  of the library sits around it as unlit terrain, and a dormant project rises
+  into a plot the moment something starts work there. GSO-1 could only ever see
+  the Claude sessions it had started itself, so six agents working in your
+  repositories were invisible to it; it now finds all of them from what Claude
+  Code already writes down, and shows what each has its hands on.
+
+  Presence is measured from the transcript rather than from the session's own
+  status, because a session that dies mid-turn claims to be busy for ever. A
+  plot appears on the first tool call and stays for five minutes after the last
+  one, so an agent thinking between tools does not make its land flicker.
+
+  Nothing renders while nothing moves: the view stops its own render loop the
+  moment the scene settles, and asks for nothing at all while the window is
+  hidden.
+
+
 ## [0.1.7] — 2026-09-08
 
 ### Fixed

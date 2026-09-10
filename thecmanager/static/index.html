@@ -902,6 +902,8 @@
         { label: "Tools", items: [
           { id: "planner", label: "Planner",
             n: PLANNER.boards ? PLANNER.boards.reduce((t, b) => t + b.tasks.length, 0) : null },
+          { id: "world",   label: "World", dot: WORLD_ACTIVE ? "live" : null,
+            n: WORLD_ACTIVE || null },
           { id: "llm",     label: "Local LLM", dot: LLM && LLM.healthy ? "live" : null, n: null },
               { id: "site",    label: "Site", n: null },
           { id: "settings", label: "Settings", n: null },
@@ -917,7 +919,7 @@
     const APP_LIST_VIEWS = new Set(["library", "favourites", "uncommitted", "failed", "vscode"]);
     // Settings is a form, so the auto-refresh must not redraw it under the
     // user's cursor mid-edit.
-    const NO_AUTOREFRESH_VIEWS = new Set(["settings"]);
+    const NO_AUTOREFRESH_VIEWS = new Set(["settings", "world"]);
 
     function syncChrome() {
       const row = $("#search-row");
@@ -1035,6 +1037,7 @@
       if (activeView === "vscode") return renderVscode();
       if (activeView === "llm") return renderLlm();
       if (activeView === "planner") return renderPlanner();
+      if (activeView === "world") return renderWorld();
       if (activeView === "settings") return renderSettings();
       if (activeView === "site") return renderSite();
 
@@ -2640,6 +2643,125 @@
       }
       toast(r.message, r.opened && !r.opened.ok ? "warn" : "success");
       await load();
+    }
+
+    // ---- World: the machine's work as territory --------------------------
+    // The scene module is loaded on first use. three.js is 2 MB of vendored
+    // JavaScript and most sessions never open this view; importing it up front
+    // would make every cold start pay for a map nobody asked to see.
+    let WORLD = null, WORLD_MOD = null, WORLD_RAF = null, WORLD_POLL = null;
+    let WORLD_ACTIVE = 0;          // agents currently on the map, for the nav dot
+    // Re-entering the view rebuilds the scene, and a frame loop started against
+    // the old one would keep re-arming itself for ever: two visits, two loops,
+    // rendering at twice the refresh rate and burning twice the GPU for it.
+    // Each loop carries the generation it was started in and retires when that
+    // no longer matches.
+    let WORLD_GEN = 0;
+
+    async function renderWorld() {
+      const gridEl = resetGrid();
+      gridEl.innerHTML = `
+        <section class="world-wrap">
+          <div class="world-head">
+            <div>
+              <h2 class="world-title">World</h2>
+              <p class="world-sub" id="world-sub">Looking for agents\u2026</p>
+            </div>
+            <div class="world-legend">
+              <span><i class="world-dot" style="background:#00e0b7"></i>working</span>
+              <span><i class="world-dot" style="background:#502ce7"></i>present</span>
+              <span><i class="world-dot" style="background:#191826"></i>dormant</span>
+            </div>
+          </div>
+          <canvas id="world-canvas" class="world-canvas"></canvas>
+          <div class="world-list" id="world-list"></div>
+        </section>`;
+
+      const canvas = $("#world-canvas");
+      if (!WORLD_MOD) {
+        try {
+          WORLD_MOD = await import("/static/world.js");
+        } catch (e) {
+          $("#world-sub").textContent = "Could not load the 3D view: " + (e.message || e);
+          return;
+        }
+      }
+      if (!WORLD || WORLD.canvas !== canvas) {
+        WORLD_GEN++;                       // retires any loop on the old scene
+        if (WORLD_RAF !== null) { cancelAnimationFrame(WORLD_RAF); WORLD_RAF = null; }
+        if (WORLD) WORLD.dispose();
+        WORLD = WORLD_MOD.createWorld(canvas);
+        WORLD.canvas = canvas;
+      }
+      worldResize();
+      await worldPoll();
+      worldStartPolling();
+    }
+
+    function worldResize() {
+      const c = $("#world-canvas");
+      if (!c || !WORLD) return;
+      WORLD.resize(c.clientWidth, c.clientHeight);
+      worldKick();
+    }
+    window.addEventListener("resize", () => { if (activeView === "world") worldResize(); });
+
+    // The render loop runs only while something is actually moving, and stops
+    // itself when the scene settles. An idle world costs one frame, then zero.
+    function worldKick() {
+      if (WORLD_RAF !== null || !WORLD) return;
+      const gen = WORLD_GEN;
+      const step = () => {
+        WORLD_RAF = null;
+        if (gen !== WORLD_GEN) return;     // a newer scene owns the screen now
+        if (!WORLD || activeView !== "world" || document.hidden) return;
+        const moving = WORLD.frame();
+        if (moving) WORLD_RAF = requestAnimationFrame(step);
+      };
+      WORLD_RAF = requestAnimationFrame(step);
+    }
+
+    async function worldPoll() {
+      const snap = await api("/api/agents").catch(() => null);
+      if (!snap || !WORLD) return;
+      const names = (ALL || []).map(a => a.name);
+      WORLD.update(snap, names);
+      WORLD_ACTIVE = WORLD.agents.size;
+      worldKick();
+      worldPaint(snap);
+      renderViews();               // the nav dot follows the world
+    }
+
+    function worldPaint(snap) {
+      const list = $("#world-list"); if (!list) return;
+      const on = [...WORLD.agents.entries()];
+      const sub = $("#world-sub");
+      if (sub) {
+        const total = (ALL || []).length;
+        sub.textContent = on.length
+          ? `${on.length} of ${total} projects inhabited \u00b7 ${snap.count} sessions running`
+          : `No agent has touched a project in the last 5 minutes \u00b7 ${snap.count} sessions running`;
+      }
+      list.innerHTML = on.sort((a, b) => a[1].idle - b[1].idle).map(([project, a]) => `
+        <div class="world-card" data-tone="${a.working ? "live" : "idle"}">
+          <div class="world-card-h">
+            <span class="world-dot" style="background:${a.working ? "#00e0b7" : "#502ce7"}"></span>
+            <strong>${escapeHtml(project)}</strong>
+          </div>
+          <div class="world-card-m">${escapeHtml(a.name)}</div>
+          <div class="world-card-m">${a.tool ? "last tool: " + escapeHtml(a.tool) : "\u2014"}
+            \u00b7 ${a.idle < 60 ? a.idle + "s" : Math.round(a.idle / 60) + "m"} ago</div>
+        </div>`).join("");
+    }
+
+    function worldStartPolling() {
+      if (WORLD_POLL) return;
+      // Same rule as everything else here: a view nobody is looking at asks
+      // for nothing. everyVisible pauses on hidden and catches up on return.
+      WORLD_POLL = everyVisible(() => { if (activeView === "world") worldPoll(); }, 4000);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && activeView === "world") worldKick();
+      });
     }
 
     async function newBoard() {
