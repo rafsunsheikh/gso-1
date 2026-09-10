@@ -26,17 +26,24 @@ import * as THREE from "./vendor/three/three.module.js";
 
 /** Still swinging: a tool call this recently means visibly at work. */
 const ACTIVE_SECONDS = 30;
-/** Still on the map. The gap to ACTIVE_SECONDS is the anti-flicker grace. */
+/** Recently at work: standing on lit land, ready to go again. */
 const PRESENT_SECONDS = 300;
+
+// Every live session gets a plot, whatever it is doing. Hiding the quiet ones
+// was the wrong call: a session idle for two hours is still a session you have
+// open, and a map that shows one of your six agents is not a map of your
+// machine. State is carried in how a plot looks, not in whether it exists.
 
 const COL = {
   sky: 0x07070c,
   ground: 0x0d0c14,
   terrain: 0x1c1b2b,      // the dormant 271
   plot: 0x272442,
+  plotStale: 0x1e1c30,
   plotEdge: 0x4b4580,
   body: 0x502ce7,         // the brand purple, as in favicon.svg
   bodyIdle: 0x322a5e,
+  bodyStale: 0x2a2740,    // live, but nothing for a long while
   head: 0xe8e6f5,
   active: 0x00e0b7,       // the teal, for the one that is working
 };
@@ -54,12 +61,24 @@ function hash(str) {
 
 /** A text sprite. Kept small and power-of-two-ish; it is read, not admired. */
 function makeLabel(text) {
-  const pad = 16, font = 30;
+  const pad = 16, font = 30, maxText = 380;
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d");
-  ctx.font = `600 ${font}px -apple-system, system-ui, sans-serif`;
-  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-  c.width = Math.min(512, w);
+  const face = `600 ${font}px -apple-system, system-ui, sans-serif`;
+  ctx.font = face;
+  // Clamping the canvas instead of the text is what cut BUSA3005_Cybersecurity
+  // off mid-word: the glyphs were still drawn full width, into a narrower
+  // bitmap. Shorten the string until it fits, and end it with an ellipsis so
+  // the reader knows something was dropped.
+  let shown = text;
+  if (ctx.measureText(shown).width > maxText) {
+    while (shown.length > 4 && ctx.measureText(shown + "\u2026").width > maxText) {
+      shown = shown.slice(0, -1);
+    }
+    shown += "\u2026";
+  }
+  const w = Math.ceil(ctx.measureText(shown).width) + pad * 2;
+  c.width = w;
   c.height = 56;
   const g = c.getContext("2d");
   g.font = `600 ${font}px -apple-system, system-ui, sans-serif`;
@@ -70,7 +89,7 @@ function makeLabel(text) {
   g.fill();
   g.fillStyle = "#e8e6f5";
   g.textBaseline = "middle";
-  g.fillText(text, pad, 27);
+  g.fillText(shown, pad, 27);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -189,7 +208,7 @@ export function createWorld(canvas) {
 
     group.userData = { project };
     scene.add(group);
-    return { group, figure, arm, body: bodyMat, rim: rimRef, rise: 0 };
+    return { group, figure, arm, body: bodyMat, rim: rimRef, pad, rise: 0 };
   }
 
   function layout() {
@@ -198,9 +217,15 @@ export function createWorld(canvas) {
     keys.forEach((k, i) => {
       const p = plots.get(k);
       const a = (i / Math.max(keys.length, 1)) * Math.PI * 2;
-      const r = keys.length <= 1 ? 0 : 3.2 + keys.length * 0.75;
+      const r = keys.length <= 1 ? 0 : 3.4 + keys.length * 0.78;
       p.target = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
     });
+    // Pull back as the ring grows, so six plots frame as well as one does.
+    const spread = keys.length <= 1 ? 0 : 3.4 + keys.length * 0.78;
+    const d = 11 + spread * 1.15;
+    camera.position.set(d * 0.62, d * 0.58, d * 0.72);
+    camera.lookAt(0, 0.6, 0);
+    needsFrame = true;
   }
 
   let agents = new Map();        // project -> { idle, name, tool }
@@ -211,16 +236,28 @@ export function createWorld(canvas) {
     const now = Date.now() / 1000;
     const next = new Map();
     for (const s of snapshot.sessions || []) {
-      const idle = s.activity && s.activity.idle_seconds;
-      if (!s.project || idle === null || idle === undefined) continue;
-      if (idle > PRESENT_SECONDS) continue;            // gone back to terrain
+      if (!s.project) continue;          // a session outside every watched root
+      const raw = s.activity && s.activity.idle_seconds;
+      // No transcript yet is a brand-new session, not an old one.
+      const idle = (raw === null || raw === undefined) ? null : raw;
       const tools = (s.activity && s.activity.tools) || [];
-      next.set(s.project, {
+      // A project can hold more than one session; the busiest one speaks for it.
+      const prev = next.get(s.project);
+      const cand = {
         idle,
         name: s.name,
+        status: s.status,
         tool: tools.length ? tools[0].tool : null,
-        working: idle <= ACTIVE_SECONDS,
-      });
+        working: idle !== null && idle <= ACTIVE_SECONDS,
+        present: idle !== null && idle <= PRESENT_SECONDS,
+        sessions: (prev ? prev.sessions : 0) + 1,
+      };
+      if (!prev || (prev.idle === null) ||
+          (cand.idle !== null && cand.idle < prev.idle)) {
+        next.set(s.project, cand);
+      } else {
+        prev.sessions = cand.sessions;
+      }
     }
 
     let changed = false;
@@ -297,8 +334,11 @@ export function createWorld(canvas) {
       }
       p.group.scale.setScalar(0.6 + 0.4 * ease);
 
-      const working = p.info && p.info.working;
-      p.body.color.setHex(working ? COL.body : COL.bodyIdle);
+      const info = p.info || {};
+      const working = info.working;
+      p.body.color.setHex(
+        working ? COL.body : (info.present ? COL.bodyIdle : COL.bodyStale));
+      p.pad.material.color.setHex(info.present ? COL.plot : COL.plotStale);
       if (working) {
         // Swing the arm and bob the body: visible work, at a readable rate.
         p.arm.rotation.x = Math.sin(t * 7) * 1.1 - 0.3;

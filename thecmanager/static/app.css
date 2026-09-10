@@ -21,6 +21,9 @@
 .world-card[data-tone="live"] { border-color: #00e0b755; }
 .world-card-h { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
 .world-card-m { font-size: .76rem; color: var(--text-dim); margin-top: 3px; }
+/* `hidden` is display:none in the UA sheet, and a display rule here would
+   quietly beat it: the empty panel showed as a grey bar above the cards. */
+.world-panel[hidden] { display: none !important; }
 .world-panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
   background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
 .world-panel-h { display: flex; align-items: center; gap: 10px; }
@@ -33,3 +36,5 @@
 .world-send { display: flex; gap: 8px; }
 .world-send input { flex: 1; padding: 9px 12px; font-size: .87rem; border-radius: 9px;
   background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+.world-card[data-tone="warm"] { border-color: #502ce755; }
+.world-card[data-tone="idle"] { opacity: .72; }

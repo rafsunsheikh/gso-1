@@ -17,10 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repositories were invisible to it; it now finds all of them from what Claude
   Code already writes down, and shows what each has its hands on.
 
-  Presence is measured from the transcript rather than from the session's own
-  status, because a session that dies mid-turn claims to be busy for ever. A
-  plot appears on the first tool call and stays for five minutes after the last
-  one, so an agent thinking between tools does not make its land flicker.
+  Every session you have open gets a plot, whatever it is doing; how recently
+  it did something decides how the land and the figure look, from lit and
+  swinging through to dim and still. State is read from the transcript rather
+  than from the session's own status, because a session that dies mid-turn
+  claims to be busy for ever.
 
   Clicking a plot opens the agent: what it has said, and a box to give it
   something to do. GSO-1 can only drive the agents it started itself, so one

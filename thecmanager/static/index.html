@@ -2669,8 +2669,9 @@
             </div>
             <div class="world-legend">
               <span><i class="world-dot" style="background:#00e0b7"></i>working</span>
-              <span><i class="world-dot" style="background:#502ce7"></i>present</span>
-              <span><i class="world-dot" style="background:#191826"></i>dormant</span>
+              <span><i class="world-dot" style="background:#502ce7"></i>recent</span>
+              <span><i class="world-dot" style="background:#2a2740"></i>idle</span>
+              <span><i class="world-dot" style="background:#1c1b2b"></i>no agent</span>
             </div>
           </div>
           <canvas id="world-canvas" class="world-canvas"></canvas>
@@ -2745,20 +2746,31 @@
       const sub = $("#world-sub");
       if (sub) {
         const total = (ALL || []).length;
+        const busy = on.filter(([, a]) => a.working).length;
         sub.textContent = on.length
-          ? `${on.length} of ${total} projects inhabited \u00b7 ${snap.count} sessions running`
-          : `No agent has touched a project in the last 5 minutes \u00b7 ${snap.count} sessions running`;
+          ? `${on.length} of ${total} projects inhabited \u00b7 `
+            + `${busy} working now \u00b7 ${snap.count} sessions running`
+          : `No agents are running \u00b7 ${total} projects dormant`;
       }
-      list.innerHTML = on.sort((a, b) => a[1].idle - b[1].idle).map(([project, a]) => `
-        <div class="world-card" data-tone="${a.working ? "live" : "idle"}">
+      // Never-null first, then busiest first: the ones you would look at.
+      const rank = (a) => a.idle === null ? Infinity : a.idle;
+      list.innerHTML = on.sort((x, y) => rank(x[1]) - rank(y[1])).map(([project, a]) => {
+        const colour = a.working ? "#00e0b7" : (a.present ? "#502ce7" : "#5a5478");
+        const when = a.idle === null ? "no activity yet"
+          : a.idle < 60 ? a.idle + "s ago"
+          : a.idle < 3600 ? Math.round(a.idle / 60) + "m ago"
+          : Math.round(a.idle / 3600) + "h ago";
+        return `
+        <div class="world-card" data-tone="${a.working ? "live" : (a.present ? "warm" : "idle")}">
           <div class="world-card-h">
-            <span class="world-dot" style="background:${a.working ? "#00e0b7" : "#502ce7"}"></span>
+            <span class="world-dot" style="background:${colour}"></span>
             <strong>${escapeHtml(project)}</strong>
           </div>
-          <div class="world-card-m">${escapeHtml(a.name)}</div>
-          <div class="world-card-m">${a.tool ? "last tool: " + escapeHtml(a.tool) : "\u2014"}
-            \u00b7 ${a.idle < 60 ? a.idle + "s" : Math.round(a.idle / 60) + "m"} ago</div>
-        </div>`).join("");
+          <div class="world-card-m">${escapeHtml(a.name)}${
+            a.sessions > 1 ? ` \u00b7 ${a.sessions} sessions` : ""}</div>
+          <div class="world-card-m">${a.tool ? escapeHtml(a.tool) + " \u00b7 " : ""}${when}</div>
+        </div>`;
+      }).join("");
     }
 
     // Clicking a plot opens it. What you can do there depends on who started
