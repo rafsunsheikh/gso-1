@@ -224,6 +224,44 @@ def sessions(include_dead: bool = False) -> list[dict]:
     return out
 
 
+def _encoded(path: Path) -> str:
+    """The transcript directory name Claude Code uses for a working directory.
+
+    `/`, `_` and `.` all flatten to `-`. That is lossy, so it is only ever used
+    forwards, from a path we already have to the directory it would produce.
+    """
+    return "-" + str(path).replace("/", "-").replace("_", "-").replace(".", "-").lstrip("-")
+
+
+def history() -> dict:
+    """How much work has happened in each project, in transcript bytes.
+
+    Not a count of files on disk and not lines of code: the size of the
+    conversations held inside it. A repository you have spent months in reads
+    differently from one you cloned and left, and that difference is the only
+    honest basis the World has for making one settlement grander than another.
+    """
+    from . import scanner
+    out: dict[str, dict] = {}
+    if not TRANSCRIPTS_DIR.is_dir():
+        return out
+    for name in scanner.list_app_names():
+        d = TRANSCRIPTS_DIR / _encoded(scanner.app_path(name))
+        if not d.is_dir():
+            continue
+        total = 0
+        count = 0
+        try:
+            for f in d.glob("*.jsonl"):
+                total += f.stat().st_size
+                count += 1
+        except OSError:
+            continue
+        if count:
+            out[name] = {"sessions": count, "bytes": total}
+    return out
+
+
 def snapshot(with_activity: bool = True, limit: int = 6) -> dict:
     """Sessions plus, optionally, what each is doing. What the map renders."""
     items = sessions()
@@ -247,6 +285,7 @@ def snapshot(with_activity: bool = True, limit: int = 6) -> dict:
     return {
         "sessions": items,
         "count": len(items),
+        "history": history(),
         "working": sum(1 for s in items if s.get("working")),
         "projects": by_project,
         "ts": time.time(),

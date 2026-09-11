@@ -593,7 +593,7 @@ export async function createWorld(canvas) {
         if (y < WATER_LEVEL + 1.2) continue;           // nothing grows in the lake
         if (plan.maxHeight !== undefined && y > plan.maxHeight) continue;
         if (plan.minHeight !== undefined && y < plan.minHeight) continue;
-        if (clearings.some(c => Math.hypot(x - c.x, z - c.z) < 22)) continue;
+        if (clearings.some(c => Math.hypot(x - c.x, z - c.z) < 26)) continue;
         // Vary size and lean as well as position: identical copies on a grid
         // is the other half of why scatter reads as artificial.
         spots.push({
@@ -765,12 +765,42 @@ export async function createWorld(canvas) {
 
     // A settlement, not a diorama: a hall, outbuildings, a market and a wall
     // of trees, spread over enough ground that you can walk between them.
-    place("towncenter", 0, -4, 9, (hash(project + "h") - 0.5) * 0.9);
+    // Hamlet, village or seat, by how much work has happened here. The kit has
+    // the whole range, and a project you have lived in for months should not
+    // look like one you cloned and left.
+    const w = weight.get(project) ?? 0;
+    const tier = w > 0.85 ? 2 : w > 0.55 ? 1 : 0;
+
+    if (tier === 2) {
+      // A seat: castle, gate and a wall of towers.
+      place("castle", 0, -6, 15, (hash(project + "h") - 0.5) * 0.6);
+      place("castlegate", 0, 9, 9, Math.PI);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.4;
+        place("walltower", Math.cos(a) * 15, Math.sin(a) * 15, 6, -a);
+      }
+      place("barracks", -13, 2, 7, hash(project + "b") * 3);
+      place("wonder", 14, -8, 10, hash(project + "wo") * 3);
+    } else if (tier === 1) {
+      // A walled village with a keep.
+      place("fortress", 0, -5, 11, (hash(project + "h") - 0.5) * 0.7);
+      place("stonewalltower", -11, -2, 6, hash(project + "w1") * 3);
+      place("stonewalltower", 11, 1, 6, hash(project + "w2") * 3);
+      place("watchtower", 9, -9, 7, hash(project + "wt") * 3);
+      place("bigmarket", 0, 6, 7, hash(project + "bm") * 3);
+    } else {
+      place("towncenter", 0, -4, 9, (hash(project + "h") - 0.5) * 0.9);
+    }
     place("house", -7, -2, 7, hash(project + "h2") * 3);
     place("house", 6.5, 3.5, 6.4, hash(project + "h3") * 3);
     place("hut", -4.5, 5.5, 5, hash(project + "s") * 3);
     place("storage", 4, 7, 5.5, hash(project + "st") * 3);
-    place("market", 0, 4.5, 6, hash(project + "mk") * 3);
+    if (tier === 0) place("market", 0, 4.5, 6, hash(project + "mk") * 3);
+    if (tier > 0) place("houses", -8, 8, 7, hash(project + "hs") * 3);
+    if (tier > 0) place("towerhouse", 12, 5, 7, hash(project + "th") * 3);
+    if (tier === 0 && hash(project + "sh") > 0.5) {
+      place("shack", 8, 9, 4.5, hash(project + "shr") * 3);
+    }
     if (hash(project + "w") > 0.5) place("windmill", 10, -5, 8, hash(project + "wr") * 3);
     else place("tower", 10, -5, 8, hash(project + "tr") * 3);
     if (hash(project + "f") > 0.55) place("farm", -11, 6, 8, hash(project + "fr") * 3);
@@ -897,12 +927,30 @@ export async function createWorld(canvas) {
 
   let agents = new Map();        // project -> { idle, name, tool }
   const meta = new Map();        // project -> stack kind, for the theme
+  const weight = new Map();      // project -> 0..1, how much work has happened there
   let needsFrame = true;
 
   /** Feed it a /api/agents snapshot. Returns true if the scene must animate. */
   function update(snapshot, allProjects, projectMeta) {
     if (projectMeta) {
       for (const [k, v] of projectMeta) meta.set(k, v);
+    }
+    // How much work a project has seen decides how grand its settlement is.
+    // Log scale, because the largest is a thousand times the smallest, and then
+    // stretched across the range actually present: dividing by the maximum
+    // alone put everything above 0.85 and made every settlement a castle.
+    if (snapshot && snapshot.history) {
+      const vals = Object.values(snapshot.history)
+        .map((h) => h.bytes || 0).filter((v) => v > 0);
+      if (vals.length) {
+        const lo = Math.log10(Math.max(1, Math.min(...vals)));
+        const hi = Math.log10(Math.max(1, Math.max(...vals)));
+        const span = hi - lo || 1;
+        for (const [k, h] of Object.entries(snapshot.history)) {
+          weight.set(k, Math.max(0, Math.min(1,
+            (Math.log10(Math.max(1, h.bytes)) - lo) / span)));
+        }
+      }
     }
     const now = Date.now() / 1000;
     const next = new Map();
