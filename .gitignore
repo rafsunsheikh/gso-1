@@ -24,3 +24,10 @@ build/work/
 
 # Article drafts, kept with the project but not part of it
 article/
+
+# Local 3D assets for the French World. Deliberately never committed: the
+# Pokemon and Ash models are Nintendo/Game Freak/Creatures characters and the
+# village is somebody else's scan, and this repository is public under
+# Apache-2.0. GSO-1 serves them off disk so the world works on the machine that
+# downloaded them, and ships none of them.
+3d_objects/

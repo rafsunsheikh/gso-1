@@ -2676,6 +2676,22 @@
           </div>
           <div class="world-stage">
             <canvas id="world-canvas" class="world-canvas"></canvas>
+            <div class="world-pick" id="world-pick"></div>
+            <div class="world-prompt" id="world-prompt" hidden></div>
+            <aside class="poke-panel" id="poke-panel" hidden>
+              <div class="poke-head">
+                <strong id="poke-title"></strong>
+                <span id="poke-sub"></span>
+                <button id="poke-close" title="Close (Q)">&times;</button>
+              </div>
+              <pre class="poke-out" id="poke-out"></pre>
+              <div class="poke-ask">
+                <input id="poke-input" placeholder="Ask this agent to do something&hellip;"
+                       autocomplete="off"/>
+                <button id="poke-send">Send</button>
+              </div>
+              <p class="poke-foot"><b>Q</b> close session view &middot; <b>&times;</b> close window</p>
+            </aside>
             <button class="world-roam" id="world-roam">Walk the world</button>
             <div class="world-keys" id="world-keys">
               <span><b>Drag</b> turn</span>
@@ -2695,6 +2711,23 @@
         </section>`;
 
       const canvas = $("#world-canvas");
+      try { WORLD_KIND = localStorage.getItem("gsoWorldKind") || WORLD_KIND; } catch (e) {}
+      await worldPicker();
+
+      if (WORLD_KIND === "french") {
+        if (WORLD) { WORLD_GEN++; if (WORLD_RAF !== null) { cancelAnimationFrame(WORLD_RAF); WORLD_RAF = null; } }
+        $("#world-keys") && ($("#world-keys").hidden = true);
+        $("#world-roam") && ($("#world-roam").hidden = true);
+        try {
+          await renderFrench(canvas);
+        } catch (e) {
+          $("#world-sub").textContent = "Could not load the French world: " + (e.message || e);
+        }
+        return;
+      }
+      if (FRENCH) { FRENCH.setActive(false); pokeClose(); }
+      if (FRENCH_RAF !== null) { cancelAnimationFrame(FRENCH_RAF); FRENCH_RAF = null; }
+
       if (!WORLD_MOD) {
         try {
           WORLD_MOD = await import("/static/world.js");
@@ -2753,6 +2786,162 @@
       await worldPoll();
       worldStartPolling();
     }
+
+    // ---- worlds -----------------------------------------------------------
+    // The valley ships with GSO-1; the French world needs models the user
+    // downloaded, so it is offered only when the server says they are there.
+    let WORLD_KIND = "valley", FRENCH = null, FRENCH_MOD = null, WORLDS = null;
+    let POKE_OPEN = null, POKE_POLL = null;
+
+    async function worldPicker() {
+      const el = $("#world-pick");
+      if (!el) return;
+      if (!WORLDS) WORLDS = await api("/api/worlds").catch(() => ({ worlds: [] }));
+      el.innerHTML = (WORLDS.worlds || []).map(w => `
+        <button data-world="${w.id}" aria-pressed="${WORLD_KIND === w.id}"
+          ${w.available ? "" : "disabled title='Models not on this machine'"}>
+          ${escapeHtml(w.name)}</button>`).join("");
+      el.querySelectorAll("[data-world]").forEach(b => b.onclick = () => {
+        if (b.disabled || b.dataset.world === WORLD_KIND) return;
+        WORLD_KIND = b.dataset.world;
+        try { localStorage.setItem("gsoWorldKind", WORLD_KIND); } catch (e) {}
+        render();
+      });
+    }
+
+    async function renderFrench(canvas) {
+      if (!FRENCH_MOD) FRENCH_MOD = await import("/static/french.js");
+      if (!FRENCH || FRENCH.canvas !== canvas) {
+        if (FRENCH) FRENCH.dispose();
+        FRENCH = await FRENCH_MOD.createFrenchWorld(canvas);
+        FRENCH.canvas = canvas;
+        FRENCH.onInteract((near) => pokeOpen(near));
+      }
+      FRENCH.setActive(true);
+      FRENCH.resize(canvas.clientWidth, canvas.clientHeight);
+      // Ash needs the pointer for looking around, and a click to grant it.
+      canvas.onclick = () => {
+        try {
+          const r = canvas.requestPointerLock();
+          if (r && r.catch) r.catch(() => {});
+        } catch (e) {}
+      };
+      frenchLoop();
+      frenchPoll();
+    }
+
+    let FRENCH_RAF = null;
+    function frenchLoop() {
+      if (FRENCH_RAF !== null) return;
+      const step = () => {
+        FRENCH_RAF = null;
+        if (!FRENCH || activeView !== "world" || WORLD_KIND !== "french" || document.hidden) return;
+        FRENCH.frame();
+        frenchPrompt();
+        FRENCH_RAF = requestAnimationFrame(step);
+      };
+      FRENCH_RAF = requestAnimationFrame(step);
+    }
+
+    function frenchPrompt() {
+      const el = $("#world-prompt");
+      if (!el) return;
+      const near = FRENCH && FRENCH.nearest;
+      if (!near || POKE_OPEN) { el.hidden = true; return; }
+      el.hidden = false;
+      el.innerHTML = `<kbd>E</kbd> talk to <b>${escapeHtml(near.project)}</b>`
+        + (near.info && near.info.tool ? ` &middot; ${escapeHtml(near.info.tool)}` : "");
+    }
+
+    async function frenchPoll() {
+      if (!FRENCH) return;
+      const snap = await api("/api/agents").catch(() => null);
+      if (snap && FRENCH) {
+        FRENCH.update(snap);
+        const sub = $("#world-sub");
+        if (sub) sub.textContent = `${FRENCH.count} agents in the village `
+          + `\u00b7 ${snap.count} sessions running`;
+      }
+      if (!POKE_POLL) {
+        POKE_POLL = everyVisible(() => {
+          if (activeView === "world" && WORLD_KIND === "french") frenchPoll();
+        }, 4000);
+      }
+    }
+
+    // ---- the session window -------------------------------------------------
+    let POKE_OUT_POLL = null;
+    async function pokeOpen(near) {
+      POKE_OPEN = near.project;
+      if (document.pointerLockElement) document.exitPointerLock();
+      const el = $("#poke-panel");
+      el.hidden = false;
+      $("#poke-title").textContent = near.project;
+      $("#poke-sub").textContent = `${near.kind}`
+        + (near.info && near.info.name ? ` \u00b7 ${near.info.name}` : "");
+      $("#poke-close").onclick = pokeClose;
+      const input = $("#poke-input"), send = $("#poke-send");
+      const ask = async () => {
+        const prompt = input.value.trim();
+        if (!prompt) return;
+        send.disabled = true;
+        const r = await api("/api/world/send", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project: near.project, prompt }),
+        }).catch(e => ({ ok: false, message: e.message || String(e) }));
+        send.disabled = false;
+        if (r.needs_confirm) {
+          if (window.confirm(r.message)) {
+            await api("/api/world/send", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ project: near.project, prompt,
+                                     confirm_second_agent: true }),
+            }).catch(() => null);
+          } else return;
+        } else if (!r.ok) { toast(r.message || "Could not send.", "error"); return; }
+        input.value = "";
+        pokeRefresh();
+      };
+      send.onclick = ask;
+      input.onkeydown = (e) => {
+        e.stopPropagation();                 // WASD must not walk Ash while typing
+        if (e.key === "Enter") ask();
+      };
+      input.focus();
+      pokeRefresh();
+      if (!POKE_OUT_POLL) {
+        POKE_OUT_POLL = everyVisible(() => { if (POKE_OPEN) pokeRefresh(); }, 2000);
+      }
+    }
+
+    async function pokeRefresh() {
+      if (!POKE_OPEN) return;
+      const st = await api(`/api/world/output?project=${encodeURIComponent(POKE_OPEN)}`)
+        .catch(() => null);
+      const out = $("#poke-out");
+      if (!st || !out) return;
+      const text = (st.lines || []).map(l => l.text).join("\n")
+        || "Nothing from this session yet. Ask it something.";
+      if (out.textContent !== text) {
+        out.textContent = text;
+        out.scrollTop = out.scrollHeight;
+      }
+    }
+
+    function pokeClose() {
+      POKE_OPEN = null;
+      const el = $("#poke-panel");
+      if (el) el.hidden = true;
+      if (POKE_OUT_POLL) { POKE_OUT_POLL.stop(); POKE_OUT_POLL = null; }
+      if (FRENCH) frenchLoop();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (!POKE_OPEN) return;
+      // Q closes the session view, as does Escape. Not while typing in the box.
+      if (e.target && e.target.id === "poke-input") return;
+      if (e.key === "q" || e.key === "Q" || e.key === "Escape") { e.preventDefault(); pokeClose(); }
+    });
 
     let WORLD_NEAR = null;
     function worldSetRoam(on) {

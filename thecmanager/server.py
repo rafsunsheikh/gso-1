@@ -1424,3 +1424,35 @@ class _RevalidatingStatic(StaticFiles):
 
 
 app.mount("/static", _RevalidatingStatic(directory=str(STATIC_DIR)), name="static")
+
+# Local-only 3D assets, mounted if the folder exists. These are models a user
+# downloaded for themselves: they are gitignored, they are not in the installer,
+# and a machine without them simply does not offer the world that needs them.
+_LOCAL_3D = Path(__file__).resolve().parent.parent / "3d_objects"
+if _LOCAL_3D.is_dir():
+    app.mount("/worlds", _RevalidatingStatic(directory=str(_LOCAL_3D)), name="worlds")
+
+
+@app.get("/api/worlds")
+def list_worlds() -> JSONResponse:
+    """Which worlds this machine can actually render.
+
+    The valley ships with GSO-1. The French world needs models the user
+    downloaded, so it is offered only when they are present, rather than
+    appearing in the menu and failing.
+    """
+    need = ["eze_village_-_france.glb", "ash_ketchup_-_pokemon.glb"]
+    have = _LOCAL_3D.is_dir() and all((_LOCAL_3D / n).exists() for n in need)
+    pokemon = []
+    if _LOCAL_3D.is_dir():
+        for f in sorted(_LOCAL_3D.glob("*.glb")):
+            n = f.name.lower()
+            if any(k in n for k in ("pikachu", "bulbasaur", "charizard", "celebi")):
+                pokemon.append(f.name)
+    return JSONResponse({
+        "worlds": [
+            {"id": "valley", "name": "Valley", "available": True},
+            {"id": "french", "name": "French World", "available": bool(have),
+             "pokemon": pokemon},
+        ]
+    })
