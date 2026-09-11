@@ -2714,14 +2714,20 @@
       try { WORLD_KIND = localStorage.getItem("gsoWorldKind") || WORLD_KIND; } catch (e) {}
       await worldPicker();
 
-      if (WORLD_KIND === "french") {
+      if (WORLD_KIND !== "valley") {
         if (WORLD) { WORLD_GEN++; if (WORLD_RAF !== null) { cancelAnimationFrame(WORLD_RAF); WORLD_RAF = null; } }
         $("#world-keys") && ($("#world-keys").hidden = true);
         $("#world-roam") && ($("#world-roam").hidden = true);
+        // These worlds are photogrammetry scans of real places and the biggest
+        // is a quarter of a gigabyte, so say what is happening rather than
+        // leaving a blank canvas for half a minute.
+        const picked = ((WORLDS && WORLDS.worlds) || []).find(w => w.id === WORLD_KIND);
+        $("#world-sub").textContent = "Loading " + (picked ? picked.name : WORLD_KIND)
+          + "\u2026 the scan is large, this takes a moment";
         try {
           await renderFrench(canvas);
         } catch (e) {
-          $("#world-sub").textContent = "Could not load the French world: " + (e.message || e);
+          $("#world-sub").textContent = "Could not load that world: " + (e.message || e);
         }
         return;
       }
@@ -2811,10 +2817,11 @@
 
     async function renderFrench(canvas) {
       if (!FRENCH_MOD) FRENCH_MOD = await import("/static/french.js");
-      if (!FRENCH || FRENCH.canvas !== canvas) {
+      if (!FRENCH || FRENCH.canvas !== canvas || FRENCH.scan !== WORLD_KIND) {
         if (FRENCH) FRENCH.dispose();
-        FRENCH = await FRENCH_MOD.createFrenchWorld(canvas);
+        FRENCH = await FRENCH_MOD.createScanWorld(canvas, WORLD_KIND);
         FRENCH.canvas = canvas;
+        FRENCH.scan = WORLD_KIND;
         FRENCH.onInteract((near) => pokeOpen(near));
       }
       FRENCH.setActive(true);
@@ -2835,7 +2842,7 @@
       if (FRENCH_RAF !== null) return;
       const step = () => {
         FRENCH_RAF = null;
-        if (!FRENCH || activeView !== "world" || WORLD_KIND !== "french" || document.hidden) return;
+        if (!FRENCH || activeView !== "world" || WORLD_KIND === "valley" || document.hidden) return;
         FRENCH.frame();
         frenchPrompt();
         FRENCH_RAF = requestAnimationFrame(step);
@@ -2864,7 +2871,7 @@
       }
       if (!POKE_POLL) {
         POKE_POLL = everyVisible(() => {
-          if (activeView === "world" && WORLD_KIND === "french") frenchPoll();
+          if (activeView === "world" && WORLD_KIND !== "valley") frenchPoll();
         }, 4000);
       }
     }

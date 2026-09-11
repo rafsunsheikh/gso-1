@@ -24,12 +24,48 @@ const ASSETS = "/worlds/";
 
 /** Real-world heights, in metres. */
 const SIZES = {
-  village: 240,        // across, not tall
   ash: 1.75,
   pikachu: 1.1,
   bulbasaur: 1.0,
   charizard: 2.6,
   celebi: 1.2,
+};
+
+/**
+ * The scans this module can host.
+ *
+ * Nothing below is specific to Èze: find the ground by raycast, reject faces
+ * too steep to stand on, put the characters on the flattest high ground. What
+ * differs between a hill village and a valley floor is the scale it wants and
+ * how far apart things should stand, so that is all a preset carries.
+ *
+ * `span` is how wide the scan should be in metres. `pitch` is the radius the
+ * agents are spread over, `band` how far below the high point still counts as
+ * the same place rather than a cliff below it.
+ */
+export const SCANS = {
+  french: {
+    name: "French World",
+    files: ["eze_village_-_france-2.glb", "eze_village_-_france.glb"],
+    span: 240, pitch: 8, pitchStep: 5, band: 26, fog: [120, 420],
+    anchor: "high",
+  },
+  nature: {
+    name: "Nature",
+    // A natural landscape has no roofs and no walls: every surface is ground,
+    // which is the case this walks best on.
+    files: ["photogrammetry__3d_scan_nature_landscape.glb"],
+    span: 320, pitch: 14, pitchStep: 9, band: 45, fog: [160, 620],
+    anchor: "middle",
+    // This scan keeps its terrain and its planting apart: Box001 is the
+    // hillside, twenty-three thousand triangles of it, and Box002 is the
+    // million and a half of grass, bushes and trees standing on it. The
+    // hillside alone is not where you walk — the meadow is knee-deep geometry
+    // and standing on the soil under it buries you — so the grass is allowed to
+    // raise the ground by up to a stride, and the hedges, which are far taller
+    // than that, are not.
+    ground: "box001", undergrowth: 1.8,
+  },
 };
 
 const POKEMON = [
@@ -59,17 +95,20 @@ function pickClip(clips, wants) {
   return clips.values().next().value || null;
 }
 
-export async function createFrenchWorld(canvas) {
+export async function createScanWorld(canvas, scanId = "french") {
+  const cfg = SCANS[scanId] || SCANS.french;
   const loader = new GLTFLoader();
   const load = (file) => loader.loadAsync(ASSETS + encodeURIComponent(file));
 
-  // Both Èze files carry identical geometry, 302,022 triangles either way; the
-  // difference is 7.5 MB of texture against 86 MB. Take the sharp one when it
-  // is there, because close up the cheap one is visibly smeared.
-  const villageFile = await fetch(ASSETS + encodeURIComponent("eze_village_-_france-2.glb"),
-                                  { method: "HEAD" })
-    .then((r) => (r.ok ? "eze_village_-_france-2.glb" : "eze_village_-_france.glb"))
-    .catch(() => "eze_village_-_france.glb");
+  // A preset may list several files, best first: the two Èze scans carry
+  // identical geometry and differ only in texture size, so the sharp one is
+  // preferred and the small one is the fallback.
+  let villageFile = cfg.files[cfg.files.length - 1];
+  for (const f of cfg.files) {
+    const ok = await fetch(ASSETS + encodeURIComponent(f), { method: "HEAD" })
+      .then((r) => r.ok).catch(() => false);
+    if (ok) { villageFile = f; break; }
+  }
 
   const [villageGltf, ashGltf, ...pokeGltf] = await Promise.all([
     load(villageFile),
@@ -82,7 +121,7 @@ export async function createFrenchWorld(canvas) {
   });
   renderer.setClearColor(0xbcd8ef, 1);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xbcd8ef, 120, 420);
+  scene.fog = new THREE.Fog(0xbcd8ef, cfg.fog[0], cfg.fog[1]);
 
   const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
 
@@ -105,7 +144,7 @@ export async function createFrenchWorld(canvas) {
     const box = new THREE.Box3().setFromObject(village);
     const size = box.getSize(new THREE.Vector3());
     const span = Math.max(size.x, size.z) || 1;
-    const k = SIZES.village / span;
+    const k = cfg.span / span;
     village.scale.setScalar(k);
     village.updateMatrixWorld(true);
     const box2 = new THREE.Box3().setFromObject(village);
@@ -114,85 +153,196 @@ export async function createFrenchWorld(canvas) {
   }
   scene.add(village);
 
-  // Ground is found by raycast rather than a formula: this is somebody's scan
-  // of a real hillside, and it has no height function to ask.
-  const down = new THREE.Raycaster();
-  down.far = 4000;
-  const DOWN = new THREE.Vector3(0, -1, 0);
-  // The scan ships with its own sky sphere, and a downward ray from above the
-  // model hits that long before it reaches a street. It was also the whole of
-  // the model's apparent height: the ±85 was the skybox radius, not the hill.
-  // It stays in the scene, because it is a perfectly good sky, and is kept out
-  // of every raycast.
-  const groundMeshes = [];
+  // The scan ships with its own sky sphere, which is a perfectly good sky and
+  // stays in the scene, but it is not ground and is kept out of the survey. It
+  // was also the whole of the model's apparent height: the plus or minus 85 was
+  // the skybox radius, not the hill.
+  /** A mesh's own name and those of everything it hangs from, lowercased. */
+  function nameChain(o) {
+    let s = "";
+    for (let n = o; n; n = n.parent) s += (n.name || "").toLowerCase() + "/";
+    return s;
+  }
+
+  const groundMeshes = [], planting = [];
   village.traverse((o) => {
     if (!o.isMesh) return;
-    if (/sky|cloud|backdrop/i.test(o.name || "")) return;
-    groundMeshes.push(o);
+    const chain = nameChain(o);
+    if (/sky|cloud|backdrop/.test(chain)) return;
+    if (cfg.ground && !chain.includes(cfg.ground)) planting.push(o);
+    else groundMeshes.push(o);
   });
 
-  // Bounds of the ground alone, so rays start just above the terrain.
   const bounds = new THREE.Box3();
   for (const m of groundMeshes) bounds.expandByObject(m);
-  const SKY_Y = bounds.max.y + 15;
 
   /**
-   * The ground, and whether it is the sort you can stand on.
+   * Where the ground is, as a grid of heights.
    *
-   * A photogrammetry scan has no idea which of its triangles is a street and
-   * which is a roof, so the only thing to go on is which way the surface
-   * faces. Streets, squares and terraces are close to level; roofs are pitched
-   * and cliffs are vertical. Taking the first face that is flat enough keeps
-   * Ash on the lanes rather than strolling over the rooftops, and if a roof is
-   * all there is, he cannot go that way.
+   * A photogrammetry scan has no height function to ask, and raycasting one is
+   * not an option either: the nature landscape is a million and a half
+   * triangles with no spatial index, so a single ray costs tens of
+   * milliseconds, the survey that looks for somewhere to stand took longer than
+   * the download, and walking would have cost a ray a frame. Visiting every
+   * triangle once and writing it into a grid turns the question into a lookup.
+   *
+   * Which triangles count is the other half of the problem. The scan has no
+   * idea which of its faces is a street and which is a roof, so the only thing
+   * to go on is which way the surface faces: streets, squares and terraces are
+   * close to level, roofs are pitched and cliffs are vertical.
+   *
+   * Where two standable surfaces sit over each other the higher one wins,
+   * which is the answer a ray dropped from the sky gave. A scan that names its
+   * terrain separately says so in its preset, and then only that object is
+   * surveyed — otherwise the tops of the bushes are standable too, and Ash
+   * steps up onto the shrubbery and walks along it.
    */
   const MAX_WALK_SLOPE = 0.62;        // cos of about 52 degrees
+  const CELLS = 640;
+  const GX0 = bounds.min.x, GZ0 = bounds.min.z;
+  const CELL = Math.max(bounds.max.x - GX0, bounds.max.z - GZ0) / CELLS || 1;
 
-  function probe(x, z, from = SKY_Y, walkableOnly = true) {
-    down.set(new THREE.Vector3(x, from, z), DOWN);
-    const hits = down.intersectObjects(groundMeshes, true);
-    for (const h of hits) {
-      if (!walkableOnly) return h.point.y;
-      if (!h.face) return h.point.y;
-      // Face normals are in the mesh's own space; rotate into the world.
-      const n = h.face.normal.clone()
-        .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(h.object.matrixWorld))
-        .normalize();
-      if (Math.abs(n.y) >= MAX_WALK_SLOPE) return h.point.y;
+  /**
+   * Write every standable face of `meshes` into `into`, keeping the highest.
+   *
+   * With `base` given, a face may only raise a cell to `lift` metres above the
+   * height already surveyed there, which is how the grass is told from the
+   * hedge standing in it.
+   */
+  function survey(meshes, into, base = null, lift = 0) {
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+    const put = (cx, cz, y) => {
+      if (cx < 0 || cz < 0 || cx >= CELLS || cz >= CELLS) return;
+      const k = cz * CELLS + cx;
+      if (base) {
+        const floor = base[k];
+        if (!(floor === floor) || y > floor + lift) return;   // NaN, or overhead
+      }
+      if (!(into[k] >= y)) into[k] = y;           // NaN-safe: an empty cell takes it
+    };
+    for (const mesh of meshes) {
+      const geo = mesh.geometry;
+      const pos = geo && geo.getAttribute("position");
+      if (!pos) continue;
+      const idx = geo.getIndex();
+      const tris = Math.floor((idx ? idx.count : pos.count) / 3);
+      const mat = mesh.matrixWorld;
+      for (let t = 0; t < tris; t++) {
+        const i = t * 3;
+        a.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(mat);
+        b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1).applyMatrix4(mat);
+        c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2).applyMatrix4(mat);
+        ab.subVectors(b, a); ac.subVectors(c, a);
+        n.crossVectors(ab, ac);
+        const len = n.length();
+        if (!len || Math.abs(n.y) / len < MAX_WALK_SLOPE) continue;
+        const det = ab.x * ac.z - ac.x * ab.z;
+        if (!det) continue;
+        const cx0 = Math.floor((Math.min(a.x, b.x, c.x) - GX0) / CELL);
+        const cx1 = Math.floor((Math.max(a.x, b.x, c.x) - GX0) / CELL);
+        const cz0 = Math.floor((Math.min(a.z, b.z, c.z) - GZ0) / CELL);
+        const cz1 = Math.floor((Math.max(a.z, b.z, c.z) - GZ0) / CELL);
+        let wrote = false;
+        for (let cz = cz0; cz <= cz1; cz++) {
+          const pz = GZ0 + (cz + 0.5) * CELL;
+          for (let cx = cx0; cx <= cx1; cx++) {
+            const px = GX0 + (cx + 0.5) * CELL;
+            // Barycentric in plan view: where in the triangle this cell centre
+            // falls, and therefore how high the surface is over it.
+            const qx = px - a.x, qz = pz - a.z;
+            const u = (qx * ac.z - ac.x * qz) / det;
+            const v = (ab.x * qz - qx * ab.z) / det;
+            if (u < 0 || v < 0 || u + v > 1) continue;
+            put(cx, cz, a.y + ab.y * u + ac.y * v);
+            wrote = true;
+          }
+        }
+        if (!wrote) {
+          // A triangle smaller than a cell covers no cell centre. Keeping it at
+          // its middle stops the finer parts of a scan coming out as holes.
+          put(Math.floor((((a.x + b.x + c.x) / 3) - GX0) / CELL),
+              Math.floor((((a.z + b.z + c.z) / 3) - GZ0) / CELL),
+              (a.y + b.y + c.y) / 3);
+        }
+      }
     }
-    return null;
   }
 
-  function groundAt(x, z, from = SKY_Y) {
-    return probe(x, z, from, true);
+  const heights = new Float32Array(CELLS * CELLS).fill(NaN);
+  survey(groundMeshes, heights);
+  if (cfg.undergrowth && planting.length) {
+    survey(planting, heights, Float32Array.from(heights), cfg.undergrowth);
+  }
+
+  function cellAt(cx, cz) {
+    if (cx < 0 || cz < 0 || cx >= CELLS || cz >= CELLS) return NaN;
+    return heights[cz * CELLS + cx];
+  }
+
+  /** The height of the ground you can stand on here, or null for nowhere. */
+  function groundAt(x, z) {
+    const fx = (x - GX0) / CELL - 0.5, fz = (z - GZ0) / CELL - 0.5;
+    const x0 = Math.floor(fx), z0 = Math.floor(fz);
+    const tx = fx - x0, tz = fz - z0;
+    const h00 = cellAt(x0, z0), h10 = cellAt(x0 + 1, z0);
+    const h01 = cellAt(x0, z0 + 1), h11 = cellAt(x0 + 1, z0 + 1);
+    if (h00 === h00 && h10 === h10 && h01 === h01 && h11 === h11) {
+      // Four neighbours: interpolate, so a slope is walked and not climbed in
+      // half-metre steps.
+      return (h00 * (1 - tx) + h10 * tx) * (1 - tz)
+           + (h01 * (1 - tx) + h11 * tx) * tz;
+    }
+    // At an edge — a doorway, the lip of a cliff — take the cell underfoot.
+    const y = cellAt(Math.round(fx), Math.round(fz));
+    return y === y ? y : null;
   }
 
   /**
-   * Find the village.
+   * Find the part of the scan worth living on.
    *
-   * The scan is a square of French coastline and Èze is a village on a crag in
-   * the middle of it, so the centre of the bounding box is a road at the foot
-   * of the hill, eighty metres below the streets. Probing a grid and taking the
-   * highest ground finds the town itself, which is the only part worth walking.
+   * Where that is depends on the scan. Èze is a village on a crag in the middle
+   * of a square of French coastline, so the centre of the bounding box is a
+   * road at the foot of the hill, eighty metres below the streets, and the
+   * highest walkable ground is the town. A natural landscape has no town: its
+   * highest ground is a peak, which is steep, small and a poor place to stand a
+   * village of agents. There the middle of the country is what is wanted, so
+   * the anchor is the walkable point nearest the centre at the typical height.
    */
   let TOWN = new THREE.Vector3(0, 0, 0);
   {
-    let best = -Infinity;
-    const reach = Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x),
-                           Math.abs(bounds.min.z), Math.abs(bounds.max.z));
-    const stepG = Math.max(3, reach / 30);
-    for (let gx = -reach; gx <= reach; gx += stepG) {
-      for (let gz = -reach; gz <= reach; gz += stepG) {
-        const y = probe(gx, gz, SKY_Y, true);
-        if (y !== null && y > best) { best = y; TOWN.set(gx, y, gz); }
+    const pts = [];
+    const step = Math.max(1, Math.floor(CELLS / 160));
+    for (let cz = 0; cz < CELLS; cz += step) {
+      for (let cx = 0; cx < CELLS; cx += step) {
+        const y = heights[cz * CELLS + cx];
+        if (y === y) {
+          pts.push(new THREE.Vector3(GX0 + (cx + 0.5) * CELL, y, GZ0 + (cz + 0.5) * CELL));
+        }
       }
     }
-    if (best === -Infinity) TOWN.set(0, groundAt(0, 0) ?? 0, 0);
+    if (!pts.length) {
+      TOWN.set(0, 0, 0);
+    } else if (cfg.anchor === "middle") {
+      const ys = pts.map((q) => q.y).sort((p, q) => p - q);
+      const mid = ys[Math.floor(ys.length / 2)];
+      let best = null, bestD = Infinity;
+      for (const q of pts) {
+        if (Math.abs(q.y - mid) > cfg.band / 2) continue;
+        const d = q.x * q.x + q.z * q.z;
+        if (d < bestD) { bestD = d; best = q; }
+      }
+      TOWN.copy(best || pts[Math.floor(pts.length / 2)]);
+    } else {
+      let best = pts[0];
+      for (const q of pts) if (q.y > best.y) best = q;
+      TOWN.copy(best);
+    }
   }
   const TOWN_Y = TOWN.y;
   // Deep enough to take in the terraces below the summit, shallow enough to
   // keep Ash off the cliff.
-  const TOWN_BAND = 26;
+  const TOWN_BAND = cfg.band;
 
   /** Somewhere on the village itself, not down the rock face. */
   function standable(x, z) {
@@ -272,7 +422,7 @@ export async function createFrenchWorld(canvas) {
     const n = 12;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const r = 8 + (i % 3) * 5;
+      const r = cfg.pitch + (i % 3) * cfg.pitchStep;
       spots.push(standable(TOWN.x + Math.cos(a) * r, TOWN.z + Math.sin(a) * r));
     }
   }
@@ -466,4 +616,9 @@ export async function createFrenchWorld(canvas) {
       };
     },
   };
+}
+
+/** The original entry point, kept so existing callers do not break. */
+export async function createFrenchWorld(canvas) {
+  return createScanWorld(canvas, "french");
 }

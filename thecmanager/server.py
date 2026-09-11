@@ -1441,18 +1441,26 @@ def list_worlds() -> JSONResponse:
     downloaded, so it is offered only when they are present, rather than
     appearing in the menu and failing.
     """
-    need = ["eze_village_-_france.glb", "ash_ketchup_-_pokemon.glb"]
-    have = _LOCAL_3D.is_dir() and all((_LOCAL_3D / n).exists() for n in need)
+    # Each scan world needs its landscape and a character to walk it. The list
+    # mirrors SCANS in french.js; a world whose model is absent is reported
+    # unavailable rather than offered and then failing.
+    scans = [
+        ("french", "French World",
+         ["eze_village_-_france-2.glb", "eze_village_-_france.glb"]),
+        ("nature", "Nature",
+         ["photogrammetry__3d_scan_nature_landscape.glb"]),
+    ]
+    have_ash = _LOCAL_3D.is_dir() and (_LOCAL_3D / "ash_ketchup_-_pokemon.glb").exists()
     pokemon = []
     if _LOCAL_3D.is_dir():
         for f in sorted(_LOCAL_3D.glob("*.glb")):
             n = f.name.lower()
             if any(k in n for k in ("pikachu", "bulbasaur", "charizard", "celebi")):
                 pokemon.append(f.name)
-    return JSONResponse({
-        "worlds": [
-            {"id": "valley", "name": "Valley", "available": True},
-            {"id": "french", "name": "French World", "available": bool(have),
-             "pokemon": pokemon},
-        ]
-    })
+
+    worlds = [{"id": "valley", "name": "Valley", "available": True}]
+    for wid, label, files in scans:
+        ok = have_ash and any((_LOCAL_3D / f).exists() for f in files)
+        worlds.append({"id": wid, "name": label, "available": bool(ok),
+                       "pokemon": pokemon if ok else []})
+    return JSONResponse({"worlds": worlds})
