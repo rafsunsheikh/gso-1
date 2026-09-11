@@ -1603,6 +1603,17 @@ export async function createWorld(canvas) {
              return { scatter: scatterGroups.length, paths: pathGroups.length,
                       pathStones: pathGroups.reduce((n, m) => n + m.count, 0) };
            },
+           setView(v) {
+             // Point the camera somewhere specific. Used for framing a shot,
+             // and the obvious hook for a future "take me to this village".
+             if (v.az !== undefined) orbit.az = v.az;
+             if (v.pol !== undefined) orbit.pol = v.pol;
+             if (v.dist !== undefined) orbit.dist = v.dist;
+             if (v.target) orbit.target.set(v.target[0], v.target[1], v.target[2]);
+             orbit.userMoved = true;
+             applyCamera();
+             kick();
+           },
            get view() {
              return { az: orbit.az, pol: orbit.pol, dist: orbit.dist,
                       target: [orbit.target.x, orbit.target.y, orbit.target.z] };

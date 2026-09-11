@@ -208,6 +208,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
       <a href="#idea">The idea</a>
       <a href="#does">What it does</a>
       <a href="./ops-room.html">Ops Room</a>
+      <a href="#next">Coming next</a>
       <a href="#install">Install</a>
       <a href="./releases.html">Releases</a>
       <a href="https://rafsunsheikh116.medium.com/your-computer-is-a-garrison-it-needs-a-staff-officer-ba23ab762140">Article</a>
@@ -350,9 +351,56 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
   </div>
 </section>
 
+<section id="next" class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">04 / Coming next</span>The World</h2>
+    <p class="say rv">GSO-1 knows which repositories you have, and which agents are working in
+      them. The World is that, as a place. Every project with a Claude session becomes a
+      settlement in a valley, and the figure standing in it is the agent: swinging while it
+      edits, walking between jobs, standing idle when the session goes quiet.</p>
+
+    <figure class="shot rv" style="margin:0">
+      <img src="assets/screenshots/world-valley.jpg" alt="A wide green valley seen from above: a
+        lake with sandy shores, dense pine and broadleaf forest, grey mountains around the rim, and
+        three small settlements labelled chat, auth-service and ledger." />
+      <figcaption>One valley, one settlement per project. The names here are placeholders.</figcaption>
+    </figure>
+
+    <div class="shots">
+      <figure class="shot rv" style="margin:0">
+        <img src="assets/screenshots/world-castle.jpg" alt="A walled castle with stone towers and a
+          gate, standing beside a lake, with a trodden stone path leading up to it through the
+          trees." />
+        <figcaption>A project you have lived in for months earns a castle. One you cloned and left
+          stays a hamlet: the tier comes from how much work has actually happened there.</figcaption>
+      </figure>
+      <figure class="shot rv" style="margin:0">
+        <img src="assets/screenshots/world-village.jpg" alt="A village of market stalls, a windmill
+          and a watchtower, with a small robot figure at work among them and stone paths running
+          between the buildings." />
+        <figcaption>The agent at work. The animation follows the tool it just called, so editing
+          does not look like running a command.</figcaption>
+      </figure>
+    </div>
+
+    <figure class="shot rv" style="margin:0">
+      <img src="assets/screenshots/world-lake.jpg" alt="The valley from a lower angle, looking
+        across water towards wooded hills and distant mountains." />
+      <figcaption>Paths join each settlement to its neighbours. You can also walk it: WASD, mouse
+        to look, and the villages are solid.</figcaption>
+    </figure>
+
+    <p class="say rv">It is built from what GSO-1 already knows, so nothing here is decoration.
+      The stack decides the colours, the transcripts decide the scale, and the tool an agent is
+      running right now decides what it is doing on screen. Scenery is Quaternius' CC0 kits.</p>
+    <p class="say rv"><span class="badge-ok">In development</span> Not in a release yet. It lives
+      on <code>main</code> if you build from source.</p>
+  </div>
+</section>
+
 <section id="install" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">04 / Deployment</span>Install</h2>
+    <h2 class="rv"><span class="num">05 / Deployment</span>Install</h2>
     <table class="rv">
       <tr><th>Platform</th><th>Download {{VERSION}}</th></tr>
       <tr><td>macOS (Apple Silicon)</td><td>
@@ -387,7 +435,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
         then "Run anyway".</p>
     </div>
 
-    <h2 class="rv" style="margin-top:52px"><span class="num">05 / From source</span>Or build it yourself</h2>
+    <h2 class="rv" style="margin-top:52px"><span class="num">06 / From source</span>Or build it yourself</h2>
     <pre class="rv"><span class="c"># requires Python 3.11+</span>
 git clone https://github.com/rafsunsheikh/gso-1.git
 cd gso-1
@@ -398,7 +446,7 @@ cp .env.example .env
 
 <section class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">06 / Standing orders</span>A note on what it can do</h2>
+    <h2 class="rv"><span class="num">07 / Standing orders</span>A note on what it can do</h2>
     <p class="say rv">GSO-1 starts processes and runs commands as you. That is the feature, and it
       is also the threat model.</p>
     <p class="say rv"><span class="badge-ok">Loopback only by default</span>, unreachable from your
