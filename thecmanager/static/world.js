@@ -889,18 +889,33 @@ export async function createWorld(canvas) {
              body: bodyMat, rim: rimRef, pad, tool, toolText: null, rise: 0 };
   }
 
+  // Every project owns one slot on a golden-angle spiral, chosen from its name
+  // and nothing else. The obvious version indexed the spiral by position in the
+  // sorted list, which meant opening Claude in a project whose name sorts early
+  // moved every other village in the valley. A place should stay where you left
+  // it.
+  const SLOTS = 720;
+
+  function slotFor(name, taken) {
+    let n = Math.floor(hash(name + "slot") * SLOTS) % SLOTS;
+    // Two names can land on the same slot; probe forward so the loser still
+    // gets a fixed home rather than overlapping the winner.
+    for (let t = 0; t < SLOTS && taken.has(n); t++) n = (n + 1) % SLOTS;
+    taken.add(n);
+    return n;
+  }
+
   function layout() {
-    // Villages sit where their name puts them, on a landscape big enough to
-    // walk across. A ring was fine to look down on; you cannot roam a ring.
+    // Sorted only so that a slot clash resolves the same way every time, not
+    // because position depends on the order.
     const keys = [...plots.keys()].sort();
-    keys.forEach((k, i) => {
+    const taken = new Set();
+    keys.forEach((k) => {
       const p = plots.get(k);
-      // Golden-angle spiral: even spacing, no two plots on top of each other,
-      // and a given project keeps its place as neighbours come and go.
-      const n = i + 1;
-      // The spiral spaces villages evenly; the jitter stops them looking placed.
-      let a = n * 2.399963 + hash(k) * 1.5;
-      let r = (34 * Math.sqrt(n) + 16) * (0.78 + hash(k + "r") * 0.5);
+      const n = slotFor(k, taken);
+      let a = n * 2.399963;
+      // sqrt spreads the slots evenly over the disc rather than crowding the rim.
+      let r = 44 + Math.sqrt((n + 0.5) / SLOTS) * (TERRAIN.size * 0.36);
       // Nudge round the spiral until the site is dry land.
       for (let t = 0; t < 24; t++) {
         const x = Math.cos(a) * r, z = Math.sin(a) * r;
