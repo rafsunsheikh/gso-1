@@ -231,11 +231,12 @@ function instance(parts, name, opts = {}) {
 }
 
 export async function createWorld(canvas) {
-  const [workerParts, propParts, kitParts, groundParts, agentGltf] = await Promise.all([
+  const [workerParts, propParts, kitParts, groundParts, floraParts, agentGltf] = await Promise.all([
     loadParts("/static/models/worker.json"),
     loadParts("/static/models/props.json"),
     loadParts("/static/models/kit.json"),
     loadParts("/static/models/ground.json"),
+    loadParts("/static/models/flora.json"),
     // The agent is a rigged character with seventeen animation clips, which is
     // the one thing the JSON pipeline cannot express: skinning needs real
     // glTF, so GLTFLoader is vendored for this and only this.
@@ -487,6 +488,17 @@ export async function createWorld(canvas) {
    * anything that lands too close to a village is dropped so the settlements
    * keep their clearings.
    */
+  // A seeded PRNG, not the string hash. Hashing "tree_x_1", "tree_x_2" and so
+  // on gave correlated values for sequential inputs, and the forest came out in
+  // visible rows. mulberry32 decorrelates properly and is still deterministic,
+  // so the wood is random-looking but in the same place every time.
+  const rng = (seed) => () => {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
   function scatterNature(clearings) {
     for (const g of scatterGroups) {
       scene.remove(g);
@@ -496,17 +508,7 @@ export async function createWorld(canvas) {
 
     const spread = TERRAIN.size * 0.46;
 
-    // A seeded PRNG, not the string hash. Hashing "tree_x_1", "tree_x_2" and so
-    // on gave correlated values for sequential inputs, and the forest came out
-    // in visible rows. mulberry32 decorrelates properly and is still
-    // deterministic, so the wood is random-looking but in the same place every
-    // time you come back.
-    const rng = (seed) => () => {
-      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+    // The PRNG lives at module scope so paths can use it too.
     // Ground cover first, then the things that stand up out of it. `from`
     // picks the kit each model lives in: the fantasy buildings have no
     // textures, the nature ground cover does.
@@ -514,13 +516,34 @@ export async function createWorld(canvas) {
       { from: groundParts, model: "Grass",             count: 5200, scale: [1.6, 3.2],  maxHeight: 16 },
       { from: groundParts, model: "Grass Wispy",       count: 3200, scale: [1.6, 3.0],  maxHeight: 14 },
       { from: groundParts, model: "Flower Group",      count: 1500,  scale: [1.2, 2.4],  maxHeight: 10 },
-      { from: groundParts, model: "Bush",              count: 1500,  scale: [2.4, 5.0],  maxHeight: 18 },
-      { from: groundParts, model: "Bush with Flowers", count: 600,  scale: [2.4, 4.4],  maxHeight: 12 },
-      { from: groundParts, model: "Fern",              count: 1100,  scale: [1.6, 3.4],  maxHeight: 14 },
+      { from: groundParts, model: "Bush",              count: 800,  scale: [2.4, 5.0],  maxHeight: 18 },
+      { from: groundParts, model: "Bush with Flowers", count: 220,  scale: [2.4, 4.4],  maxHeight: 12 },
+      { from: groundParts, model: "Fern",              count: 1400,  scale: [1.6, 3.4],  maxHeight: 14 },
       { from: groundParts, model: "Mushroom",          count: 340,  scale: [1.0, 2.2],  maxHeight: 10 },
       { from: groundParts, model: "Pebble Round",      count: 700,  scale: [1.0, 2.6],  maxHeight: 30 },
-      { from: kitParts,    model: "tree",              count: 2600, scale: [9, 19],     maxHeight: 24 },
-      { from: kitParts,    model: "trees",             count: 1300,  scale: [8, 16],     maxHeight: 20 },
+      // Mixed woodland. One repeated pine read as a plantation; four species
+      // with two variants each, weighted so the cheap models carry the volume
+      // and the expensive twisted trees are occasional landmarks.
+      { from: kitParts,   model: "tree",                     count: 900, scale: [9, 19],  maxHeight: 24 },
+      { from: kitParts,   model: "trees",                    count: 600, scale: [8, 16],  maxHeight: 20 },
+      { from: floraParts, model: "Pine",                     count: 700, scale: [7, 15],  maxHeight: 26 },
+      { from: floraParts, model: "Pine-Zt62gceKXZ",          count: 600, scale: [7, 16],  maxHeight: 26 },
+      { from: floraParts, model: "Tree",                     count: 650, scale: [8, 17],  maxHeight: 20 },
+      { from: floraParts, model: "Tree-t9KbsfYdXz",          count: 550, scale: [8, 16],  maxHeight: 20 },
+      // The twisted tree's leaf atlas is crimson: it is the kit's autumn
+      // variant. Two hundred of them turned a green valley red, so they are
+      // rare now, which is what a landmark should be.
+      { from: floraParts, model: "Twisted Tree-9aWlx82xUf",  count: 22, scale: [11, 22], maxHeight: 16 },
+      { from: floraParts, model: "Twisted Tree-GVTsMmuzv7",  count: 18,  scale: [11, 21], maxHeight: 16 },
+      // Dead trees take the high thin ground where little else grows.
+      { from: floraParts, model: "Dead Tree-CD4edbPSGm",     count: 130, scale: [8, 15],  minHeight: 8, maxHeight: 30 },
+      { from: floraParts, model: "Dead Tree-n8FhMgMldD",     count: 110, scale: [8, 14],  minHeight: 8, maxHeight: 30 },
+      { from: floraParts, model: "Tall Grass",               count: 3000, scale: [1.4, 3.0], maxHeight: 16 },
+      { from: floraParts, model: "Clover",                   count: 2000, scale: [1.2, 2.4], maxHeight: 12 },
+      { from: floraParts, model: "Plant",                    count: 900,  scale: [1.2, 2.6], maxHeight: 16 },
+      { from: floraParts, model: "Plant Big",                count: 420,  scale: [1.6, 3.4], maxHeight: 16 },
+      { from: floraParts, model: "Flower Single",            count: 800,  scale: [1.0, 2.0], maxHeight: 10 },
+      { from: floraParts, model: "Rock Medium",              count: 260,  scale: [1.6, 4.0], maxHeight: 40 },
       { from: kitParts,    model: "rock",              count: 800,  scale: [2, 8],      maxHeight: 70 },
       { from: kitParts,    model: "logs",              count: 220,  scale: [1.6, 3.0],  maxHeight: 12 },
       // The rim. Big enough to read as mountains from the valley floor.
@@ -611,6 +634,100 @@ export async function createWorld(canvas) {
     }
   }
   const scatterGroups = [];
+  const pathGroups = [];
+
+  /**
+   * Trodden paths between the villages.
+   *
+   * Stones laid along a line from each settlement to its nearest neighbour,
+   * wandering a little either side and skipping anything that would fall in a
+   * lake. They are what makes the valley look inhabited rather than merely
+   * occupied: a place people walk between, not six camps in a wood.
+   */
+  function layPaths(sites) {
+    for (const g of pathGroups) scene.remove(g);
+    pathGroups.length = 0;
+    if (sites.length < 2) return;
+
+    const stones = ["Rock Path Round Small", "Rock Path Round Thin",
+                    "Rock Path Round Wide", "Rock Path Square Smal",
+                    "Rock Path Square Thin", "Rock Path Square Wide"]
+      .filter((n) => [...floraParts.keys()].some((k) => k.startsWith(n + "__")));
+    if (!stones.length) return;
+
+    const rand = rng(20260911);
+    const perStone = new Map(stones.map((n) => [n, []]));
+
+    for (let i = 0; i < sites.length; i++) {
+      // Join each village to the nearest one it is not already joined to.
+      // The two nearest, so the valley is a network rather than a chain.
+      const near = sites
+        .map((s2, j) => ({ j, d: sites[i].distanceTo(s2) }))
+        .filter((o) => o.j !== i)
+        .sort((p1, p2) => p1.d - p2.d)
+        .slice(0, 2);
+      for (const { j: best, d: bestD } of near) {
+      const a = sites[i], b = sites[best];
+      // One stone every metre and a half: further apart and it reads as
+      // litter rather than a trail.
+      const steps = Math.max(16, Math.round(bestD / 1.5));
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        // A gentle sideways wander, strongest in the middle of the run.
+        const sway = Math.sin(t * Math.PI) * (rand() - 0.5) * 26;
+        const nx = -(b.z - a.z) / bestD, nz = (b.x - a.x) / bestD;
+        const x = a.x + (b.x - a.x) * t + nx * sway + (rand() - 0.5) * 2.4;
+        const z = a.z + (b.z - a.z) * t + nz * sway + (rand() - 0.5) * 2.4;
+        const y = terrainY(x, z);
+        if (y < WATER_LEVEL + 1.0) continue;          // the path fords nothing
+        const name = stones[(rand() * stones.length) | 0];
+        // A second stone alongside, so the trail has width and does not read
+        // as a dotted line.
+        if (rand() < 0.6) {
+          const ox = nx * (rand() - 0.5) * 5.0, oz = nz * (rand() - 0.5) * 5.0;
+          const y2 = terrainY(x + ox, z + oz);
+          if (y2 > WATER_LEVEL + 1.0) {
+            const n2 = stones[(rand() * stones.length) | 0];
+            perStone.get(n2).push({ x: x + ox, y: y2, z: z + oz,
+                                    s: 2.2 + rand() * 2.4, r: rand() * Math.PI * 2 });
+          }
+        }
+        perStone.get(name).push({ x, y, z, s: 2.6 + rand() * 2.6, r: rand() * Math.PI * 2 });
+      }
+      }
+    }
+
+    for (const [name, spots] of perStone) {
+      if (!spots.length) continue;
+      for (const key of floraParts.keys()) {
+        if (!key.startsWith(name + "__")) continue;
+        const part = floraParts.get(key);
+        const mesh = new THREE.InstancedMesh(
+          part.geo,
+          new THREE.MeshStandardMaterial({
+            color: part.map ? new THREE.Color(0xffffff) : part.colour.clone(),
+            map: part.map || null,
+            alphaTest: part.map ? 0.5 : 0,
+            side: part.map ? THREE.DoubleSide : THREE.FrontSide,
+            roughness: 0.95, flatShading: !part.map,
+          }),
+          spots.length,
+        );
+        const m = new THREE.Object3D();
+        spots.forEach((sp, i) => {
+          m.position.set(sp.x, sp.y, sp.z);
+          m.rotation.set(0, sp.r, 0);
+          m.scale.setScalar(sp.s);
+          m.updateMatrix();
+          mesh.setMatrixAt(i, m.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.frustumCulled = false;
+        scene.add(mesh);
+        pathGroups.push(mesh);
+      }
+    }
+  }
 
   // ---- the active plots ----------------------------------------------------
   const plots = new Map();       // project -> { group, figure, arm, target, t }
@@ -829,8 +946,11 @@ export async function createWorld(canvas) {
     if (changed) layout();
 
     if (changed || !scatterGroups.length) {
-      scatterNature([...plots.values()].map(
-        (p) => p.target || new THREE.Vector3()));
+      const sites = [...plots.values()]
+        .map((p) => p.target)
+        .filter(Boolean);
+      scatterNature(sites);
+      layPaths(sites);
     }
     agents = next;
     needsFrame = true;
@@ -1416,6 +1536,10 @@ export async function createWorld(canvas) {
            setRoam, nearestPlot, get roaming() { return roam.on; },
            // Exposed so the camera can be asserted about rather than guessed
            // at from pixels: a turn and a pan both change the picture.
+           get counts() {
+             return { scatter: scatterGroups.length, paths: pathGroups.length,
+                      pathStones: pathGroups.reduce((n, m) => n + m.count, 0) };
+           },
            get view() {
              return { az: orbit.az, pol: orbit.pol, dist: orbit.dist,
                       target: [orbit.target.x, orbit.target.y, orbit.target.z] };

@@ -133,7 +133,12 @@ def save_textures(j, blob, wanted):
         if i not in wanted:
             continue
         name = (im.get("name") or "").lower()
-        if "normal" in name:            # flat shading; a normal map is dead weight
+        # Drop normal maps, which flat shading has no use for. Matching on the
+        # word alone threw away Bark_NormalTree, the bark of a tree species
+        # actually called "Normal Tree", and those trees then rendered white.
+        # Only the _Normal suffix marks a normal map.
+        stem = name.rsplit(".", 1)[0]
+        if stem.endswith("_normal") or stem.endswith("normalmap"):
             continue
         if "bufferView" not in im:
             continue
