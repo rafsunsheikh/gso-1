@@ -63,8 +63,16 @@ export async function createFrenchWorld(canvas) {
   const loader = new GLTFLoader();
   const load = (file) => loader.loadAsync(ASSETS + encodeURIComponent(file));
 
+  // Both Èze files carry identical geometry, 302,022 triangles either way; the
+  // difference is 7.5 MB of texture against 86 MB. Take the sharp one when it
+  // is there, because close up the cheap one is visibly smeared.
+  const villageFile = await fetch(ASSETS + encodeURIComponent("eze_village_-_france-2.glb"),
+                                  { method: "HEAD" })
+    .then((r) => (r.ok ? "eze_village_-_france-2.glb" : "eze_village_-_france.glb"))
+    .catch(() => "eze_village_-_france.glb");
+
   const [villageGltf, ashGltf, ...pokeGltf] = await Promise.all([
-    load("eze_village_-_france.glb"),
+    load(villageFile),
     load("ash_ketchup_-_pokemon.glb"),
     ...POKEMON.map((p) => load(p.file).catch(() => null)),
   ]);
@@ -128,10 +136,35 @@ export async function createFrenchWorld(canvas) {
   for (const m of groundMeshes) bounds.expandByObject(m);
   const SKY_Y = bounds.max.y + 15;
 
-  function groundAt(x, z, from = SKY_Y) {
+  /**
+   * The ground, and whether it is the sort you can stand on.
+   *
+   * A photogrammetry scan has no idea which of its triangles is a street and
+   * which is a roof, so the only thing to go on is which way the surface
+   * faces. Streets, squares and terraces are close to level; roofs are pitched
+   * and cliffs are vertical. Taking the first face that is flat enough keeps
+   * Ash on the lanes rather than strolling over the rooftops, and if a roof is
+   * all there is, he cannot go that way.
+   */
+  const MAX_WALK_SLOPE = 0.62;        // cos of about 52 degrees
+
+  function probe(x, z, from = SKY_Y, walkableOnly = true) {
     down.set(new THREE.Vector3(x, from, z), DOWN);
-    const hit = down.intersectObjects(groundMeshes, true);
-    return hit.length ? hit[0].point.y : null;
+    const hits = down.intersectObjects(groundMeshes, true);
+    for (const h of hits) {
+      if (!walkableOnly) return h.point.y;
+      if (!h.face) return h.point.y;
+      // Face normals are in the mesh's own space; rotate into the world.
+      const n = h.face.normal.clone()
+        .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(h.object.matrixWorld))
+        .normalize();
+      if (Math.abs(n.y) >= MAX_WALK_SLOPE) return h.point.y;
+    }
+    return null;
+  }
+
+  function groundAt(x, z, from = SKY_Y) {
+    return probe(x, z, from, true);
   }
 
   /**
@@ -150,7 +183,7 @@ export async function createFrenchWorld(canvas) {
     const stepG = Math.max(3, reach / 30);
     for (let gx = -reach; gx <= reach; gx += stepG) {
       for (let gz = -reach; gz <= reach; gz += stepG) {
-        const y = groundAt(gx, gz);
+        const y = probe(gx, gz, SKY_Y, true);
         if (y !== null && y > best) { best = y; TOWN.set(gx, y, gz); }
       }
     }
