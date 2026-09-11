@@ -64,15 +64,32 @@ def _require(name: str) -> None:
 _ASSET_REF = re.compile(r'(href|src)="(/static/[^"?]+)"')
 
 
+# A module pulled in with a dynamic import is not an href or a src, so the
+# pattern above never saw it. ES modules are cached hard, by the HTTP cache and
+# then again in the page's module map, so world.js went on being the version the
+# browser first fetched however many times the file changed underneath it.
+_IMPORT_REF = re.compile(r'import\(\s*"(/static/[^"?]+)"\s*\)')
+
+
 def _stamp_assets(html: str) -> str:
+    def stamp(path: str) -> str:
+        target = STATIC_DIR / path[len("/static/"):]
+        return f"{path}?v={int(target.stat().st_mtime)}"
+
     def sub(m: re.Match) -> str:
         attr, path = m.group(1), m.group(2)
-        target = STATIC_DIR / path[len("/static/"):]
         try:
-            return f'{attr}="{path}?v={int(target.stat().st_mtime)}"'
+            return f'{attr}="{stamp(path)}"'
         except OSError:
             return m.group(0)
-    return _ASSET_REF.sub(sub, html)
+
+    def sub_import(m: re.Match) -> str:
+        try:
+            return f'import("{stamp(m.group(1))}")'
+        except OSError:
+            return m.group(0)
+
+    return _IMPORT_REF.sub(sub_import, _ASSET_REF.sub(sub, html))
 
 
 def _page(name: str) -> HTMLResponse:
@@ -1389,4 +1406,21 @@ def browse(path: str = "") -> JSONResponse:
     )
 
 
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+class _RevalidatingStatic(StaticFiles):
+    """Static files that must be checked before they are reused.
+
+    Stamping the HTML covers what the HTML mentions, but world.js fetches its
+    own models and imports the vendored three.js, and none of those are visible
+    to the stamper. `no-cache` does not mean "do not store": it means ask first,
+    and with the ETag already being sent an unchanged file costs a 304 and no
+    body. The alternative was shipping a change and having the browser quietly
+    keep running the previous one, which is a miserable thing to debug.
+    """
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+app.mount("/static", _RevalidatingStatic(directory=str(STATIC_DIR)), name="static")

@@ -1077,7 +1077,10 @@ export async function createWorld(canvas) {
     // Left turns, middle drags the map about. Right is left alone so the
     // browser's own menu, and Save image with it, still works.
     if (e.button === 2) return;
-    dragging = { x: e.clientX, y: e.clientY, mode: e.button === 1 ? "pan" : "turn" };
+    // Shift-drag pans as well as the middle button, because a Magic Mouse and
+    // a trackpad have no middle button to press.
+    const pan = e.button === 1 || e.shiftKey;
+    dragging = { x: e.clientX, y: e.clientY, mode: pan ? "pan" : "turn" };
     if (e.button === 1) e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
   });
@@ -1411,6 +1414,12 @@ export async function createWorld(canvas) {
 
   return { update, frame, resize, dispose, pick, select, onNeedsFrame,
            setRoam, nearestPlot, get roaming() { return roam.on; },
+           // Exposed so the camera can be asserted about rather than guessed
+           // at from pixels: a turn and a pan both change the picture.
+           get view() {
+             return { az: orbit.az, pol: orbit.pol, dist: orbit.dist,
+                      target: [orbit.target.x, orbit.target.y, orbit.target.z] };
+           },
            resetCamera: () => {
              orbit.userMoved = false;
              orbit.target.set(0, 4, 0);
