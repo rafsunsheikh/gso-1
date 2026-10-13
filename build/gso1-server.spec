@@ -43,6 +43,9 @@ if os.path.isfile(os.path.join(PRO, "ADDONS")):
     from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
     pathex.append(PRO)
+    # collect_submodules imports the packages: they must be findable while the spec runs.
+    import sys
+    sys.path.insert(0, PRO)
     datas.append((os.path.join(PRO, "ADDONS"), "pro"))
     for name in [n.strip() for n in open(os.path.join(PRO, "ADDONS")) if n.strip() and not n.startswith("#")]:
         hidden += collect_submodules(name)
