@@ -37,6 +37,11 @@ jobs:
       - name: Byte-compile every module
         run: python -m compileall -q thecmanager supervisor
 
+      - name: Tests
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest -q tests
+
       - name: Import the app
         # Catches the failure that matters most: a server that cannot start.
         env:
@@ -98,6 +103,10 @@ jobs:
         # `git add -f` away from being published with it.
         run: |
           bad=0
+          if git ls-files data | grep -vE '^data/\.gitkeep$' | grep -q .; then
+            echo "::error::runtime data under data/ is tracked and must not be"
+            bad=1
+          fi
           for f in .env data/credentials.json data/settings.json data/registry.json; do
             if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
               echo "::error::$f is tracked and must not be"

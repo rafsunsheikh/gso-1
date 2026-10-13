@@ -79,6 +79,20 @@ def server_bin() -> Optional[str]:
     return None
 
 
+def is_mmproj(path: str | Path) -> bool:
+    """The image part of a vision model (llama.cpp's "multimodal projector"), not a model of its own."""
+    return "mmproj" in Path(path).name.lower()
+
+
+def mmproj_for(model_path: str) -> Optional[str]:
+    """The image part that belongs to a model: an mmproj .gguf in the same folder."""
+    folder = Path(model_path).parent
+    if not folder.is_dir():
+        return None
+    found = sorted(f for f in folder.glob("*.gguf") if is_mmproj(f))
+    return str(found[0].resolve()) if found else None
+
+
 def list_models() -> list[dict]:
     models: list[dict] = []
     seen: set[str] = set()
@@ -87,6 +101,8 @@ def list_models() -> list[dict]:
         if not base.exists():
             continue
         for f in base.rglob("*.gguf"):
+            if is_mmproj(f):
+                continue
             try:
                 size = f.stat().st_size
             except OSError:
@@ -103,6 +119,8 @@ def list_models() -> list[dict]:
                     "path": rp,
                     "size_gb": round(size / 1e9, 1),
                     "dir": str(f.parent),
+                    # It can read pictures when its image part sits next to it.
+                    "vision": mmproj_for(rp) is not None,
                 }
             )
     models.sort(key=lambda m: m["name"].lower())
@@ -137,6 +155,8 @@ DEFAULT_PRESET: dict = {
     "context_shift": True,
     "cache_type_k": "q8_0",
     "cache_type_v": "q8_0",
+    # Load the image part when the model has one, so it can describe photos.
+    "vision": True,
 }
 
 _PRESET_KEYS = frozenset(DEFAULT_PRESET) | {"port"}
@@ -154,6 +174,36 @@ def presets() -> dict:
 
 def last_model() -> str:
     return str(_llm_settings().get("last_model") or "")
+
+
+def autostart_model() -> str:
+    """The model started whenever GSO-1 starts, or "" for none."""
+    return str(_llm_settings().get("autostart") or "")
+
+
+def set_autostart(model_path: str) -> None:
+    """Remember (or, with "", forget) the model to start with GSO-1."""
+    settings = config.load_settings()
+    block = settings.get("llm")
+    block = dict(block) if isinstance(block, dict) else {}
+    block["autostart"] = model_path or ""
+    settings["llm"] = block
+    config.save_settings(settings)
+
+
+def start_autostart_model() -> dict:
+    """Start the chosen model on its remembered flags, unless a server already answers.
+    Called in the background when GSO-1 starts, so a slow model never delays the dashboard."""
+    path = autostart_model()
+    if not path:
+        return {"ok": False, "message": "No model is set to start with GSO-1."}
+    flags = preset_for(path)
+    port = flags.pop("port", 0) or default_port()
+    if _health(port):
+        return {"ok": True, "message": f"A server already answers on port {port}."}
+    if not Path(path).exists():
+        return {"ok": False, "message": f"Model not found: {path}"}
+    return start(model_path=path, port=port, **{k: v for k, v in flags.items() if k in DEFAULT_PRESET})
 
 
 def preset_for(model_path: str) -> dict:
@@ -335,6 +385,7 @@ def start(
     context_shift: bool = True,
     cache_type_k: str = "q8_0",
     cache_type_v: str = "q8_0",
+    vision: bool = True,
 ) -> dict:
     global _proc
     port = port or default_port()
@@ -383,6 +434,9 @@ def start(
         cmd += ["-ctk", cache_type_k]
     if cache_type_v:
         cmd += ["-ctv", cache_type_v]
+    mmproj = mmproj_for(model_path) if vision else None
+    if mmproj:
+        cmd += ["--mmproj", mmproj]
     if jinja:
         cmd.append("--jinja")
     if alias:

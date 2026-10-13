@@ -359,7 +359,12 @@ def display_name() -> str:
     Returned whole rather than reduced to a first name: splitting on the first
     word greets "MD Rafsun Sheikh" as "MD", and every rule for spotting a
     prefix is wrong for somebody.
+
+    MANAGER_DISPLAY_NAME overrides it (a demo, a screen recording).
     """
+    override = os.environ.get("MANAGER_DISPLAY_NAME", "").strip()
+    if override:
+        return override
     try:
         import pwd
 

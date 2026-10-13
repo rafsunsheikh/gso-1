@@ -28,13 +28,42 @@ hidden = (
     + ["thecmanager", "supervisor"]
 )
 
+# The dashboard is a static bundle read from disk at request time; without
+# it the server starts and serves nothing.
+datas = [(os.path.join(ROOT, "thecmanager", "static"), "thecmanager/static")]
+binaries = []
+pathex = [ROOT]
+
+# A Pro build: add-ons in pro/ (a private checkout, absent from this repository)
+# are bundled as compiled code, with their static files and the list of names
+# the loader reads (pro/ADDONS). Each add-on can name extra packages it needs
+# in pro/<name>/BUNDLE (one per line). A plain checkout builds the free app.
+PRO = os.path.join(ROOT, "pro")
+if os.path.isfile(os.path.join(PRO, "ADDONS")):
+    from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
+    pathex.append(PRO)
+    # collect_submodules imports the packages: they must be findable while the spec runs.
+    import sys
+    sys.path.insert(0, PRO)
+    datas.append((os.path.join(PRO, "ADDONS"), "pro"))
+    for name in [n.strip() for n in open(os.path.join(PRO, "ADDONS")) if n.strip() and not n.startswith("#")]:
+        hidden += collect_submodules(name)
+        web = os.path.join(PRO, name, "web")
+        if os.path.isdir(web):
+            datas.append((web, f"{name}/web"))
+        extra = os.path.join(PRO, name, "BUNDLE")
+        for pkg in [p.strip() for p in open(extra)] if os.path.isfile(extra) else []:
+            if pkg and not pkg.startswith("#"):
+                hidden += collect_submodules(pkg)
+                datas += collect_data_files(pkg)
+                binaries += collect_dynamic_libs(pkg)
+
 a = Analysis(
     [os.path.join(SPECPATH, "gso1_server_entry.py")],
-    pathex=[ROOT],
-    binaries=[],
-    # The dashboard is a static bundle read from disk at request time; without
-    # it the server starts and serves nothing.
-    datas=[(os.path.join(ROOT, "thecmanager", "static"), "thecmanager/static")],
+    pathex=pathex,
+    binaries=binaries,
+    datas=datas,
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
