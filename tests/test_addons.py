@@ -24,10 +24,16 @@ def addon_dir(tmp_path, monkeypatch):
         def hello():
             return {"hello": "world"}
 
+        pages = APIRouter()
+
+        @pages.get("/back")
+        def back():
+            return {"page": "back"}
+
         GSO1_ADDON = {
             "id": "sample", "label": "Sample", "feature": "sample-feature",
             "views": [{"id": "home", "label": "Home"}],
-            "router": router, "static": Path(__file__).parent / "web",
+            "router": router, "pages": pages, "static": Path(__file__).parent / "web",
             "scripts": ["app.js"], "startup": lambda: started.append(1),
         }
     '''))
@@ -47,6 +53,7 @@ def test_locked_without_a_licence(addon_dir, monkeypatch):
     addons.load(app)
     c = _client(app)
     assert c.get("/api/addons/sample/hello").status_code == 402
+    assert c.get("/x/sample/back").status_code == 402
     m = addons.manifest()["addons"][0]
     assert m["licensed"] is False and m["scripts"] == []
     assert "sample-feature" in licensing.pro_features()
@@ -61,6 +68,7 @@ def test_unlocked_with_a_licence(addon_dir, monkeypatch):
     addons.load(app)
     c = _client(app)
     assert c.get("/api/addons/sample/hello").json() == {"hello": "world"}
+    assert c.get("/x/sample/back").json() == {"page": "back"}
     assert "sampleLoaded" in c.get("/addons/sample/app.js").text
     m = addons.manifest()["addons"][0]
     assert m["licensed"] is True and m["scripts"] == ["/addons/sample/app.js"]

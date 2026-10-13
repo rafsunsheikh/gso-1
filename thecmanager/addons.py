@@ -9,6 +9,8 @@ GSO1_ADDONS_DIR). It describes itself with a module-level `GSO1_ADDON` dict:
         "views": [{"id": "inbox", "label": "Inbox"}],
         "feature": "notes",            # licence feature; every add-on is Pro
         "router": APIRouter(...),      # served under /api/addons/<id>
+        "pages": APIRouter(...),       # optional: plain pages under /x/<id> (for example the
+                                       # address a sign-in with Google returns to)
         "static": Path(...),           # served under /addons/<id>/
         "scripts": ["app.js"], "styles": ["app.css"],  # loaded by the page
         "startup": callable,           # optional background work, only when licensed
@@ -84,6 +86,9 @@ def load(app: FastAPI) -> list[dict[str, Any]]:
         router = spec.get("router")
         if isinstance(router, APIRouter):
             app.include_router(router, prefix=f"/api/addons/{aid}", dependencies=[Depends(_gate(feature))])
+        pages = spec.get("pages")
+        if isinstance(pages, APIRouter):
+            app.include_router(pages, prefix=f"/x/{aid}", dependencies=[Depends(_gate(feature))])
         static = spec.get("static")
         if static and Path(static).is_dir():
             app.mount(f"/addons/{aid}", StaticFiles(directory=str(static)), name=f"addon-{aid}")
