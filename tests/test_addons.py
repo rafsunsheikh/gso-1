@@ -95,3 +95,12 @@ def test_licence_routes_in_the_app():
     r = c.post("/api/license", json={"key": "GSO1.not.valid"}, headers={"origin": "http://127.0.0.1:8420"})
     assert r.status_code == 400 and r.json()["ok"] is False
     assert c.get("/api/addons").json() == {"addons": [], "errors": []}
+
+
+def test_a_frozen_build_finds_addons_by_the_list_file(addon_dir, monkeypatch):
+    # In a Pro build the code is compiled into the app and only pro/ADDONS names it.
+    (addon_dir / "ADDONS").write_text("# bundled add-ons\nsample_addon\n")
+    monkeypatch.setattr(licensing, "tier", lambda: "pro")
+    app = FastAPI()
+    addons.load(app)
+    assert [m["id"] for m in addons.manifest()["addons"]] == ["sample"]

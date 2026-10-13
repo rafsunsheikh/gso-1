@@ -58,11 +58,18 @@ def discover() -> list[dict[str, Any]]:
     for base in addon_dirs():
         if str(base) not in sys.path:
             sys.path.insert(0, str(base))
-        for pkg in sorted(p for p in base.iterdir() if (p / "__init__.py").is_file()):
+        # A frozen (Pro) build carries the add-ons as compiled code, named in pro/ADDONS;
+        # a source checkout has them as package folders.
+        listed = base / "ADDONS"
+        if listed.is_file():
+            names = [n.strip() for n in listed.read_text().splitlines() if n.strip() and not n.startswith("#")]
+        else:
+            names = sorted(p.name for p in base.iterdir() if (p / "__init__.py").is_file())
+        for name in names:
             try:
-                module = importlib.import_module(pkg.name)
+                module = importlib.import_module(name)
             except Exception as e:  # noqa: BLE001
-                _errors.append({"addon": pkg.name, "error": f"{type(e).__name__}: {e}"})
+                _errors.append({"addon": name, "error": f"{type(e).__name__}: {e}"})
                 continue
             spec = getattr(module, "GSO1_ADDON", None)
             if isinstance(spec, dict) and spec.get("id") and not any(a["id"] == spec["id"] for a in found):
