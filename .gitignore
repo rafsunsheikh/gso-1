@@ -13,6 +13,8 @@ data/*.json
 data/schedule_state.json
 !data/.gitkeep
 data/*.jsonl
+# Add-on data (Personal Communication keeps messages, files and its key here).
+data/*/
 
 # Local design handoff archives, not part of the distribution
 *.zip
