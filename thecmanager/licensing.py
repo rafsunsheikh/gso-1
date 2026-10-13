@@ -49,6 +49,9 @@ PRO_FEATURES = (
     "remote",         # the phone companion and the Telegram bridge
 )
 
+# Pro features added at run time by optional add-ons (see addons.py).
+_extra_pro: list[str] = []
+
 _lock = threading.Lock()
 _LICENCE_FILE = config.DATA_DIR / "license.json"
 _KEY_PREFIX = "GSO1"
@@ -128,9 +131,19 @@ def tier() -> str:
     return status().get("tier", "free")
 
 
+def register_pro_feature(feature: str) -> None:
+    """Mark a feature as Pro. Add-ons call this: every add-on is a Pro feature."""
+    if feature not in PRO_FEATURES and feature not in _extra_pro:
+        _extra_pro.append(feature)
+
+
+def pro_features() -> list[str]:
+    return list(PRO_FEATURES) + _extra_pro
+
+
 def allows(feature: str) -> bool:
     """Whether this copy may use `feature`. Anything unlisted is free."""
-    if feature in PRO_FEATURES:
+    if feature in PRO_FEATURES or feature in _extra_pro:
         return tier() != "free"
     return True
 
@@ -162,6 +175,6 @@ def snapshot() -> dict[str, Any]:
     """Everything the UI needs to decide what to show."""
     s = status()
     s["free_features"] = list(FREE_FEATURES)
-    s["pro_features"] = list(PRO_FEATURES)
-    s["locked"] = [] if s["tier"] != "free" else list(PRO_FEATURES)
+    s["pro_features"] = pro_features()
+    s["locked"] = [] if s["tier"] != "free" else pro_features()
     return s

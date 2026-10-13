@@ -18,9 +18,9 @@ from pydantic import BaseModel
 
 from . import __version__
 from . import (
-    agents, claudebridge, config, dispatch, events, git_ops, health, llm,
-    llmproxy, llmusage, modelsetup, planner, remoteauth, runner, scanner,
-    summarize, sysmon, telegrambot, vscode,
+    addons, agents, claudebridge, config, dispatch, events, git_ops, health,
+    licensing, llm, llmproxy, llmusage, modelsetup, planner, remoteauth,
+    requestguard, runner, scanner, summarize, sysmon, telegrambot, vscode,
 )
 from . import scheduler
 from . import opsroom as opsroom_bridge
@@ -30,6 +30,9 @@ from . import site as site_cms
 app = FastAPI(title="GSO-1", version=__version__)
 # Loopback is untouched; anything arriving from another device needs the token.
 app.add_middleware(remoteauth.RemoteAuthMiddleware)
+# Added last, so it runs first: a request a web page made is refused before
+# anything else looks at it.
+app.add_middleware(requestguard.RequestGuardMiddleware)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -37,11 +40,48 @@ atexit.register(runner.stop_all)
 atexit.register(llm.stop_if_managed)
 
 
+# Optional add-ons from the pro/ folder (none in a plain checkout).
+addons.load(app)
+
+
 @app.on_event("startup")
 def _start_telegram() -> None:
     telegrambot.start()  # no-op unless MANAGER_TELEGRAM_TOKEN is set
     scheduler.start()  # recurring reports; jobs live in data/schedule.json
+    addons.start_licensed()  # background work of add-ons, only when licensed
+    # The model chosen to start with GSO-1, in the background (loading takes a while).
+    if llm.autostart_model():
+        threading.Thread(target=llm.start_autostart_model, name="llm-autostart", daemon=True).start()
     events.record("run", "gso-1", f"dashboard up on :{config.PORT}")
+
+
+@app.get("/api/addons")
+def addons_manifest() -> JSONResponse:
+    return JSONResponse(addons.manifest())
+
+
+@app.get("/api/license")
+def license_status() -> JSONResponse:
+    return JSONResponse(licensing.snapshot())
+
+
+class LicenseBody(BaseModel):
+    key: str
+
+
+@app.post("/api/license")
+def license_activate(body: LicenseBody) -> JSONResponse:
+    result = licensing.activate(body.key)
+    if result.get("ok"):
+        # Unlocked now: start add-ons that were waiting for a licence.
+        addons.start_licensed()
+        events.record("run", "gso-1", f"licence activated ({result.get('tier')})")
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+@app.delete("/api/license")
+def license_deactivate() -> JSONResponse:
+    return JSONResponse(licensing.deactivate())
 
 
 atexit.register(scheduler.stop)
@@ -648,6 +688,21 @@ def llm_status() -> JSONResponse:
     return JSONResponse(llm.status())
 
 
+class AutostartBody(BaseModel):
+    model_path: str = ""
+
+
+@app.post("/api/llm/autostart")
+def llm_autostart(body: AutostartBody) -> JSONResponse:
+    """Choose the model GSO-1 starts by itself (empty: none)."""
+    if body.model_path and not Path(body.model_path).exists():
+        raise HTTPException(status_code=400, detail="Model not found.")
+    llm.set_autostart(body.model_path)
+    events.record("llm", "llama-server",
+                  f"starts with GSO-1: {Path(body.model_path).stem}" if body.model_path else "no model starts with GSO-1")
+    return JSONResponse({"ok": True, "autostart": llm.autostart_model()})
+
+
 @app.get("/api/llm/models")
 def llm_models() -> JSONResponse:
     """Models on disk, each with the flags it was last started with.
@@ -672,6 +727,7 @@ def llm_models() -> JSONResponse:
             "default_port": llm.default_port(),
             "defaults": llm.DEFAULT_PRESET,
             "last_model": llm.last_model(),
+            "autostart": llm.autostart_model(),
             "models": [
                 dict(m, preset=llm.preset_for(m["path"]), has_preset=m["path"] in saved)
                 for m in models
@@ -777,6 +833,7 @@ class LlmStartBody(BaseModel):
     context_shift: bool = True
     cache_type_k: str = "q8_0"
     cache_type_v: str = "q8_0"
+    vision: bool = True
 
 
 @app.post("/api/llm/start")
@@ -800,6 +857,7 @@ def llm_start(body: LlmStartBody) -> JSONResponse:
         context_shift=body.context_shift,
         cache_type_k=body.cache_type_k,
         cache_type_v=body.cache_type_v,
+        vision=body.vision,
     )
     if result["ok"]:
         # Remember on success only: flags that failed to start a server are not

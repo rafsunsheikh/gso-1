@@ -489,6 +489,7 @@
     let siteBusy = false;
     let VSCODE = [];                // folders open in VS Code
     let LLM = {};                   // llama.cpp server status
+    let ADDONS = [];                // optional Pro tabs from the pro/ folder (/api/addons)
     let MODELS = [];                // available GGUF models
     let LLM_META = {};              // model dirs, binary, defaults, last model
     let LLM_FORM = null;            // flags currently in the Start form
@@ -572,12 +573,14 @@
 
     async function _loadInner() {
       if (!_loadedOnce) renderSkeleton(6);
-      const [data, vsc, llm, plan] = await Promise.all([
+      const [data, vsc, llm, plan, ext] = await Promise.all([
         api("/api/apps"),
         api("/api/vscode/folders").catch(() => ({folders:[]})),
         api("/api/llm/status").catch(() => ({})),
         api("/api/planner").catch(() => ({boards:[]})),
+        api("/api/addons").catch(() => ({addons:[]})),
       ]);
+      setAddons(ext.addons || []);
       ALL = data.apps;
       ROOTS = data.roots || [];
       HOME_DIR = data.home || HOME_DIR;
@@ -872,6 +875,77 @@
       });
     }
 
+    /* ---- Optional add-ons (Pro tabs from the pro/ folder) ----------------
+       The server lists them at /api/addons. A licensed add-on's scripts are
+       loaded once; each registers itself with GSO1.registerAddon(id, {render})
+       and draws its views into #grid. Locked ones show what Pro adds. */
+    const ADDON_IMPLS = {};
+    const ADDON_COUNTS = {};
+    const _addonFiles = new Set();
+    window.GSO1 = Object.assign(window.GSO1 || {}, {
+      registerAddon(id, impl) {
+        ADDON_IMPLS[id] = impl;
+        if (activeView.startsWith(`addon:${id}:`)) render();
+      },
+      // An add-on can show a number next to one of its tabs (unread, waiting...).
+      setCount(id, view, n) {
+        ADDON_COUNTS[`${id}:${view}`] = n || null;
+        renderViews();
+      },
+      api: (p, o) => api(p, o), toast: (m, k) => toast(m, k), escapeHtml: s => escapeHtml(s),
+      selectView: id => selectView(id),
+    });
+
+    function setAddons(list) {
+      ADDONS = list;
+      for (const a of list) {
+        for (const href of a.styles || []) {
+          if (_addonFiles.has(href)) continue;
+          _addonFiles.add(href);
+          const l = document.createElement("link");
+          l.rel = "stylesheet"; l.href = href;
+          document.head.appendChild(l);
+        }
+        for (const src of a.scripts || []) {
+          if (_addonFiles.has(src)) continue;
+          _addonFiles.add(src);
+          const s = document.createElement("script");
+          s.src = src; s.defer = true;
+          document.head.appendChild(s);
+        }
+      }
+      if (activeView.startsWith("addon:") && !ADDONS.some(a => activeView.startsWith(`addon:${a.id}:`)))
+        activeView = "opsroom";
+    }
+
+    function renderAddon() {
+      const [, aid, vid] = activeView.split(":");
+      const a = ADDONS.find(x => x.id === aid);
+      const grid = resetGrid("addon-view");
+      $("#subtitle").textContent = a ? a.label : "";
+      if (a && !a.licensed) {
+        grid.innerHTML = `
+          <div class="dk-card" style="max-width:520px;padding:26px">
+            <div style="font-size:15px;font-weight:600;margin-bottom:6px">${escapeHtml(a.label)} is part of GSO-1 Pro</div>
+            <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">
+              Add your licence key in Settings, Licence, and this tab opens here.</div>
+            <button class="lib-act" id="addon-licence">Open Settings</button>
+          </div>`;
+        $("#addon-licence").onclick = () => { SETTINGS_TAB = "licence"; selectView("settings"); };
+        return;
+      }
+      const impl = ADDON_IMPLS[aid];
+      if (!impl) {
+        grid.innerHTML = `<div style="padding:22px;color:var(--text-dim)">Loading\u2026</div>`;
+        return;
+      }
+      try {
+        impl.render(grid, vid);
+      } catch (e) {
+        grid.innerHTML = `<div class="dk-card" data-tone="err" style="padding:22px">${escapeHtml(String(e.message || e))}</div>`;
+      }
+    }
+
     /** Sidebar nav, per the handoff's four groups. */
     function navGroups() {
       const liveCount = ALL.filter(a => a.running).length;
@@ -899,6 +973,11 @@
           ...rootItems,
           { id: "addroot", label: "Add a folder\u2026", n: null },
         ]},
+        ...ADDONS.map(a => ({ label: a.label, items: a.views.map(v => ({
+          id: `addon:${a.id}:${v.id}`, label: v.label,
+          dot: a.licensed ? (v.dot || null) : null,
+          n: a.licensed && ADDON_COUNTS[`${a.id}:${v.id}`] ? ADDON_COUNTS[`${a.id}:${v.id}`] : null,
+        })) })),
         { label: "Tools", items: [
           { id: "planner", label: "Planner",
             n: PLANNER.boards ? PLANNER.boards.reduce((t, b) => t + b.tasks.length, 0) : null },
@@ -988,6 +1067,12 @@
                     favourites: "Favourites", planner: "Planner", llm: "Local LLM",
                     site: "Site", settings: "Settings" };
       if (activeView.startsWith("root:")) return activeView.slice(5);
+      if (activeView.startsWith("addon:")) {
+        const [, aid, vid] = activeView.split(":");
+        const a = ADDONS.find(x => x.id === aid);
+        const v = a && a.views.find(x => x.id === vid);
+        return v ? `${a.label} · ${v.label}` : "Library";
+      }
       return map[activeView] || "Library";
     }
 
@@ -1040,6 +1125,7 @@
       if (activeView === "world") return renderWorld();
       if (activeView === "settings") return renderSettings();
       if (activeView === "site") return renderSite();
+      if (activeView.startsWith("addon:")) return renderAddon();
 
       const gridEl = resetGrid();
 
@@ -1619,6 +1705,7 @@
         context_shift: chk("#llm-ctxshift", true),
         cache_type_k: val("#llm-cachetype", "q8_0"),
         cache_type_v: val("#llm-cachetype", "q8_0"),
+        vision: chk("#llm-vision", true),
       };
     }
 
@@ -1684,6 +1771,16 @@
         </div>
         <div class="llm-model">${escapeHtml(s.model || "No model loaded")}${
           s.pid ? ` · pid ${s.pid}` : ""}${s.managed ? " · managed" : busy ? " · external" : ""}</div>
+        ${(() => {
+          // Start with GSO-1: the loaded model (or, when stopped, the one already chosen).
+          const auto = LLM_META.autostart || "";
+          const candidate = busy ? (MODELS.find(m => m.path === (s.model_path || "").trim() || m.name === s.model) || {}).path : auto;
+          if (!candidate) return "";
+          const on = auto === candidate;
+          return `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;color:var(--text-2)">
+            <input id="llm-autostart" type="checkbox" data-path="${escapeHtml(candidate)}" ${on ? "checked" : ""}/>
+            Start ${on && !busy ? escapeHtml(shortPath(auto).split("/").pop()) : "this model"} whenever GSO-1 starts</label>`;
+        })()}
         <div class="llm-stats">${stats.map(([l, v]) =>
           `<div><div class="llm-stat-l">${l}</div><div class="llm-stat-v">${v}</div></div>`).join("")}</div>
         ${busy && !s.managed ? `<p style="margin-top:11px;font-size:11.5px;color:var(--warn-text)">
@@ -1715,7 +1812,7 @@
       const modelRows = MODELS.map(m => {
         const isLoaded = busy && (m.path === loadedPath || m.name === s.model);
         return `<div class="llm-row">
-          <span class="llm-row-name"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(shortPath(m.path))}${
+          <span class="llm-row-name"><b>${escapeHtml(m.name)}${m.vision ? ` <span class="llm-pill" data-s="disk" style="margin-left:6px;vertical-align:1px" title="Its image part sits next to it, so it can describe photos">reads images</span>` : ""}</b><span>${escapeHtml(shortPath(m.path))}${
             remembered.has(m.path) ? ` · remembered: ctx ${(m.preset.ctx || 0).toLocaleString()}${
               m.preset.reasoning_format ? `, ${escapeHtml(m.preset.reasoning_format)}` : ""}` : ""
           }</span></span>
@@ -1955,6 +2052,10 @@
                 <span>Use <span class="mono">--context-shift</span>
                   <span class="block text-[11px] text-slate-500">Evicts the oldest tokens when the window fills instead of erroring. Keep on for long Claude Code sessions.</span></span></label>
               <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
+                <input id="llm-vision" type="checkbox" ${f.vision === false ? "" : "checked"} class="mt-0.5"/>
+                <span>Load the image part <span class="mono">--mmproj</span>, when the model has one
+                  <span class="block text-[11px] text-slate-500">Lets a vision model (like Qwen3-VL) read photos. Uses about 1 GB more memory.</span></span></label>
+              <label class="flex items-start gap-2 text-xs text-slate-300 mt-3">
                 <input id="llm-jinja" type="checkbox" ${f.jinja === false ? "" : "checked"} class="mt-0.5"/>
                 <span>Use <span class="mono">--jinja</span> (model chat template)
                   <span class="block text-[11px] text-slate-500">Applies the model's own template, required for function/tool calling. Leave on unless debugging.</span></span></label>
@@ -2056,6 +2157,17 @@
       // "Load" from a model row starts that model on its own remembered flags,
       // not on whatever happens to be typed in the form below. The row is a
       // shortcut for "run this one the way it wants to be run".
+      const autoBox = $("#llm-autostart");
+      if (autoBox) autoBox.onchange = async () => {
+        const path = autoBox.checked ? autoBox.dataset.path : "";
+        try {
+          await api("/api/llm/autostart", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model_path: path }) });
+          LLM_META.autostart = path;
+          flash(path ? "This model now starts with GSO-1" : "No model starts with GSO-1", true);
+        } catch (e) { autoBox.checked = !autoBox.checked; flash("Could not save that", false); }
+      };
+
       $$("[data-load]").forEach(b => b.onclick = () => {
         const m = MODELS.find(x => x.path === b.dataset.load);
         if (!m) return;
@@ -4037,6 +4149,7 @@
       { id: "telegram", label: "Telegram" },
       { id: "opsroom",  label: "Ops Room" },
       { id: "remote",   label: "Phone access" },
+      { id: "licence",  label: "Licence" },
       { id: "other",    label: "Other" },
     ];
 
@@ -4056,6 +4169,55 @@
         { key: "TAVILY_API_KEY", hint: "Enables web search for the Ops Room agent. Without it the tool disappears rather than failing." },
       ],
     };
+
+    let LICENCE = null;
+
+    function settingsLicencePane() {
+      const L = LICENCE || { tier: "free" };
+      const pro = L.tier === "pro" && L.licensed;
+      const when = t => t ? new Date(t * 1000).toLocaleDateString() : "";
+      return `
+        <div style="padding:16px 18px;border:1px solid var(--line);border-radius:10px;margin-bottom:18px">
+          <div style="font-size:.95rem;font-weight:600;margin-bottom:4px">${pro ? "GSO-1 Pro" : "GSO-1 Free"}</div>
+          <div style="font-size:.82rem;color:var(--text-dim)">
+            ${pro ? `Licensed to ${escapeHtml(L.name || L.email || "you")}${L.expires ? ` until ${when(L.expires)}` : ""}.`
+                  : `The free tier never expires. Pro adds the Ops Room, the World, local models, phone access${(L.pro_features || []).length > 4 ? " and the Pro tabs" : ""}.`}
+            ${L.reason && !pro && L.reason !== "no key" ? ` (${escapeHtml(L.reason)})` : ""}
+          </div>
+        </div>
+        ${pro ? `<button id="lic-remove" style="padding:8px 14px;font-size:.85rem;border:1px solid var(--line);
+                  border-radius:8px;background:transparent;color:var(--text);cursor:pointer">
+                  Remove the key from this machine</button>` : `
+          <label for="lic-key" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px">Licence key</label>
+          <textarea id="lic-key" rows="3" placeholder="GSO1.\u2026" spellcheck="false"
+            style="width:100%;font-family:var(--mono,monospace);font-size:.8rem;padding:10px;border-radius:8px;
+                   border:1px solid var(--line);background:var(--surface);color:var(--text)"></textarea>
+          <div style="font-size:.78rem;color:var(--text-dim);margin:6px 0 12px">
+            Checked on this machine; nothing is sent anywhere.</div>
+          <button id="lic-activate" style="padding:9px 18px;font-size:.87rem;font-weight:600;border:0;border-radius:8px;
+                  background:var(--accent,#6366f1);color:#fff;cursor:pointer">Activate</button>`}`;
+    }
+
+    function wireLicencePane() {
+      const act = $("#lic-activate");
+      if (act) act.onclick = async () => {
+        act.disabled = true;
+        try {
+          const r = await fetch("/api/license", { method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ key: $("#lic-key").value }) }).then(x => x.json());
+          LICENCE = null;
+          toast(r.ok ? "GSO-1 Pro is active" : (r.error || "That key is not valid."), r.ok ? "success" : "error");
+          if (r.ok) await load();
+          renderSettings();
+        } finally { act.disabled = false; }
+      };
+      const rm = $("#lic-remove");
+      if (rm) rm.onclick = async () => {
+        await fetch("/api/license", { method: "DELETE" });
+        LICENCE = null; toast("Key removed from this machine", "success");
+        await load(); renderSettings();
+      };
+    }
 
     function settingsField(f) {
       const meta = (SETTINGS && SETTINGS.settings[f.key]) || {};
@@ -4322,8 +4484,13 @@
         }
       }
 
+      if (SETTINGS_TAB === "licence" && !LICENCE) {
+        try { LICENCE = await api("/api/license"); } catch (e) { LICENCE = { tier: "free" }; }
+      }
       const pane = SETTINGS_TAB === "opsroom"
         ? settingsOpsRoomPane()
+        : SETTINGS_TAB === "licence"
+        ? settingsLicencePane()
         : SETTINGS_TAB === "folders"
         ? settingsFoldersPane()
         : (SETTINGS_FIELDS[SETTINGS_TAB] || []).map(settingsField).join("");
@@ -4395,6 +4562,7 @@
       if (edit) edit.onclick = openRootManager;
 
       if (SETTINGS_TAB === "opsroom") wireOpsRoomPane();
+      if (SETTINGS_TAB === "licence") wireLicencePane();
 
       const save = $("#set-save");
       if (save) save.onclick = async () => {
@@ -4543,7 +4711,8 @@
         // Nothing to scan until the first-run picker has an answer.
         || $("#setup-modal").style.display !== "none"
         || activeView === "llm" || activeView === "planner"
-        || activeView === "site" || NO_AUTOREFRESH_VIEWS.has(activeView);
+        || activeView === "site" || activeView.startsWith("addon:")
+        || NO_AUTOREFRESH_VIEWS.has(activeView);
       if (!busy) load();
     }, 8000);
   </script>
