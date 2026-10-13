@@ -71,7 +71,7 @@ def test_unlocked_with_a_licence(addon_dir, monkeypatch):
     assert c.get("/x/sample/back").json() == {"page": "back"}
     assert "sampleLoaded" in c.get("/addons/sample/app.js").text
     m = addons.manifest()["addons"][0]
-    assert m["licensed"] is True and m["scripts"] == ["/addons/sample/app.js"]
+    assert m["licensed"] is True and m["scripts"][0].startswith("/addons/sample/app.js?v=")
     addons.start_licensed()
     addons.start_licensed()
     import sample_addon

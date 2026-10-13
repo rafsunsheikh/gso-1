@@ -123,6 +123,16 @@ def start_licensed() -> None:
             _errors.append({"addon": aid, "error": f"startup failed: {type(e).__name__}: {e}"})
 
 
+def _versioned(spec: dict[str, Any], name: str) -> str:
+    """The file's address with its change time, so a browser never keeps an old copy after an update."""
+    url = f"/addons/{spec['id']}/{name}"
+    static = spec.get("static")
+    try:
+        return f"{url}?v={int((Path(static) / name).stat().st_mtime)}" if static else url
+    except OSError:
+        return url
+
+
 def manifest() -> dict[str, Any]:
     """What the page needs to add the tabs: names, views, files, and whether they are unlocked."""
     out = []
@@ -134,7 +144,7 @@ def manifest() -> dict[str, Any]:
             "label": spec.get("label", aid),
             "views": spec.get("views", []),
             "licensed": unlocked,
-            "scripts": [f"/addons/{aid}/{s}" for s in spec.get("scripts", [])] if unlocked else [],
-            "styles": [f"/addons/{aid}/{s}" for s in spec.get("styles", [])] if unlocked else [],
+            "scripts": [_versioned(spec, s) for s in spec.get("scripts", [])] if unlocked else [],
+            "styles": [_versioned(spec, s) for s in spec.get("styles", [])] if unlocked else [],
         })
     return {"addons": out, "errors": list(_errors)}
