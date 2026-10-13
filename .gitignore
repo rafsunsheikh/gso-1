@@ -35,3 +35,7 @@ article/
 # Pro add-ons. They live in their own private repository and are loaded from
 # here when present (thecmanager/addons.py); this public one never carries them.
 pro/
+
+# The website video: its source is kept, its installs and renders are rebuilt.
+site-video/node_modules/
+site-video/out/

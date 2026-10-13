@@ -1,0 +1,20 @@
+{
+  "name": "gso1-launch-clip",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "stills": "remotion still src/index.ts Launch out/first.png --frame=0 && remotion still src/index.ts Launch out/tap.png --frame=100 && remotion still src/index.ts Launch out/last.png --frame=599",
+    "render": "remotion render src/index.ts Launch out/launch.mp4 --codec=h264 --crf=20 && remotion still src/index.ts Launch cover.png --frame=560"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/react": "18.3.12"
+  }
+}
