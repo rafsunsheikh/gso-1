@@ -709,7 +709,9 @@
         return;
       }
 
-      if (EVENTS === null && !_evLoading) loadEvents().then(renderOpsRoom);
+      // Redraw when the events land, but only if the Ops Room is still on screen:
+      // otherwise this would undo the first tab you clicked after opening GSO-1.
+      if (EVENTS === null && !_evLoading) loadEvents().then(() => { if (activeView === "opsroom") renderOpsRoom(); });
 
       const c = OVERVIEW.counts || {};
       const hour = new Date().getHours();
