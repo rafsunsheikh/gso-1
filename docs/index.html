@@ -208,6 +208,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
       <a href="#idea">The idea</a>
       <a href="#does">What it does</a>
       <a href="./ops-room.html">Ops Room</a>
+      <a href="#personal">Personal Communication</a>
       <a href="#next">Coming next</a>
       <a href="#install">Install</a>
       <a href="./releases.html">Releases</a>
@@ -351,9 +352,49 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
   </div>
 </section>
 
+<section id="personal" class="rule">
+  <div class="wrap">
+    <h2 class="rv"><span class="num">04 / Pro</span>Personal Communication</h2>
+    <p class="say rv">Your email and chats in one inbox, inside GSO-1. Gmail, iMessage and SMS,
+      Telegram and WhatsApp land in the same list, already sorted by a model running on your Mac:
+      what needs a reply, what is important, what can wait. Open a conversation and it drafts an
+      answer in your own style, in the language you were writing in. Nothing is sent until you
+      press Send.</p>
+
+    <figure class="shot rv" style="margin:0">
+      <img src="assets/screenshots/personal-communication.jpg" alt="The Personal Communication
+        inbox in GSO-1: a list of conversations from WhatsApp, Gmail, Telegram and iMessage, each
+        with a one-line summary; an open conversation with Sam Lee about dinner on Saturday, a
+        drafted reply below it, and on the right the plan it found (dinner with Sam) and a
+        promise to book the restaurant." />
+      <figcaption>Made-up people and messages. The summary, the draft, the dinner plan and the
+        promise were all found by the model on this Mac.</figcaption>
+    </figure>
+
+    <div class="grid">
+      <div class="card rv"><span class="ico">✉</span><h3>One inbox</h3>
+        <p>Every app in one list, with Needs reply, Unread, Later and Done. Reply to one message,
+          react with an emoji, search everything you were ever sent.</p></div>
+      <div class="card rv"><span class="ico">✎</span><h3>Drafts that sound like you</h3>
+        <p>It learns from what you send and what you change. You can also train a model on your
+          own past replies, on your Mac, and use it for drafts.</p></div>
+      <div class="card rv"><span class="ico">☷</span><h3>Your day, sorted</h3>
+        <p>A morning brief, events and to-dos found in messages, the promises you made, and a
+          notification only for what matters, never in quiet hours.</p></div>
+      <div class="card rv"><span class="ico">⛨</span><h3>Stays on your Mac</h3>
+        <p>Messages, photos and the model all stay on your machine. It has its own lock, nightly
+          encrypted backups, and it never sends anything on its own.</p></div>
+    </div>
+
+    <p class="say rv"><span class="badge-ok">GSO-1 Pro</span> Part of GSO-1 Pro, for macOS on Apple
+      Silicon. WhatsApp support uses an unofficial connection that WhatsApp's terms do not allow;
+      linking it is your choice.</p>
+  </div>
+</section>
+
 <section id="next" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">04 / Coming next</span>The World</h2>
+    <h2 class="rv"><span class="num">05 / Coming next</span>The World</h2>
     <p class="say rv">GSO-1 knows which repositories you have, and which agents are working in
       them. The World is that, as a place. Every project with a Claude session becomes a
       settlement in a valley, and the figure standing in it is the agent: swinging while it
@@ -400,7 +441,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
 
 <section id="install" class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">05 / Deployment</span>Install</h2>
+    <h2 class="rv"><span class="num">06 / Deployment</span>Install</h2>
     <table class="rv">
       <tr><th>Platform</th><th>Download {{VERSION}}</th></tr>
       <tr><td>macOS (Apple Silicon)</td><td>
@@ -435,7 +476,7 @@ footer .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin
         then "Run anyway".</p>
     </div>
 
-    <h2 class="rv" style="margin-top:52px"><span class="num">06 / From source</span>Or build it yourself</h2>
+    <h2 class="rv" style="margin-top:52px"><span class="num">07 / From source</span>Or build it yourself</h2>
     <pre class="rv"><span class="c"># requires Python 3.11+</span>
 git clone https://github.com/rafsunsheikh/gso-1.git
 cd gso-1
@@ -446,7 +487,7 @@ cp .env.example .env
 
 <section class="rule">
   <div class="wrap">
-    <h2 class="rv"><span class="num">07 / Standing orders</span>A note on what it can do</h2>
+    <h2 class="rv"><span class="num">08 / Standing orders</span>A note on what it can do</h2>
     <p class="say rv">GSO-1 starts processes and runs commands as you. That is the feature, and it
       is also the threat model.</p>
     <p class="say rv"><span class="badge-ok">Loopback only by default</span>, unreachable from your
