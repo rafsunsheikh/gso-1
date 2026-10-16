@@ -8,17 +8,33 @@
 <meta property="og:title" content="GSO-1 release notes">
 <meta property="og:description" content="Every GSO-1 release, what changed in it, and where to download it.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128193;</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&var(--ok);</text></svg>">
 <style>
 :root{
-  --bg:#07070c; --bg-2:#0b0b13; --panel:#11111c; --panel-2:#161624;
-  --line:#23233a; --line-2:#2e2e4a;
-  --ink:#eef0f6; --dim:#9ea6bd; --faint:#6b7390;
-  --accent:#6f6af8; --accent-2:#9b97ff;
-  --ok:#3ddc97; --warn:#f5b642; --bad:#ff6b6b;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
-  --maxw:820px;
+  /* Built by scripts/build_tokens.py from the same three ramps as the
+     app's own colours, so the site and the app cannot drift apart.
+     light-dark() picks the first value when the reader's machine is
+     set to light and the second when it is set to dark. */
+  color-scheme: light dark;
+  --bg: light-dark(oklch(0.992 0.0005 255), oklch(0.145 0.0005 255));
+  --bg-2: light-dark(oklch(0.980 0.0008 255), oklch(0.178 0.0008 255));
+  --panel: light-dark(oklch(0.980 0.0008 255), oklch(0.178 0.0008 255));
+  --panel-2: light-dark(oklch(0.958 0.0014 255), oklch(0.215 0.0014 255));
+  --line: light-dark(oklch(0.895 0.0029 255), oklch(0.330 0.0029 255));
+  --line-2: light-dark(oklch(0.845 0.0035 255), oklch(0.390 0.0035 255));
+  --ink: light-dark(oklch(0.240 0.0029 255), oklch(0.965 0.0029 255));
+  --dim: light-dark(oklch(0.510 0.0088 255), oklch(0.775 0.0088 255));
+  --faint: light-dark(oklch(0.516 0.0087 255.0), oklch(0.769 0.0087 255.0));
+  --accent: light-dark(oklch(0.560 0.1750 275), oklch(0.560 0.1750 275));
+  --accent-2: light-dark(oklch(0.510 0.0963 275), oklch(0.775 0.0963 275));
+  --ok: light-dark(oklch(0.520 0.1550 150), oklch(0.520 0.1550 150));
+  --warn: light-dark(oklch(0.780 0.1600 75), oklch(0.780 0.1600 75));
+  --bad: light-dark(oklch(0.550 0.2050 25), oklch(0.550 0.2050 25));
+  --grid: light-dark(color-mix(in oklch, oklch(0.560 0.1750 275) 6%, transparent),
+                     color-mix(in oklch, oklch(0.560 0.1750 275) 8%, transparent));
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Inter var", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --maxw:1060px;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -28,15 +44,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
 a{color:var(--accent-2);text-decoration:none}
 a:hover{text-decoration:underline}
 code{font-family:var(--mono);font-size:.87em;background:var(--panel-2);
-  border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#cfd3e6}
+  border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--dim)}
 
 .topbar{position:fixed;inset:0 0 auto 0;z-index:50;height:52px;display:flex;
-  align-items:center;justify-content:center;background:rgba(7,7,12,.72);
+  align-items:center;justify-content:center;background:color-mix(in oklch, var(--bg) 72%, transparent);
   backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .topbar .wrap{display:flex;align-items:center;justify-content:space-between;width:100%}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em}
 .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);
-  box-shadow:0 0 0 4px rgba(61,220,151,.14)}
+  box-shadow:0 0 0 4px color-mix(in oklch, var(--ok) 14%, transparent)}
 .topnav{display:flex;gap:22px;font-size:.85rem;color:var(--dim)}
 .topnav a{color:var(--dim)}
 .topnav a:hover{color:var(--ink);text-decoration:none}
@@ -57,7 +73,7 @@ main{padding:10px 0 90px}
 .rel-date{font:500 12px var(--mono);color:var(--faint)}
 .rel-tag{font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;
   padding:3px 8px;border-radius:999px;border:1px solid var(--line-2)}
-.rel-tag-now{color:var(--ok);border-color:rgba(61,220,151,.4);background:rgba(61,220,151,.1)}
+.rel-tag-now{color:var(--ok);border-color:color-mix(in oklch, var(--ok) 40%, transparent);background:color-mix(in oklch, var(--ok) 10%, transparent)}
 .rel-tag-soft{color:var(--faint)}
 .rel-dl{margin-left:auto;font-size:.85rem;white-space:nowrap}
 .rel-intro{color:var(--dim);margin:10px 0 0;max-width:70ch}

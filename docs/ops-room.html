@@ -10,14 +10,29 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
 <style>
 :root{
-  --bg:#07070c; --bg-2:#0b0b13; --panel:#11111c; --panel-2:#161624;
-  --line:#23233a; --line-2:#2e2e4a;
-  --ink:#eef0f6; --dim:#9ea6bd; --faint:#6b7390;
-  --accent:#6f6af8; --accent-2:#9b97ff;
-  --ok:#3ddc97; --warn:#f5b642; --bad:#ff6b6b;
-  --grid:rgba(111,106,248,.075);
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  /* Built by scripts/build_tokens.py from the same three ramps as the
+     app's own colours, so the site and the app cannot drift apart.
+     light-dark() picks the first value when the reader's machine is
+     set to light and the second when it is set to dark. */
+  color-scheme: light dark;
+  --bg: light-dark(oklch(0.992 0.0005 255), oklch(0.145 0.0005 255));
+  --bg-2: light-dark(oklch(0.980 0.0008 255), oklch(0.178 0.0008 255));
+  --panel: light-dark(oklch(0.980 0.0008 255), oklch(0.178 0.0008 255));
+  --panel-2: light-dark(oklch(0.958 0.0014 255), oklch(0.215 0.0014 255));
+  --line: light-dark(oklch(0.895 0.0029 255), oklch(0.330 0.0029 255));
+  --line-2: light-dark(oklch(0.845 0.0035 255), oklch(0.390 0.0035 255));
+  --ink: light-dark(oklch(0.240 0.0029 255), oklch(0.965 0.0029 255));
+  --dim: light-dark(oklch(0.510 0.0088 255), oklch(0.775 0.0088 255));
+  --faint: light-dark(oklch(0.516 0.0087 255.0), oklch(0.769 0.0087 255.0));
+  --accent: light-dark(oklch(0.560 0.1750 275), oklch(0.560 0.1750 275));
+  --accent-2: light-dark(oklch(0.510 0.0963 275), oklch(0.775 0.0963 275));
+  --ok: light-dark(oklch(0.520 0.1550 150), oklch(0.520 0.1550 150));
+  --warn: light-dark(oklch(0.780 0.1600 75), oklch(0.780 0.1600 75));
+  --bad: light-dark(oklch(0.550 0.2050 25), oklch(0.550 0.2050 25));
+  --grid: light-dark(color-mix(in oklch, oklch(0.560 0.1750 275) 6%, transparent),
+                     color-mix(in oklch, oklch(0.560 0.1750 275) 8%, transparent));
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Inter var", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --maxw:1060px;
 }
 *{box-sizing:border-box}
@@ -30,7 +45,7 @@ a:hover{text-decoration:underline}
 a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 
 .topbar{position:fixed;inset:0 0 auto 0;z-index:50;height:52px;display:flex;align-items:center;
-  background:rgba(7,7,12,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  background:color-mix(in oklch, var(--bg) 72%, transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .topbar .wrap{display:flex;align-items:center;justify-content:space-between;width:100%}
 .brand{display:flex;align-items:center;gap:9px;font-weight:650;color:var(--ink)}
 .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
@@ -48,7 +63,7 @@ header.hero::before{content:"";position:absolute;inset:-50%;pointer-events:none;
 .eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);
   font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
   border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:24px;
-  background:rgba(17,17,28,.6)}
+  background:color-mix(in oklch, var(--panel) 60%, transparent)}
 h1{position:relative;font-size:clamp(2.3rem,6vw,3.4rem);line-height:1.05;margin:0 0 18px;
   letter-spacing:-.03em;font-weight:700;text-wrap:balance}
 .lede{position:relative;font-size:1.15rem;color:var(--dim);margin:0;max-width:56ch}
